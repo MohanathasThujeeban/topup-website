@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Lycamobile PIN</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Arial', 'Helvetica', sans-serif;
+      line-height: 1.6;
+      color: #1F2937;
+      background-color: #F9FAFB;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: linear-gradient(135deg, #2563EB 0%, #10B981 100%);
+      padding: 20px;
+    }
+    .email-content {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .email-header {
+      background: linear-gradient(135deg, #2563EB 0%, #10B981 100%);
+      padding: 30px;
+      text-align: center;
+    }
+    .logo {
+      background: white;
+      width: 60px;
+      height: 60px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      font-weight: bold;
+      color: #2563EB;
+      margin-bottom: 15px;
+    }
+    .logo-text {
+      color: white;
+      font-size: 28px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    .email-body {
+      padding: 40px 30px;
+    }
+    h1 {
+      color: #1F2937;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+    p {
+      color: #4B5563;
+      margin-bottom: 15px;
+      font-size: 16px;
+    }
+    .pin-box {
+      background: linear-gradient(135deg, #2563EB 0%, #10B981 100%);
+      border-radius: 12px;
+      padding: 30px;
+      text-align: center;
+      margin: 30px 0;
+    }
+    .pin-label {
+      color: white;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 15px;
+    }
+    .pin-code {
+      background: white;
+      color: #2563EB;
+      font-size: 32px;
+      font-weight: bold;
+      font-family: 'Courier New', monospace;
+      padding: 20px;
+      border-radius: 8px;
+      letter-spacing: 2px;
+      margin: 15px 0;
+      word-break: break-all;
+    }
+    .copy-button {
+      background: white;
+      color: #2563EB;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      margin-top: 10px;
+    }
+    .activation-steps {
+      background: #F9FAFB;
+      border-left: 4px solid #2563EB;
+      padding: 20px;
+      margin: 30px 0;
+      border-radius: 8px;
+    }
+    .activation-steps h2 {
+      color: #1F2937;
+      font-size: 20px;
+      margin-bottom: 15px;
+    }
+    .step {
+      margin-bottom: 15px;
+      padding-left: 30px;
+      position: relative;
+    }
+    .step-number {
+      position: absolute;
+      left: 0;
+      top: 0;
+      background: #2563EB;
+      color: white;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .quick-links {
+      background: #FEF3C7;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 30px 0;
+    }
+    .quick-links h3 {
+      color: #92400E;
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+    .link-item {
+      display: block;
+      color: #2563EB;
+      text-decoration: none;
+      padding: 10px 0;
+      font-weight: 500;
+    }
+    .link-item:hover {
+      text-decoration: underline;
+    }
+    .whatsapp-button {
+      background: #25D366;
+      color: white;
+      text-decoration: none;
+      padding: 15px 30px;
+      border-radius: 8px;
+      display: inline-block;
+      font-weight: 600;
+      margin: 10px 0;
+      font-size: 16px;
+    }
+    .order-details {
+      background: #F9FAFB;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 30px 0;
+    }
+    .order-details h3 {
+      color: #1F2937;
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+    .order-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #E5E7EB;
+    }
+    .order-item:last-child {
+      border-bottom: none;
+    }
+    .order-label {
+      color: #6B7280;
+      font-size: 14px;
+    }
+    .order-value {
+      color: #1F2937;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .email-footer {
+      background: #1F2937;
+      color: #9CA3AF;
+      padding: 30px;
+      text-align: center;
+    }
+    .footer-links {
+      margin: 20px 0;
+    }
+    .footer-link {
+      color: #9CA3AF;
+      text-decoration: none;
+      margin: 0 15px;
+      font-size: 14px;
+    }
+    .footer-link:hover {
+      color: #fff;
+    }
+    .social-icons {
+      margin: 20px 0;
+    }
+    .social-icon {
+      display: inline-block;
+      width: 36px;
+      height: 36px;
+      background: #374151;
+      border-radius: 50%;
+      margin: 0 8px;
+      line-height: 36px;
+      color: white;
+      text-decoration: none;
+    }
+    .social-icon:hover {
+      background: #2563EB;
+    }
+    @media only screen and (max-width: 600px) {
+      .email-body {
+        padding: 30px 20px;
+      }
+      .pin-code {
+        font-size: 24px;
+        padding: 15px;
+      }
+      h1 {
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-content">
+      <!-- Email Header -->
+      <div class="email-header">
+        <div class="logo">E</div>
+        <div class="logo-text">EasyTopup.no</div>
+      </div>
+
+      <!-- Email Body -->
+      <div class="email-body">
+        <h1>Hi [Customer Name],</h1>
+        <p>Thank you for your order! Your Lycamobile ePIN is ready and waiting for you.</p>
+
+        <!-- PIN Code Box -->
+        <div class="pin-box">
+          <div class="pin-label">Your PIN Code:</div>
+          <div class="pin-code">1234-5678-9101-1121</div>
+          <a href="#" class="copy-button">📋 Copy PIN</a>
+        </div>
+
+        <!-- Activation Instructions -->
+        <div class="activation-steps">
+          <h2>How to Activate:</h2>
+          <div class="step">
+            <div class="step-number">1</div>
+            <strong>Insert your Lycamobile SIM</strong><br>
+            <span style="color: #6B7280; font-size: 14px;">Make sure your Lycamobile SIM is inserted in your phone</span>
+          </div>
+          <div class="step">
+            <div class="step-number">2</div>
+            <strong>Dial *123*1234567891011121#</strong><br>
+            <span style="color: #6B7280; font-size: 14px;">Replace with your actual PIN code</span>
+          </div>
+          <div class="step">
+            <div class="step-number">3</div>
+            <strong>Press Call</strong><br>
+            <span style="color: #6B7280; font-size: 14px;">Wait for the activation to complete</span>
+          </div>
+          <div class="step">
+            <div class="step-number">4</div>
+            <strong>Wait for confirmation SMS</strong><br>
+            <span style="color: #6B7280; font-size: 14px;">You'll receive confirmation within 2 minutes</span>
+          </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="quick-links">
+          <h3>Need Help?</h3>
+          <a href="#" class="link-item">📱 Activation Help Guide</a>
+          <a href="#" class="link-item">📞 Call Support: +47 XXX XXX XXX</a>
+          <br>
+          <a href="https://wa.me/47XXXXXXXXX" class="whatsapp-button">
+            💬 Chat with us on WhatsApp
+          </a>
+        </div>
+
+        <!-- Order Details -->
+        <div class="order-details">
+          <h3>Order Details</h3>
+          <div class="order-item">
+            <span class="order-label">Product:</span>
+            <span class="order-value">Lycamobile 5GB ePIN</span>
+          </div>
+          <div class="order-item">
+            <span class="order-label">Amount:</span>
+            <span class="order-value">NOK 99</span>
+          </div>
+          <div class="order-item">
+            <span class="order-label">Order Date:</span>
+            <span class="order-value">08/10/2025</span>
+          </div>
+          <div class="order-item">
+            <span class="order-label">Order Number:</span>
+            <span class="order-value">#ET-12345</span>
+          </div>
+        </div>
+
+        <p style="color: #6B7280; font-size: 14px; margin-top: 30px;">
+          If you have any questions or need assistance, our support team is available 24/7 via WhatsApp, email, or phone.
+        </p>
+      </div>
+
+      <!-- Email Footer -->
+      <div class="email-footer">
+        <div class="footer-links">
+          <a href="#" class="footer-link">Help Center</a>
+          <a href="#" class="footer-link">Contact Us</a>
+          <a href="#" class="footer-link">Terms & Conditions</a>
+        </div>
+
+        <div class="social-icons">
+          <a href="#" class="social-icon">f</a>
+          <a href="#" class="social-icon">in</a>
+          <a href="#" class="social-icon">t</a>
+        </div>
+
+        <p style="font-size: 12px; margin: 20px 0;">
+          EasyTopup.no<br>
+          Oslo, Norway<br>
+          Org. Nr: XXXXXXXXX
+        </p>
+
+        <p style="font-size: 11px; color: #6B7280;">
+          You are receiving this email because you made a purchase at EasyTopup.no<br>
+          <a href="#" style="color: #6B7280;">Unsubscribe</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
