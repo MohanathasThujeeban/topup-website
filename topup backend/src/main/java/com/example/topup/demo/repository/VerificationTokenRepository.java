@@ -28,6 +28,8 @@ public interface VerificationTokenRepository extends MongoRepository<Verificatio
      */
     @Query("{'token': ?0, 'email': ?1, 'used': false, 'expiryDate': {$gt: ?2}}")
     Optional<VerificationToken> findValidTokenByTokenAndEmail(String token, String email, LocalDateTime currentTime);
+    
+    // Using the existing findValidToken method at the bottom of the file
 
     /**
      * Find tokens by user

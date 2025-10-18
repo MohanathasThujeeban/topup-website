@@ -126,10 +126,23 @@ public class UserService {
      * Verify email with token
      */
     public boolean verifyEmail(String email, String token) {
+        System.out.println("Verifying email: " + email + " with token: " + token);
+        
+        // Check if token exists at all
+        Optional<VerificationToken> anyToken = verificationTokenRepository.findByToken(token);
+        if (anyToken.isPresent()) {
+            System.out.println("Token exists in database: " + anyToken.get());
+        } else {
+            System.out.println("Token not found in database!");
+        }
+        
+        // Try to find valid token with expiry check
         Optional<VerificationToken> verificationToken = verificationTokenRepository
-            .findValidToken(token, email, VerificationToken.TokenType.EMAIL_VERIFICATION, LocalDateTime.now());
+            .findValidTokenByTokenAndEmail(token, email, LocalDateTime.now());
 
         if (verificationToken.isPresent()) {
+            System.out.println("Valid token found: " + verificationToken.get());
+            
             VerificationToken vToken = verificationToken.get();
             User user = vToken.getUser();
 
@@ -152,7 +165,11 @@ public class UserService {
                 }
 
                 return true;
+            } else {
+                System.out.println("User not found for token!");
             }
+        } else {
+            System.out.println("No valid token found for this email and token combination!");
         }
 
         return false;

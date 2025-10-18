@@ -29,7 +29,12 @@ public class EmailService {
     public void sendEmailVerification(String toEmail, String firstName, String verificationToken) {
         try {
             String verificationUrl = appUrl + "/verify-email?token=" + verificationToken + "&email=" + toEmail;
-            String htmlContent = generateEmailVerificationHtml(firstName, verificationUrl);
+            // Create a 16-digit verification key from the token (using first 16 chars or padding if needed)
+            String verificationKey = (verificationToken.length() >= 16) ? 
+                verificationToken.substring(0, 16) : 
+                String.format("%-16s", verificationToken).replace(' ', '0');
+            
+            String htmlContent = generateEmailVerificationHtml(firstName, verificationUrl, verificationKey);
             
             sendHtmlEmail(
                 toEmail,
@@ -166,6 +171,44 @@ public class EmailService {
             </html>
             """, 
             appName, firstName, appName, verificationUrl, verificationUrl, supportEmail, supportEmail
+        );
+    }
+    private String generateEmailVerificationHtml(String firstName, String verificationUrl, String verificationKey) {
+        return String.format("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Email Verification</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0; font-size: 28px;">%s</h1>
+                </div>
+                <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
+                    <h2 style="color: #333; margin-bottom: 20px;">Hi %s!</h2>
+                    <p style="margin-bottom: 20px;">Thank you for registering with %s. To complete your account setup, please verify your email address.</p>
+                    <div style="background: #eef6ff; border: 2px dashed #667eea; padding: 18px; border-radius: 8px; margin-bottom: 24px; text-align: center;">
+                        <span style="font-size: 22px; letter-spacing: 2px; font-family: 'Courier New', monospace; color: #333; font-weight: bold;">Your 16-digit key:</span><br>
+                        <span style="font-size: 28px; font-family: 'Courier New', monospace; color: #667eea; font-weight: bold; background: #fff; padding: 8px 18px; border-radius: 6px; display: inline-block; margin-top: 10px;">%s</span>
+                    </div>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="%s" style="background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Verify Email Address</a>
+                    </div>
+                    <p style="margin-bottom: 20px;">If the button doesn't work, you can copy and paste this link into your browser:</p>
+                    <p style="word-break: break-all; background: #e9e9e9; padding: 10px; border-radius: 5px; font-family: monospace;">%s</p>
+                    <p style="margin-bottom: 20px; color: #666; font-size: 14px;">This verification link will expire in 24 hours for security purposes.</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+                    <p style="color: #666; font-size: 14px; margin: 0;">
+                        If you didn't create an account with us, please ignore this email or contact our support team at 
+                        <a href="mailto:%s" style="color: #667eea;">%s</a>
+                    </p>
+                </div>
+            </body>
+            </html>
+            """,
+            appName, firstName, appName, verificationKey, verificationUrl, verificationUrl, supportEmail, supportEmail
         );
     }
 

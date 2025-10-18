@@ -206,26 +206,7 @@ const AnimatedPhone = () => {
         </g>
       </svg>
 
-      <style jsx>{`
-        .notification-pop {
-          animation: notificationSlide 2s ease-in-out infinite;
-        }
-
-        @keyframes notificationSlide {
-          0% {
-            transform: translateX(-20px);
-            opacity: 0;
-          }
-          20%, 80% {
-            transform: translateX(0);
-            opacity: 1;
-          }
-          100% {
-            transform: translateX(20px);
-            opacity: 0;
-          }
-        }
-      `}</style>
+      {/* Animation styles are defined in index.css */}
     </div>
   );
 };

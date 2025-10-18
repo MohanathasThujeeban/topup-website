@@ -33,7 +33,7 @@ public class VerificationToken {
     @Indexed
     private TokenType tokenType;
 
-    @Indexed(expireAfterSeconds = 86400) // Auto-delete after 24 hours
+    @Indexed(name = "expiryDate", expireAfterSeconds = 604800) // Auto-delete after 7 days (increased from 24 hours)
     private LocalDateTime expiryDate;
 
     private boolean used = false;
@@ -63,9 +63,9 @@ public class VerificationToken {
 
     // Token Type Enum
     public enum TokenType {
-        EMAIL_VERIFICATION(24), // 24 hours
-        PASSWORD_RESET(1),      // 1 hour
-        ACCOUNT_ACTIVATION(72); // 72 hours
+        EMAIL_VERIFICATION(168), // 7 days (increased from 24 hours)
+        PASSWORD_RESET(24),      // 24 hours (increased from 1 hour)
+        ACCOUNT_ACTIVATION(168); // 7 days (increased from 72 hours)
 
         private final int hoursValid;
 

@@ -11,7 +11,8 @@ export const useAuth = () => {
 };
 
 // API Base URL - In production, this should come from environment variables
-const API_BASE_URL = 'http://localhost:8080/api';
+// Using local network IP so that mobile devices on the same network can access it
+const API_BASE_URL = 'http://172.20.10.3:8080/api';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -137,24 +138,75 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Email Verification
-  const verifyEmail = async (token) => {
+  const verifyEmail = async (token, email) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/verify-email?token=${token}`, {
+      console.log(`AuthContext: Verifying email with token: ${token} and email: ${email}`);
+      
+      // Sanitize inputs - ensure we have clean values
+      if (token && typeof token === 'string') {
+        token = token.trim();
+      }
+      
+      if (email && typeof email === 'string') {
+        email = email.trim();
+      }
+      
+      // Ensure both token and email are present
+      if (!token || !email) {
+        console.log("AuthContext: Missing verification info - token:", token, "email:", email);
+        return { 
+          success: false, 
+          message: "Missing verification information. Please check your verification link or try again."
+        };
+      }
+      
+      // Make the API call with properly encoded parameters
+      console.log(`AuthContext: Making verification request to: ${API_BASE_URL}/auth/verify-email`);
+      
+      // Add a timestamp to prevent caching
+      const timestamp = new Date().getTime();
+      const url = `${API_BASE_URL}/auth/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}&_t=${timestamp}`;
+      
+      console.log(`AuthContext: Request URL: ${url}`);
+      
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
         }
       });
 
+      console.log(`AuthContext: Response status:`, response.status);
       const data = await response.json();
+      console.log('AuthContext: Verification API response:', data);
 
       if (response.ok) {
-        return { success: true, message: data.message };
+        // Clear success flag to ensure state is properly updated
+        console.log('AuthContext: Verification SUCCESSFUL');
+        return { 
+          success: true, 
+          message: data.message || 'Email verified successfully!',
+          data: data
+        };
       } else {
-        return { success: false, message: data.message || 'Email verification failed' };
+        console.log('AuthContext: Verification FAILED');
+        let errorMessage = data.message || 'Email verification failed';
+        let isExpired = errorMessage.toLowerCase().includes('expired');
+        
+        return { 
+          success: false, 
+          message: errorMessage,
+          expired: isExpired
+        };
       }
     } catch (error) {
-      return { success: false, message: 'Network error. Please try again.' };
+      console.error('AuthContext: Verification error:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Network error. Please try again.',
+        error: error 
+      };
     }
   };
 

@@ -38,33 +38,63 @@ const EmailVerificationPage = () => {
 
   const handleVerification = async (verificationToken) => {
     try {
+      console.log('Starting verification process');
       setVerificationStatus('pending');
       
-      const result = await verifyEmail(verificationToken);
+      // Directly grab email from URL params to ensure it's available immediately
+      const emailFromParams = searchParams.get('email') || '';
+      const emailToUse = email || emailFromParams;
+      
+      console.log(`Verifying token: ${verificationToken} Email: ${emailToUse}`);
+      
+      if (!emailToUse) {
+        console.log('No email found for verification');
+        setVerificationStatus('error');
+        setMessage('Missing email address. Please check your verification link or try again.');
+        return;
+      }
+      
+      // Update email state first to ensure it's available
+      setEmail(emailToUse);
+      
+      // Call API to verify email
+      console.log('Calling verification API...');
+      const result = await verifyEmail(verificationToken, emailToUse);
+      console.log('Verification API response:', result);
       
       if (result.success) {
-        setVerificationStatus('success');
+        console.log('VERIFICATION SUCCESSFUL - Setting status to success');
+        // Update state with success information
         setMessage('Your email has been successfully verified! You can now log in to your account.');
         
-        // Redirect to login after 3 seconds
+        // Explicitly set status in state
+        setVerificationStatus('success');
+        
+        // Delay redirect to ensure user sees success state
+        console.log('Scheduling redirect after successful verification');
         setTimeout(() => {
+          console.log('Redirecting to login page now');
           navigate('/login', { 
             state: { 
               message: 'Email verified successfully! You can now log in.',
-              email: email 
+              email: emailToUse,
+              verified: true
             } 
           });
-        }, 3000);
+        }, 5000); // Increased to 5 seconds to ensure user sees success message
       } else {
-        setVerificationStatus('error');
+        console.log('VERIFICATION FAILED - Setting status:', result.message?.includes('expired') ? 'expired' : 'error');
+        
         if (result.message?.includes('expired')) {
           setVerificationStatus('expired');
           setMessage('The verification link has expired. Please request a new one.');
         } else {
+          setVerificationStatus('error');
           setMessage(result.message || 'Email verification failed. Please try again.');
         }
       }
     } catch (error) {
+      console.error('Verification error:', error);
       setVerificationStatus('error');
       setMessage(error.message || 'Something went wrong during verification.');
     }
@@ -145,6 +175,8 @@ const EmailVerificationPage = () => {
     }
   };
 
+  console.log('Rendering with verification status:', verificationStatus);
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Background Pattern */}
@@ -178,6 +210,13 @@ const EmailVerificationPage = () => {
               {getStatusTitle()}
             </h1>
 
+            {/* Debug info - remove in production */}
+            <div className="p-2 bg-gray-100 text-xs text-left rounded mb-2 hidden">
+              <p>Status: {verificationStatus}</p>
+              <p>Email: {email}</p>
+              <p>Token: {token ? 'Present' : 'Not present'}</p>
+            </div>
+
             {/* Message */}
             <div className="mb-8">
               {message && (
@@ -207,6 +246,12 @@ const EmailVerificationPage = () => {
                   <CheckCircle className="w-5 h-5 mr-2" />
                   <span>Redirecting to login page in a few seconds...</span>
                 </div>
+                <div className="p-6 bg-green-50 border border-green-200 rounded-lg mb-4">
+                  <h3 className="font-semibold text-green-800 mb-2">Verification Successful!</h3>
+                  <p className="text-green-700">
+                    Your email has been verified successfully. You can now log in to your account and enjoy all the features.
+                  </p>
+                </div>
                 <Link
                   to="/login"
                   className="inline-block px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-blue-700 transition-all duration-200 transform hover:scale-105"
@@ -217,7 +262,7 @@ const EmailVerificationPage = () => {
               </div>
             )}
 
-            {(verificationStatus === 'error' || verificationStatus === 'expired' || verificationStatus === 'pending') && email && (
+            {(verificationStatus === 'error' || verificationStatus === 'expired') && email && (
               <div className="space-y-4">
                 {/* Resend Verification */}
                 <div className="bg-gray-50 p-6 rounded-lg">
@@ -267,6 +312,20 @@ const EmailVerificationPage = () => {
                   >
                     Create New Account
                   </Link>
+                </div>
+              </div>
+            )}
+
+            {verificationStatus === 'pending' && token && (
+              <div className="space-y-4">
+                <div className="p-6 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+                  <div className="flex justify-center mb-3">
+                    <RefreshCw className="w-6 h-6 text-blue-600 animate-spin" />
+                  </div>
+                  <h3 className="font-semibold text-blue-800 mb-2">Verifying Your Email</h3>
+                  <p className="text-blue-700">
+                    Please wait while we verify your email address. This may take a few moments...
+                  </p>
                 </div>
               </div>
             )}

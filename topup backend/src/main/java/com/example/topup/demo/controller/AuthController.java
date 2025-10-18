@@ -18,7 +18,12 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173", "http://172.20.10.3:3000", "http://172.20.10.3"}, 
+    allowedHeaders = "*", 
+    exposedHeaders = {"Authorization", "Content-Type"},
+    allowCredentials = "true", 
+    methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS},
+    maxAge = 3600)
 public class AuthController {
 
     @Autowired
@@ -29,7 +34,9 @@ public class AuthController {
      */
     @PostMapping("/register/personal")
     public ResponseEntity<?> registerPersonal(@Valid @RequestBody PersonalRegistrationRequest request) {
+        System.out.println("Received registration request for: " + request.getEmail());
         try {
+            System.out.println("Processing registration for: " + request.getFirstName() + " " + request.getLastName());
             User user = userService.registerPersonalUser(
                 request.getFirstName(),
                 request.getLastName(), 
@@ -131,26 +138,74 @@ public class AuthController {
     /**
      * Email verification
      */
-    @PostMapping("/verify-email")
-    public ResponseEntity<?> verifyEmail(@Valid @RequestBody EmailVerificationRequest request) {
+    @GetMapping("/verify-email")
+    public ResponseEntity<?> verifyEmail(@RequestParam String token, @RequestParam String email) {
         try {
-            boolean verified = userService.verifyEmail(request.getEmail(), request.getToken());
-
+            System.out.println("GET Verification request received - Token: " + token + ", Email: " + email);
+            
+            // Validate parameters
+            if (token == null || token.trim().isEmpty() || email == null || email.trim().isEmpty()) {
+                System.out.println("Missing verification parameters - token: " + token + ", email: " + email);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Missing required verification parameters. Please check your verification link.");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+            
+            boolean verified = userService.verifyEmail(email, token);
+            
             Map<String, Object> response = new HashMap<>();
             if (verified) {
+                System.out.println("Email verification successful for " + email);
                 response.put("success", true);
                 response.put("message", "Email verified successfully!");
                 return ResponseEntity.ok(response);
             } else {
+                System.out.println("Email verification failed for " + email + " - Invalid or expired token");
                 response.put("success", false);
                 response.put("message", "Invalid or expired verification token.");
                 return ResponseEntity.badRequest().body(response);
             }
 
         } catch (Exception e) {
+            System.out.println("Email verification error: " + e.getMessage());
+            e.printStackTrace();
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Email verification failed. Please try again.");
+            response.put("message", "Email verification failed. Please try again. Error: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+    
+    /**
+     * Email verification (POST version for backward compatibility)
+     */
+    @PostMapping("/verify-email")
+    public ResponseEntity<?> verifyEmailPost(@Valid @RequestBody EmailVerificationRequest request) {
+        try {
+            System.out.println("POST Verification request received - Token: " + request.getToken() + ", Email: " + request.getEmail());
+            
+            boolean verified = userService.verifyEmail(request.getEmail(), request.getToken());
+            
+            Map<String, Object> response = new HashMap<>();
+            if (verified) {
+                System.out.println("Email verification successful for " + request.getEmail());
+                response.put("success", true);
+                response.put("message", "Email verified successfully!");
+                return ResponseEntity.ok(response);
+            } else {
+                System.out.println("Email verification failed for " + request.getEmail() + " - Invalid or expired token");
+                response.put("success", false);
+                response.put("message", "Invalid or expired verification token.");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+        } catch (Exception e) {
+            System.out.println("Email verification error: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Email verification failed. Please try again. Error: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
     }
@@ -266,12 +321,16 @@ public class AuthController {
         private String email;
 
         @NotBlank(message = "Mobile number is required")
-        @Pattern(regexp = "^\\+?[1-9]\\d{1,14}$", message = "Please provide a valid mobile number")
+        @Pattern(regexp = "^[0-9\\+][0-9]{7,14}$", message = "Please provide a valid mobile number")
         private String mobileNumber;
 
         @NotBlank(message = "Password is required")
         @Size(min = 8, message = "Password must be at least 8 characters long")
         private String password;
+        
+        private boolean acceptMarketing;
+        
+        private String accountType;
 
         // Getters and Setters
         public String getFirstName() { return firstName; }
@@ -284,6 +343,10 @@ public class AuthController {
         public void setMobileNumber(String mobileNumber) { this.mobileNumber = mobileNumber; }
         public String getPassword() { return password; }
         public void setPassword(String password) { this.password = password; }
+        public boolean getAcceptMarketing() { return acceptMarketing; }
+        public void setAcceptMarketing(boolean acceptMarketing) { this.acceptMarketing = acceptMarketing; }
+        public String getAccountType() { return accountType; }
+        public void setAccountType(String accountType) { this.accountType = accountType; }
     }
 
     public static class BusinessRegistrationRequest extends PersonalRegistrationRequest {
