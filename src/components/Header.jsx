@@ -68,10 +68,10 @@ const Header = () => {
         </div>
 
         <div className="container mx-auto px-4 lg:px-6">
-          <div className="flex items-center justify-between h-20">
+          <div className="flex items-center justify-between h-20 gap-4">
             
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-3 group logo-container">
+            <Link to="/" className="flex items-center gap-3 group logo-container flex-shrink-0">
               <div className="relative w-12 h-12 bg-gradient-to-br from-teal-500 via-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center logo-icon shadow-lg overflow-hidden">
                 {/* Animated background glow */}
                 <div className="absolute inset-0 bg-gradient-to-br from-teal-400 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-xl"></div>
@@ -85,33 +85,43 @@ const Header = () => {
                 <div className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full opacity-0 group-hover:opacity-100 group-hover:animate-ping"></div>
                 <div className="absolute bottom-1 left-1 w-1.5 h-1.5 bg-yellow-300 rounded-full opacity-0 group-hover:opacity-100 group-hover:animate-pulse"></div>
               </div>
-              <span className="text-2xl font-display font-bold logo-text">
+              <span className="text-2xl font-display font-bold logo-text whitespace-nowrap">
                 TopUp Pro
               </span>
             </Link>
 
-            {/* Navigation */}
-            <nav className="hidden lg:flex items-center gap-12">
-              <Link to="/" className="nav-link-clean group relative px-4 py-2 text-gray-700 hover:text-cyan-600 font-accent font-medium transition-all duration-300">
-                Home
-                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
-              </Link>
-              <Link to="/bundles" className="nav-link-clean group relative px-4 py-2 text-gray-700 hover:text-cyan-600 font-accent font-medium transition-all duration-300">
-                Bundles
-                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
-              </Link>
-              <Link to="/esim" className="nav-link-clean group relative px-4 py-2 text-gray-700 hover:text-cyan-600 font-accent font-medium transition-all duration-300">
-                eSIM
-                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
-              </Link>
-              <Link to="/help" className="nav-link-clean group relative px-4 py-2 text-gray-700 hover:text-cyan-600 font-accent font-medium transition-all duration-300">
-                Support
-                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
-              </Link>
+            {/* Navigation - Centered */}
+            <nav className="hidden lg:flex items-center justify-center flex-1 mx-8">
+              <div className="flex items-center gap-6 xl:gap-8">
+                <Link to="/" className="nav-link-clean group relative px-3 py-2 text-gray-900 hover:text-cyan-600 font-semibold transition-all duration-300 whitespace-nowrap">
+                  Home
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
+                </Link>
+                <Link to="/bundles" className="nav-link-clean group relative px-3 py-2 text-gray-900 hover:text-cyan-600 font-semibold transition-all duration-300 whitespace-nowrap">
+                  Prepaid Bundles
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
+                </Link>
+                <Link to="/esim" className="nav-link-clean group relative px-3 py-2 text-gray-900 hover:text-cyan-600 font-semibold transition-all duration-300 whitespace-nowrap">
+                  eSIM
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
+                </Link>
+                <Link to="/offers" className="nav-link-clean group relative px-3 py-2 text-gray-900 hover:text-cyan-600 font-semibold transition-all duration-300 whitespace-nowrap">
+                  Offers
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
+                </Link>
+                <Link to="/support" className="nav-link-clean group relative px-3 py-2 text-gray-900 hover:text-cyan-600 font-semibold transition-all duration-300 whitespace-nowrap">
+                  Support
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
+                </Link>
+                <Link to="/faq" className="nav-link-clean group relative px-3 py-2 text-gray-900 hover:text-cyan-600 font-semibold transition-all duration-300 whitespace-nowrap">
+                  FAQ
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
+                </Link>
+              </div>
             </nav>
 
             {/* Right Side Actions */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 flex-shrink-0">
               {/* Shopping Cart */}
               <Link to="/checkout" className="relative cart-icon">
                 <div className="p-3 bg-gradient-to-r from-teal-500 to-cyan-600 rounded-xl btn-animated shadow-lg">
@@ -120,7 +130,7 @@ const Header = () => {
               </Link>
 
               {/* Top Up Button */}
-              <Link to="/bundles" className="hidden md:flex items-center gap-2 topup-button text-white px-6 py-3 rounded-xl font-accent font-semibold shadow-lg">
+              <Link to="/bundles" className="hidden md:flex items-center gap-2 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white px-4 py-3 rounded-xl font-semibold shadow-lg transform hover:scale-105 transition-all duration-300 whitespace-nowrap">
                 <Zap size={18} className="relative z-10" />
                 <span className="relative z-10">Top Up Now</span>
               </Link>
@@ -183,13 +193,13 @@ const Header = () => {
                 <div className="hidden lg:flex items-center gap-3">
                   <Link 
                     to="/login"
-                    className="px-6 py-3 text-gray-700 hover:text-cyan-600 font-accent font-semibold nav-link"
+                    className="px-4 py-3 text-gray-900 hover:text-cyan-600 font-semibold border border-gray-300 hover:border-cyan-500 rounded-xl transition-all duration-300 hover:shadow-md whitespace-nowrap"
                   >
                     Sign In
                   </Link>
                   <Link 
                     to="/signup"
-                    className="px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-accent font-semibold rounded-xl btn-animated shadow-lg"
+                    className="px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg transform hover:scale-105 transition-all duration-300 whitespace-nowrap"
                   >
                     <span className="relative z-10">Sign Up</span>
                   </Link>
@@ -216,31 +226,45 @@ const Header = () => {
               <nav className="flex flex-col gap-4">
                 <Link 
                   to="/" 
-                  className="nav-link text-gray-700 hover:text-cyan-600 font-accent font-medium py-2" 
+                  className="nav-link text-gray-900 hover:text-cyan-600 font-semibold py-3 px-2 rounded-lg hover:bg-white/50 transition-all duration-300" 
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Home
                 </Link>
                 <Link 
                   to="/bundles" 
-                  className="nav-link text-gray-700 hover:text-cyan-600 font-accent font-medium py-2" 
+                  className="nav-link text-gray-900 hover:text-cyan-600 font-semibold py-3 px-2 rounded-lg hover:bg-white/50 transition-all duration-300" 
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  Bundles
+                  Prepaid Bundles
                 </Link>
                 <Link 
                   to="/esim" 
-                  className="nav-link text-gray-700 hover:text-cyan-600 font-accent font-medium py-2" 
+                  className="nav-link text-gray-900 hover:text-cyan-600 font-semibold py-3 px-2 rounded-lg hover:bg-white/50 transition-all duration-300" 
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   eSIM
                 </Link>
                 <Link 
-                  to="/help" 
-                  className="nav-link text-gray-700 hover:text-cyan-600 font-accent font-medium py-2" 
+                  to="/offers" 
+                  className="nav-link text-gray-900 hover:text-cyan-600 font-semibold py-3 px-2 rounded-lg hover:bg-white/50 transition-all duration-300" 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Offers
+                </Link>
+                <Link 
+                  to="/support" 
+                  className="nav-link text-gray-900 hover:text-cyan-600 font-semibold py-3 px-2 rounded-lg hover:bg-white/50 transition-all duration-300" 
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Support
+                </Link>
+                <Link 
+                  to="/faq" 
+                  className="nav-link text-gray-900 hover:text-cyan-600 font-semibold py-3 px-2 rounded-lg hover:bg-white/50 transition-all duration-300" 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  FAQ
                 </Link>
                 
                 {/* Authentication Section for Mobile */}
@@ -291,14 +315,14 @@ const Header = () => {
                   <div className="border-t border-gray-200 pt-4 mt-2 space-y-3">
                     <Link 
                       to="/login"
-                      className="block text-center text-gray-700 hover:text-blue-600 font-accent font-semibold py-3 border border-gray-300 rounded-xl hover:border-blue-300 btn-animated" 
+                      className="block text-center text-gray-900 hover:text-cyan-600 font-semibold py-4 border-2 border-gray-300 hover:border-cyan-500 rounded-xl transition-all duration-300 hover:shadow-md" 
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       <span className="relative z-10">Sign In</span>
                     </Link>
                     <Link 
                       to="/signup"
-                      className="block text-center bg-gradient-to-r from-blue-600 to-purple-600 text-white font-accent font-semibold py-3 rounded-xl shadow-lg btn-animated" 
+                      className="block text-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-4 rounded-xl shadow-lg transform hover:scale-[1.02] transition-all duration-300" 
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       <span className="relative z-10">Sign Up</span>
@@ -308,7 +332,7 @@ const Header = () => {
                 
                 <Link 
                   to="/bundles" 
-                  className="flex items-center justify-center gap-2 w-full topup-button text-white py-4 px-6 rounded-xl font-accent font-semibold mt-4 shadow-lg" 
+                  className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white py-4 px-6 rounded-xl font-semibold mt-4 shadow-lg transform hover:scale-[1.02] transition-all duration-300" 
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   <Zap size={18} className="relative z-10" />

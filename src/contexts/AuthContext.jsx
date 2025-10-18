@@ -10,6 +10,9 @@ export const useAuth = () => {
   return context;
 };
 
+// API Base URL - In production, this should come from environment variables
+const API_BASE_URL = 'http://localhost:8080/api';
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -18,29 +21,217 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Check if user is logged in (from localStorage)
     const storedUser = localStorage.getItem('user');
-    if (storedUser) {
+    const storedToken = localStorage.getItem('token');
+    
+    if (storedUser && storedToken) {
       try {
         const userData = JSON.parse(storedUser);
         setUser(userData);
         setIsAuthenticated(true);
+        
+        // Verify token is still valid by making a request to the backend
+        verifyToken(storedToken);
       } catch (error) {
         console.error('Error parsing user data:', error);
         localStorage.removeItem('user');
+        localStorage.removeItem('token');
       }
     }
     setIsLoading(false);
   }, []);
 
-  const login = (userData) => {
-    setUser(userData);
-    setIsAuthenticated(true);
-    localStorage.setItem('user', JSON.stringify(userData));
+  const verifyToken = async (token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/verify`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        // Token is invalid, logout user
+        logout();
+      }
+    } catch (error) {
+      console.error('Token verification failed:', error);
+      // On network error, don't logout immediately
+    }
+  };
+
+  // Personal Account Registration
+  const registerPersonal = async (userData) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/register/personal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(userData)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        return { success: true, data: data };
+      } else {
+        return { success: false, message: data.message || 'Registration failed' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Network error. Please try again.' };
+    }
+  };
+
+  // Business Account Registration
+  const registerBusiness = async (userData) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/register/business`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(userData)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        return { success: true, data: data };
+      } else {
+        return { success: false, message: data.message || 'Business registration failed' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Network error. Please try again.' };
+    }
+  };
+
+  // Login Function
+  const login = async (credentials) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(credentials)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        const { user: userData, token } = data;
+        
+        setUser(userData);
+        setIsAuthenticated(true);
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('token', token);
+        
+        return { success: true, user: userData };
+      } else {
+        return { success: false, message: data.message || 'Login failed' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Network error. Please try again.' };
+    }
+  };
+
+  // Email Verification
+  const verifyEmail = async (token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/verify-email?token=${token}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Email verification failed' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Network error. Please try again.' };
+    }
+  };
+
+  // Resend Verification Email
+  const resendVerification = async (email) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Failed to resend verification email' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Network error. Please try again.' };
+    }
+  };
+
+  // Send Password Reset Email
+  const sendPasswordReset = async (email) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Failed to send reset email' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Network error. Please try again.' };
+    }
+  };
+
+  // Reset Password
+  const resetPassword = async (resetData) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(resetData)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Password reset failed' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Network error. Please try again.' };
+    }
   };
 
   const logout = () => {
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
   };
 
   const updateUser = (userData) => {
@@ -55,9 +246,19 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     updateUser,
+    registerPersonal,
+    registerBusiness,
+    verifyEmail,
+    resendVerification,
+    sendPasswordReset,
+    resetPassword
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export default AuthContext;

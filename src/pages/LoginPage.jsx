@@ -61,14 +61,22 @@ const LoginPage = () => {
     setSubmitError('');
 
     try {
-      const result = await login(formData.email, formData.password);
+      const result = await login({
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password
+      });
       
       if (result.success) {
-        // Redirect to intended page or dashboard
+        // Login successful, user will be redirected by useEffect
         const from = location.state?.from?.pathname || '/';
         navigate(from, { replace: true });
       } else {
-        setSubmitError(formatErrorMessage(result.error));
+        setSubmitError(result.message || 'Login failed. Please check your credentials.');
+        
+        // If email not verified, offer resend verification
+        if (result.message?.includes('verify') || result.message?.includes('verification')) {
+          setSubmitError(`${result.message}`);
+        }
       }
     } catch (error) {
       setSubmitError('An unexpected error occurred. Please try again.');

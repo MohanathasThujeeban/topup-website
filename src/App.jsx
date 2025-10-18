@@ -7,12 +7,22 @@ import WhatsAppWidget from './components/WhatsAppWidget';
 import HomePage from './pages/HomePage';
 import BundlesPage from './pages/BundlesPage';
 import ESIMPage from './pages/eSIMPage';
+import OffersPage from './pages/OffersPage';
+import SupportPage from './pages/SupportPage';
+import FAQPage from './pages/FAQPage';
+import TermsPage from './pages/TermsPage';
+import PrivacyPage from './pages/PrivacyPage';
+import ContactPage from './pages/ContactPage';
 import ProductPage from './pages/ProductPage';
 import CheckoutPage from './pages/CheckoutPage';
 import ConfirmationPage from './pages/ConfirmationPage';
 import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
 import ProfilePage from './pages/ProfilePage';
+// Signup flow pages
+import AccountTypeSelectionPage from './pages/AccountTypeSelectionPage';
+import PersonalRegistrationPage from './pages/PersonalRegistrationPage';
+import BusinessRegistrationPage from './pages/BusinessRegistrationPage';
+import EmailVerificationPage from './pages/EmailVerificationPage';
 
 function App() {
   return (
@@ -24,11 +34,21 @@ function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/bundles" element={<BundlesPage />} />
             <Route path="/esim" element={<ESIMPage />} />
+            <Route path="/offers" element={<OffersPage />} />
+            <Route path="/support" element={<SupportPage />} />
+            <Route path="/faq" element={<FAQPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/contact" element={<ContactPage />} />
             <Route path="/product/:id" element={<ProductPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/confirmation" element={<ConfirmationPage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
+            {/* Signup flow */}
+            <Route path="/signup" element={<AccountTypeSelectionPage />} />
+            <Route path="/signup/personal" element={<PersonalRegistrationPage />} />
+            <Route path="/signup/business" element={<BusinessRegistrationPage />} />
+            <Route path="/verify-email" element={<EmailVerificationPage />} />
             <Route path="/profile" element={<ProfilePage />} />
           </Routes>
         </main>

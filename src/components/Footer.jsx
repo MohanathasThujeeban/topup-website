@@ -35,7 +35,7 @@ const Footer = () => {
               <span className="text-xl font-bold text-white font-display group-hover:text-cyan-400 transition-colors duration-300">EasyTopup.no</span>
             </div>
             <p className="text-sm mb-4 text-gray-400 font-body">
-              Instant Lycamobile ePIN and eSIM delivery. Fast, secure, and reliable.
+              Instant Lycamobile ePIN and eSIM delivery. Fast, secure, and reliable mobile top-up solutions for Norway.
             </p>
             <div className="flex gap-4">
               <a href="#" className="w-10 h-10 bg-gray-800 hover:bg-gradient-to-br hover:from-teal-500 hover:to-cyan-500 rounded-lg flex items-center justify-center hover:scale-110 hover:rotate-6 transition-all duration-300 group shadow-lg">
@@ -52,30 +52,30 @@ const Footer = () => {
 
           {/* Quick Links */}
           <div>
-            <h3 className="text-white font-semibold mb-4 font-heading">Quick Links</h3>
+            <h3 className="text-white font-semibold mb-4 font-heading">Services</h3>
             <ul className="space-y-2">
               <li>
                 <Link to="/bundles" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
                   <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
-                  Bundles
+                  Prepaid Bundles
                 </Link>
               </li>
               <li>
-                <Link to="/help" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
+                <Link to="/esim" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
                   <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
-                  Help Center
+                  eSIM Solutions
                 </Link>
               </li>
               <li>
-                <Link to="/about" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
+                <Link to="/offers" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
                   <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
-                  About Us
+                  Special Offers
                 </Link>
               </li>
               <li>
-                <Link to="/contact" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
+                <Link to="/support" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
                   <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
-                  Contact
+                  Customer Support
                 </Link>
               </li>
             </ul>
@@ -83,7 +83,7 @@ const Footer = () => {
 
           {/* Legal */}
           <div>
-            <h3 className="text-white font-semibold mb-4 font-heading">Legal</h3>
+            <h3 className="text-white font-semibold mb-4 font-heading">Legal & Privacy</h3>
             <ul className="space-y-2">
               <li>
                 <Link to="/terms" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
@@ -94,7 +94,7 @@ const Footer = () => {
               <li>
                 <Link to="/privacy" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
                   <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
-                  Privacy Policy
+                  Privacy Policy & GDPR
                 </Link>
               </li>
               <li>
@@ -112,31 +112,56 @@ const Footer = () => {
             </ul>
           </div>
 
-          {/* Contact Info */}
+          {/* Contact Information */}
           <div>
-            <h3 className="text-white font-semibold mb-4 font-heading">Contact Us</h3>
+            <h3 className="text-white font-semibold mb-4 font-heading">Contact Information</h3>
             <ul className="space-y-3">
-              <li className="flex items-center gap-3 group hover:translate-x-2 transition-transform duration-300">
-                <div className="w-8 h-8 bg-gray-800 group-hover:bg-gradient-to-br group-hover:from-teal-500 group-hover:to-cyan-500 rounded-lg flex items-center justify-center transition-all duration-300">
-                  <Mail size={16} className="group-hover:text-white transition-colors" />
-                </div>
-                <span className="text-sm font-body group-hover:text-cyan-400 transition-colors">support@easytopup.no</span>
-              </li>
-              <li className="flex items-center gap-3 group hover:translate-x-2 transition-transform duration-300">
-                <div className="w-8 h-8 bg-gray-800 group-hover:bg-gradient-to-br group-hover:from-teal-500 group-hover:to-cyan-500 rounded-lg flex items-center justify-center transition-all duration-300">
+              <li className="flex items-start gap-3 group hover:translate-x-2 transition-transform duration-300">
+                <div className="w-8 h-8 bg-gray-800 group-hover:bg-gradient-to-br group-hover:from-green-500 group-hover:to-emerald-500 rounded-lg flex items-center justify-center transition-all duration-300 mt-0.5">
                   <Phone size={16} className="group-hover:text-white transition-colors" />
                 </div>
-                <span className="text-sm font-body group-hover:text-cyan-400 transition-colors">+47 12 134656</span>
+                <div>
+                  <p className="text-sm font-body group-hover:text-cyan-400 transition-colors">WhatsApp: +47 xxx xxx xxx</p>
+                  <p className="text-xs text-gray-500">24/7 Support Available</p>
+                </div>
               </li>
               <li className="flex items-start gap-3 group hover:translate-x-2 transition-transform duration-300">
                 <div className="w-8 h-8 bg-gray-800 group-hover:bg-gradient-to-br group-hover:from-teal-500 group-hover:to-cyan-500 rounded-lg flex items-center justify-center transition-all duration-300 mt-0.5">
+                  <Mail size={16} className="group-hover:text-white transition-colors" />
+                </div>
+                <div>
+                  <p className="text-sm font-body group-hover:text-cyan-400 transition-colors">support@easytopup.no</p>
+                  <p className="text-xs text-gray-500">Response within 2-4 hours</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-3 group hover:translate-x-2 transition-transform duration-300">
+                <div className="w-8 h-8 bg-gray-800 group-hover:bg-gradient-to-br group-hover:from-blue-500 group-hover:to-indigo-500 rounded-lg flex items-center justify-center transition-all duration-300 mt-0.5">
                   <MapPin size={16} className="group-hover:text-white transition-colors" />
                 </div>
-                <span className="text-sm font-body group-hover:text-cyan-400 transition-colors">
-                  Oslo, Norway
-                </span>
+                <div>
+                  <p className="text-sm font-body group-hover:text-cyan-400 transition-colors">Karl Johans gate 1</p>
+                  <p className="text-xs text-gray-500">0154 Oslo, Norway</p>
+                </div>
               </li>
             </ul>
+            
+            {/* Quick Access */}
+            <div className="mt-6 pt-4 border-t border-gray-800">
+              <ul className="space-y-2">
+                <li>
+                  <Link to="/contact" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body text-sm">
+                    <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
+                    Contact Form
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/faq" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body text-sm">
+                    <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
+                    FAQ & Help
+                  </Link>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
 
