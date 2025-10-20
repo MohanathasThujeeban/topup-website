@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -28,6 +30,88 @@ public class AuthController {
 
     @Autowired
     private UserService userService;
+
+    /**
+     * Login (development-friendly): verifies credentials and returns a basic token and user payload
+     */
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+        try {
+            Optional<User> userOpt = userService.findByEmail(request.getEmail());
+            if (userOpt.isEmpty()) {
+                Map<String, Object> res = new HashMap<>();
+                res.put("success", false);
+                res.put("message", "Invalid email or password");
+                return ResponseEntity.status(401).body(res);
+            }
+
+            User user = userOpt.get();
+            // Validate password
+            boolean matches = userService
+                .getPasswordEncoder()
+                .matches(request.getPassword(), user.getPassword());
+            if (!matches) {
+                Map<String, Object> res = new HashMap<>();
+                res.put("success", false);
+                res.put("message", "Invalid email or password");
+                return ResponseEntity.status(401).body(res);
+            }
+
+            // Ensure email verified for personal accounts before login
+            if (!user.isEmailVerified()) {
+                Map<String, Object> res = new HashMap<>();
+                res.put("success", false);
+                res.put("message", "Please verify your email to continue.");
+                res.put("requiresVerification", true);
+                return ResponseEntity.status(403).body(res);
+            }
+
+            // Generate a simple dev token (replace with JWT in production)
+            String token = "dev-" + UUID.randomUUID();
+
+            Map<String, Object> userPayload = new HashMap<>();
+            userPayload.put("id", user.getId());
+            userPayload.put("name", (user.getFirstName() != null ? user.getFirstName() : "")
+                    + (user.getLastName() != null ? (" " + user.getLastName()) : ""));
+            userPayload.put("email", user.getEmail());
+            userPayload.put("accountType", user.getAccountType() != null ? user.getAccountType().name() : "PERSONAL");
+            userPayload.put("joinedAt", user.getCreatedDate());
+            userPayload.put("avatar", null);
+            Map<String, Object> prefs = new HashMap<>();
+            prefs.put("currency", "NOK");
+            prefs.put("language", "en");
+            prefs.put("notifications", true);
+            userPayload.put("preferences", prefs);
+
+            Map<String, Object> res = new HashMap<>();
+            res.put("success", true);
+            res.put("user", userPayload);
+            res.put("token", token);
+            return ResponseEntity.ok(res);
+
+        } catch (Exception e) {
+            Map<String, Object> res = new HashMap<>();
+            res.put("success", false);
+            res.put("message", "Login failed. Please try again.");
+            return ResponseEntity.internalServerError().body(res);
+        }
+    }
+
+    /**
+     * Token verify (development): Accepts any Bearer token and returns success
+     */
+    @GetMapping("/verify")
+    public ResponseEntity<?> verifyToken(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            Map<String, Object> res = new HashMap<>();
+            res.put("success", true);
+            return ResponseEntity.ok(res);
+        }
+        Map<String, Object> res = new HashMap<>();
+        res.put("success", false);
+        res.put("message", "Missing or invalid Authorization header");
+        return ResponseEntity.status(401).body(res);
+    }
 
     /**
      * Personal user registration
@@ -261,6 +345,32 @@ public class AuthController {
     }
 
     /**
+     * Validate reset token without using it
+     */
+    @GetMapping("/validate-reset-token")
+    public ResponseEntity<?> validateResetToken(@RequestParam String token, @RequestParam String email) {
+        try {
+            boolean isValid = userService.validateResetToken(email, token);
+
+            Map<String, Object> response = new HashMap<>();
+            if (isValid) {
+                response.put("success", true);
+                response.put("message", "Reset token is valid.");
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("success", false);
+                response.put("message", "Invalid or expired reset token.");
+                return ResponseEntity.badRequest().body(response);
+            }
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Failed to validate reset token. Please try again.");
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    /**
      * Reset password with token
      */
     @PostMapping("/reset-password")
@@ -469,5 +579,19 @@ public class AuthController {
         public void setToken(String token) { this.token = token; }
         public String getNewPassword() { return newPassword; }
         public void setNewPassword(String newPassword) { this.newPassword = newPassword; }
+    }
+
+    public static class LoginRequest {
+        @NotBlank(message = "Email is required")
+        @Email(message = "Please provide a valid email address")
+        private String email;
+
+        @NotBlank(message = "Password is required")
+        private String password;
+
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+        public String getPassword() { return password; }
+        public void setPassword(String password) { this.password = password; }
     }
 }

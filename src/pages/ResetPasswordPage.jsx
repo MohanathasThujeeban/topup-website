@@ -5,6 +5,7 @@ import {
   Shield, RefreshCw 
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const ResetPasswordPage = () => {
   const navigate = useNavigate();
@@ -27,12 +28,49 @@ const ResetPasswordPage = () => {
   const token = searchParams.get('token');
   const email = searchParams.get('email');
 
+  const [isValidatingToken, setIsValidatingToken] = useState(true);
+
   useEffect(() => {
     // Check if token and email are present
     if (!token || !email) {
       setTokenValid(false);
       setMessage('Invalid or missing reset token. Please request a new password reset.');
+      setIsValidatingToken(false);
+      return;
     }
+    
+    // Actually validate the token with the backend
+    const validateToken = async () => {
+      try {
+        // Call the backend to validate the token
+        const API_BASE_URL = 'http://172.20.10.3:8080'; // This should come from env vars or config
+        const response = await fetch(`${API_BASE_URL}/api/auth/validate-reset-token?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
+          }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+          setIsValidatingToken(false);
+          setTokenValid(true);
+        } else {
+          setTokenValid(false);
+          setMessage(data.message || 'Invalid or expired reset token. Please request a new one.');
+          setIsValidatingToken(false);
+        }
+      } catch (error) {
+        console.error("Error validating token:", error);
+        setTokenValid(false);
+        setMessage('There was an error validating your reset token. Please try again.');
+        setIsValidatingToken(false);
+      }
+    };
+    
+    validateToken();
   }, [token, email]);
 
   // Password strength calculation
@@ -171,6 +209,18 @@ const ResetPasswordPage = () => {
     }
   };
 
+  if (isValidatingToken) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto px-4">
+          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 text-center">
+            <LoadingSpinner message="Validating your reset link..." />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!tokenValid) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
@@ -246,27 +296,38 @@ const ResetPasswordPage = () => {
 
           {/* Form */}
           <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-            {submitStatus === 'success' ? (
+            {isSubmitting ? (
+              /* Loading State */
+              <div className="text-center py-6">
+                <LoadingSpinner message="Resetting your password..." />
+              </div>
+            ) : submitStatus === 'success' ? (
               /* Success State */
               <div className="text-center">
-                <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold text-green-600 mb-4">
-                  Password Reset Successful!
-                </h2>
-                <p className="text-gray-600 mb-6 leading-relaxed">
-                  {message}
-                </p>
-                <div className="flex items-center justify-center text-green-600 mb-4">
-                  <RefreshCw className="w-4 h-4 mr-2" />
+                <div className="mb-6">
+                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-3">
+                    <h2 className="text-xl font-semibold text-green-700 mb-2">
+                      Password Reset Successful!
+                    </h2>
+                    <p className="text-green-600 leading-relaxed">
+                      {message}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-center text-green-600 mb-4 bg-green-50 p-2 rounded-full inline-block">
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                   <span className="text-sm">Redirecting to login page...</span>
                 </div>
-                <Link
-                  to="/login"
-                  state={{ email: email }}
-                  className="inline-block px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-blue-700 transition-all duration-200"
-                >
-                  Go to Login
-                </Link>
+                <div className="mt-6">
+                  <Link
+                    to="/login"
+                    state={{ email: email }}
+                    className="inline-block px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-blue-700 transition-all duration-200"
+                  >
+                    Go to Login
+                  </Link>
+                </div>
               </div>
             ) : (
               /* Form State */

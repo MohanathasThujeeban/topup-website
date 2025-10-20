@@ -18,11 +18,18 @@ import CheckoutPage from './pages/CheckoutPage';
 import ConfirmationPage from './pages/ConfirmationPage';
 import LoginPage from './pages/LoginPage';
 import ProfilePage from './pages/ProfilePage';
+import RetailerLoginPage from './pages/RetailerLoginPage';
+import RetailerDashboard from './pages/RetailerDashboard';
+import RetailerOrderConfirmationPage from './pages/RetailerOrderConfirmationPage';
+import AdminDashboard from './pages/AdminDashboard';
+import RequireBusiness from './components/RequireBusiness';
 // Signup flow pages
 import AccountTypeSelectionPage from './pages/AccountTypeSelectionPage';
 import PersonalRegistrationPage from './pages/PersonalRegistrationPage';
 import BusinessRegistrationPage from './pages/BusinessRegistrationPage';
 import EmailVerificationPage from './pages/EmailVerificationPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 function App() {
   return (
@@ -49,7 +56,15 @@ function App() {
             <Route path="/signup/personal" element={<PersonalRegistrationPage />} />
             <Route path="/signup/business" element={<BusinessRegistrationPage />} />
             <Route path="/verify-email" element={<EmailVerificationPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            {/* B2B (Retailer) */}
+            <Route path="/retailer/login" element={<RetailerLoginPage />} />
+            <Route path="/retailer/dashboard" element={<RetailerDashboard />} />
+            <Route path="/retailer/order/:orderId/confirmation" element={<RequireBusiness><RetailerOrderConfirmationPage /></RequireBusiness>} />
+            {/* Admin */}
+            <Route path="/admin" element={<AdminDashboard />} />
           </Routes>
         </main>
         <Footer />

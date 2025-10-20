@@ -2,14 +2,22 @@ package com.example.topup.demo.service;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+
 @Service
 public class EmailService {
+    
+    private static final Logger log = LoggerFactory.getLogger(EmailService.class);
 
     @Autowired
     private JavaMailSender mailSender;
@@ -42,6 +50,7 @@ public class EmailService {
                 htmlContent
             );
         } catch (Exception e) {
+            log.error("Failed to send verification email", e);
             throw new RuntimeException("Failed to send verification email", e);
         }
     }
@@ -60,6 +69,7 @@ public class EmailService {
                 htmlContent
             );
         } catch (Exception e) {
+            log.error("Failed to send password reset email", e);
             throw new RuntimeException("Failed to send password reset email", e);
         }
     }
@@ -77,6 +87,7 @@ public class EmailService {
                 htmlContent
             );
         } catch (Exception e) {
+            log.error("Failed to send business approval email", e);
             throw new RuntimeException("Failed to send business approval email", e);
         }
     }
@@ -94,6 +105,7 @@ public class EmailService {
                 htmlContent
             );
         } catch (Exception e) {
+            log.error("Failed to send business pending email", e);
             throw new RuntimeException("Failed to send business pending email", e);
         }
     }
@@ -111,6 +123,7 @@ public class EmailService {
                 htmlContent
             );
         } catch (Exception e) {
+            log.error("Failed to send welcome email", e);
             throw new RuntimeException("Failed to send welcome email", e);
         }
     }
@@ -131,48 +144,6 @@ public class EmailService {
     }
 
     // HTML Email Templates
-    
-    private String generateEmailVerificationHtml(String firstName, String verificationUrl) {
-        return String.format("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Email Verification</title>
-            </head>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                    <h1 style="color: white; margin: 0; font-size: 28px;">%s</h1>
-                </div>
-                
-                <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
-                    <h2 style="color: #333; margin-bottom: 20px;">Hi %s!</h2>
-                    
-                    <p style="margin-bottom: 20px;">Thank you for registering with %s. To complete your account setup, please verify your email address.</p>
-                    
-                    <div style="text-align: center; margin: 30px 0;">
-                        <a href="%s" style="background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Verify Email Address</a>
-                    </div>
-                    
-                    <p style="margin-bottom: 20px;">If the button doesn't work, you can copy and paste this link into your browser:</p>
-                    <p style="word-break: break-all; background: #e9e9e9; padding: 10px; border-radius: 5px; font-family: monospace;">%s</p>
-                    
-                    <p style="margin-bottom: 20px; color: #666; font-size: 14px;">This verification link will expire in 24 hours for security purposes.</p>
-                    
-                    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-                    
-                    <p style="color: #666; font-size: 14px; margin: 0;">
-                        If you didn't create an account with us, please ignore this email or contact our support team at 
-                        <a href="mailto:%s" style="color: #667eea;">%s</a>
-                    </p>
-                </div>
-            </body>
-            </html>
-            """, 
-            appName, firstName, appName, verificationUrl, verificationUrl, supportEmail, supportEmail
-        );
-    }
     private String generateEmailVerificationHtml(String firstName, String verificationUrl, String verificationKey) {
         return String.format("""
             <!DOCTYPE html>
@@ -213,51 +184,64 @@ public class EmailService {
     }
 
     private String generatePasswordResetHtml(String firstName, String resetUrl) {
-        return String.format("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Password Reset</title>
-            </head>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                    <h1 style="color: white; margin: 0; font-size: 28px;">%s</h1>
-                </div>
-                
-                <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
-                    <h2 style="color: #333; margin-bottom: 20px;">Hi %s!</h2>
-                    
-                    <p style="margin-bottom: 20px;">We received a request to reset your password for your %s account.</p>
-                    
-                    <div style="text-align: center; margin: 30px 0;">
-                        <a href="%s" style="background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Reset Password</a>
+        // Try to load template from file
+        try {
+            // Read the template file
+            Resource resource = new ClassPathResource("templates/password-reset-email.html");
+            String template = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            
+            // Format the template with the values
+            return String.format(template, firstName, resetUrl, resetUrl, supportEmail, supportEmail);
+        } catch (Exception e) {
+            // Fall back to the inline template if file loading fails
+            log.error("Failed to load password reset email template, falling back to default template", e);
+            
+            return String.format("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Password Reset</title>
+                </head>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <h1 style="color: white; margin: 0; font-size: 28px;">%s</h1>
                     </div>
                     
-                    <p style="margin-bottom: 20px;">If the button doesn't work, you can copy and paste this link into your browser:</p>
-                    <p style="word-break: break-all; background: #e9e9e9; padding: 10px; border-radius: 5px; font-family: monospace;">%s</p>
-                    
-                    <p style="margin-bottom: 20px; color: #666; font-size: 14px;">This reset link will expire in 1 hour for security purposes.</p>
-                    
-                    <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                        <p style="margin: 0; color: #856404; font-size: 14px;">
-                            <strong>Security Notice:</strong> If you didn't request this password reset, please ignore this email. Your account is still secure.
+                    <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
+                        <h2 style="color: #333; margin-bottom: 20px;">Hi %s!</h2>
+                        
+                        <p style="margin-bottom: 20px;">We received a request to reset your password for your %s account.</p>
+                        
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="%s" style="background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Reset Password</a>
+                        </div>
+                        
+                        <p style="margin-bottom: 20px;">If the button doesn't work, you can copy and paste this link into your browser:</p>
+                        <p style="word-break: break-all; background: #e9e9e9; padding: 10px; border-radius: 5px; font-family: monospace;">%s</p>
+                        
+                        <p style="margin-bottom: 20px; color: #666; font-size: 14px;">This reset link will expire in 1 hour for security purposes.</p>
+                        
+                        <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                            <p style="margin: 0; color: #856404; font-size: 14px;">
+                                <strong>Security Notice:</strong> If you didn't request this password reset, please ignore this email. Your account is still secure.
+                            </p>
+                        </div>
+                        
+                        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+                        
+                        <p style="color: #666; font-size: 14px; margin: 0;">
+                            Need help? Contact our support team at 
+                            <a href="mailto:%s" style="color: #667eea;">%s</a>
                         </p>
                     </div>
-                    
-                    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-                    
-                    <p style="color: #666; font-size: 14px; margin: 0;">
-                        Need help? Contact our support team at 
-                        <a href="mailto:%s" style="color: #667eea;">%s</a>
-                    </p>
-                </div>
-            </body>
-            </html>
-            """, 
-            appName, firstName, appName, resetUrl, resetUrl, supportEmail, supportEmail
-        );
+                </body>
+                </html>
+                """, 
+                appName, firstName, appName, resetUrl, resetUrl, supportEmail, supportEmail
+            );
+        }
     }
 
     private String generateBusinessApprovalHtml(String firstName, String companyName, String username, String temporaryPassword) {

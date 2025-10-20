@@ -65,6 +65,9 @@ const BusinessRegistrationPage = () => {
 
   const validateStep = (step) => {
     const newErrors = {};
+    // Define shared validators outside of switch to avoid TDZ issues in case blocks
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const phoneRegex = /^[+]?[\d\s\-\(\)]{10,}$/;
 
     switch (step) {
       case 1: // Personal Information
@@ -74,13 +77,11 @@ const BusinessRegistrationPage = () => {
         if (!formData.lastName.trim()) {
           newErrors.lastName = 'Last name is required';
         }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!formData.email.trim()) {
           newErrors.email = 'Email is required';
         } else if (!emailRegex.test(formData.email)) {
           newErrors.email = 'Please enter a valid email';
         }
-        const phoneRegex = /^[+]?[\d\s\-\(\)]{10,}$/;
         if (!formData.mobileNumber.trim()) {
           newErrors.mobileNumber = 'Mobile number is required';
         } else if (!phoneRegex.test(formData.mobileNumber.replace(/\s/g, ''))) {
@@ -102,6 +103,17 @@ const BusinessRegistrationPage = () => {
         }
         if (!formData.organizationNumber.trim()) {
           newErrors.organizationNumber = 'Organization number is required';
+        } else {
+          const orgDigits = formData.organizationNumber.replace(/\D/g, '');
+          if (orgDigits.length !== 9) {
+            newErrors.organizationNumber = 'Organization number must be exactly 9 digits';
+          }
+        }
+        if (formData.vatNumber && formData.vatNumber.trim()) {
+          const vatDigits = formData.vatNumber.replace(/\D/g, '');
+          if (vatDigits.length !== 12) {
+            newErrors.vatNumber = 'VAT number must be exactly 12 digits';
+          }
         }
         if (!formData.companyEmail.trim()) {
           newErrors.companyEmail = 'Company email is required';
@@ -202,34 +214,52 @@ const BusinessRegistrationPage = () => {
     setSubmitError('');
 
     try {
+      // Sanitize values to satisfy backend constraints
+      const normalizePhone = (input) => {
+        const trimmed = (input || '').trim();
+        const hasPlus = trimmed.startsWith('+');
+        const digits = trimmed.replace(/\D/g, '');
+        return hasPlus ? `+${digits}` : digits;
+      };
+
+      const orgDigits = (formData.organizationNumber || '').replace(/\D/g, '');
+      const rawVatDigits = (formData.vatNumber || '').replace(/\D/g, '');
+      const vatValue = rawVatDigits.length ? rawVatDigits : null; // null to bypass @Pattern when empty
+
+      const postalAddr = {
+        street: formData.streetAddress.trim(),
+        city: formData.city.trim(),
+        postalCode: formData.postalCode.trim(),
+        country: formData.country
+      };
+
+      const billingAddr = formData.billingAddressSame
+        ? { ...postalAddr }
+        : {
+            street: formData.billingStreetAddress.trim(),
+            city: formData.billingCity.trim(),
+            postalCode: formData.billingPostalCode.trim(),
+            country: formData.billingCountry
+          };
+
       const businessData = {
         // Personal Info
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         email: formData.email.trim().toLowerCase(),
-        mobileNumber: formData.mobileNumber.trim(),
+        mobileNumber: normalizePhone(formData.mobileNumber),
         password: formData.password,
-        
+
         // Company Info
         companyName: formData.companyName.trim(),
-        organizationNumber: formData.organizationNumber.trim(),
-        vatNumber: formData.vatNumber.trim(),
+        organizationNumber: orgDigits,
+        vatNumber: vatValue,
         companyEmail: formData.companyEmail.trim().toLowerCase(),
-        
-        // Address Info
-        postalAddress: {
-          streetAddress: formData.streetAddress.trim(),
-          city: formData.city.trim(),
-          postalCode: formData.postalCode.trim(),
-          country: formData.country
-        },
-        billingAddress: formData.billingAddressSame ? null : {
-          streetAddress: formData.billingStreetAddress.trim(),
-          city: formData.billingCity.trim(),
-          postalCode: formData.billingPostalCode.trim(),
-          country: formData.billingCountry
-        },
-        
+
+        // Address Info (align with backend DTO keys)
+        postalAddress: postalAddr,
+        billingAddress: billingAddr,
+
         verificationMethod: formData.verificationMethod,
         acceptMarketing: formData.acceptMarketing,
         accountType: 'business'

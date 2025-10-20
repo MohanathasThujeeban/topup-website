@@ -67,9 +67,14 @@ const LoginPage = () => {
       });
       
       if (result.success) {
-        // Login successful, user will be redirected by useEffect
-        const from = location.state?.from?.pathname || '/';
-        navigate(from, { replace: true });
+        // Business users → Retailer dashboard; others → Profile/home or from-state
+        const accountType = result.user?.accountType;
+        if (accountType === 'BUSINESS') {
+          navigate('/retailer/dashboard', { replace: true });
+        } else {
+          const from = location.state?.from?.pathname || '/profile';
+          navigate(from, { replace: true });
+        }
       } else {
         setSubmitError(result.message || 'Login failed. Please check your credentials.');
         

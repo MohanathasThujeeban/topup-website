@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, ArrowLeft, CheckCircle, AlertCircle, Send, RefreshCw } from 'lucide-react';
+import { Mail, ArrowLeft, AlertCircle, Send, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import PasswordResetConfirmation from '../components/PasswordResetConfirmation';
 
 const ForgotPasswordPage = () => {
   const navigate = useNavigate();
@@ -114,51 +115,11 @@ const ForgotPasswordPage = () => {
           {/* Form */}
           <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
             {submitStatus === 'success' ? (
-              /* Success State */
-              <div className="text-center">
-                <div className="mb-6">
-                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold text-green-600 mb-2">
-                    Email Sent Successfully!
-                  </h2>
-                  <p className="text-gray-600 leading-relaxed">
-                    {message}
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  <button
-                    onClick={handleResendEmail}
-                    disabled={isSubmitting}
-                    className="w-full py-3 px-4 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                  >
-                    {isSubmitting ? (
-                      <div className="flex items-center justify-center">
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                        Resending...
-                      </div>
-                    ) : (
-                      <>
-                        <Send className="w-4 h-4 mr-2 inline" />
-                        Resend Email
-                      </>
-                    )}
-                  </button>
-
-                  <Link
-                    to="/login"
-                    className="block w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 text-center"
-                  >
-                    Back to Login
-                  </Link>
-                </div>
-
-                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-blue-800 text-sm">
-                    <strong>Didn't receive the email?</strong> Check your spam folder or contact support if you continue to have issues.
-                  </p>
-                </div>
-              </div>
+              /* Success State - Using our new component */
+              <PasswordResetConfirmation 
+                email={email}
+                onResend={handleResendEmail}
+              />
             ) : (
               /* Form State */
               <form onSubmit={handleSubmit} className="space-y-6">

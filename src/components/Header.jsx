@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Menu, X, ShoppingCart, Zap, User, LogOut, Settings, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { initializeCursorTrail, initializeHeaderEffects, initializeScrollProgress } from '../utils/headerEffects';
+import Avatar from './Avatar';
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
   const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
 
   // Initialize all effects
   useEffect(() => {
@@ -43,6 +45,7 @@ const Header = () => {
   const handleLogout = () => {
     logout();
     setIsUserMenuOpen(false);
+    navigate('/', { replace: true });
   };
 
   return (
@@ -68,7 +71,7 @@ const Header = () => {
         </div>
 
         <div className="container mx-auto px-4 lg:px-6">
-          <div className="flex items-center justify-between h-20 gap-4">
+          <div className="flex items-center justify-between h-20 gap-3">
             
             {/* Logo */}
             <Link to="/" className="flex items-center gap-3 group logo-container flex-shrink-0">
@@ -91,8 +94,8 @@ const Header = () => {
             </Link>
 
             {/* Navigation - Centered */}
-            <nav className="hidden lg:flex items-center justify-center flex-1 mx-8">
-              <div className="flex items-center gap-6 xl:gap-8">
+            <nav className="hidden lg:flex items-center justify-center flex-1 mx-6 xl:mx-8">
+              <div className="flex items-center gap-5 xl:gap-7">
                 <Link to="/" className="nav-link-clean group relative px-3 py-2 text-gray-900 hover:text-cyan-600 font-semibold transition-all duration-300 whitespace-nowrap">
                   Home
                   <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
@@ -121,7 +124,7 @@ const Header = () => {
             </nav>
 
             {/* Right Side Actions */}
-            <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0 whitespace-nowrap pr-1">
               {/* Shopping Cart */}
               <Link to="/checkout" className="relative cart-icon">
                 <div className="p-3 bg-gradient-to-r from-teal-500 to-cyan-600 rounded-xl btn-animated shadow-lg">
@@ -137,58 +140,77 @@ const Header = () => {
 
               {/* Authentication Section */}
               {isAuthenticated ? (
-                <div className="relative hidden lg:block">
+                <>
+                  {/* Desktop user menu */}
+                  <div className="relative hidden lg:block z-50 min-w-[220px]">
+                    <button 
+                      onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                      className="flex items-center gap-3 bg-gray-100 hover:bg-gray-200 rounded-xl px-3 py-3 btn-animated"
+                    >
+                      <Avatar name={user?.name} src={user?.avatar} sizeClasses="w-8 h-8" rounded="rounded-lg" />
+                      <span className="font-accent font-medium text-gray-700 max-w-[120px] xl:max-w-[180px] truncate">{user?.name}</span>
+                      <ChevronDown size={16} className={`text-gray-500 transition-transform duration-300 ${isUserMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {/* User Dropdown Menu */}
+                    {isUserMenuOpen && (
+                      <div className="user-dropdown absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-[60]">
+                        <div className="px-4 py-3 border-b border-gray-100">
+                          <p className="font-accent font-semibold text-gray-900">{user?.name}</p>
+                          <p className="font-caption text-sm text-gray-500">{user?.email}</p>
+                        </div>
+                        
+                        <Link 
+                          to="/profile"
+                          className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 font-accent transition-colors nav-link"
+                          onClick={() => setIsUserMenuOpen(false)}
+                        >
+                          <User size={18} />
+                          My Profile
+                        </Link>
+                        
+                        <Link 
+                          to="/settings"
+                          className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 font-accent transition-colors nav-link"
+                          onClick={() => setIsUserMenuOpen(false)}
+                        >
+                          <Settings size={18} />
+                          Settings
+                        </Link>
+                        
+                        <hr className="my-2" />
+                        
+                        <button 
+                          onClick={handleLogout}
+                          className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 font-accent transition-colors w-full text-left nav-link"
+                        >
+                          <LogOut size={18} />
+                          Sign Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sign Out on desktop (align with user menu) */}
                   <button 
-                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                    className="flex items-center gap-3 bg-gray-100 hover:bg-gray-200 rounded-xl px-4 py-3 btn-animated"
+                    onClick={handleLogout}
+                    className="hidden lg:inline-flex items-center gap-2 px-3 py-3 border border-gray-300 hover:border-red-300 hover:bg-red-50 text-gray-800 rounded-xl transition-all"
+                    title="Sign out"
                   >
-                    <img 
-                      src={user?.avatar} 
-                      alt={user?.name} 
-                      className="w-8 h-8 rounded-lg object-cover"
-                    />
-                    <span className="font-accent font-medium text-gray-700">{user?.name}</span>
-                    <ChevronDown size={16} className={`text-gray-500 transition-transform duration-300 ${isUserMenuOpen ? 'rotate-180' : ''}`} />
+                    <LogOut size={18} />
+                    <span className="hidden xl:inline">Sign Out</span>
                   </button>
 
-                  {/* User Dropdown Menu */}
-                  {isUserMenuOpen && (
-                    <div className="user-dropdown absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
-                      <div className="px-4 py-3 border-b border-gray-100">
-                        <p className="font-accent font-semibold text-gray-900">{user?.name}</p>
-                        <p className="font-caption text-sm text-gray-500">{user?.email}</p>
-                      </div>
-                      
-                      <Link 
-                        to="/profile"
-                        className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 font-accent transition-colors nav-link"
-                        onClick={() => setIsUserMenuOpen(false)}
-                      >
-                        <User size={18} />
-                        My Profile
-                      </Link>
-                      
-                      <Link 
-                        to="/settings"
-                        className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 font-accent transition-colors nav-link"
-                        onClick={() => setIsUserMenuOpen(false)}
-                      >
-                        <Settings size={18} />
-                        Settings
-                      </Link>
-                      
-                      <hr className="my-2" />
-                      
-                      <button 
-                        onClick={handleLogout}
-                        className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 font-accent transition-colors w-full text-left nav-link"
-                      >
-                        <LogOut size={18} />
-                        Sign Out
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  {/* Quick Sign Out on tablet/mobile */}
+                  <button 
+                    onClick={handleLogout}
+                    className="lg:hidden p-3 rounded-xl hover:bg-gray-100"
+                    aria-label="Sign out"
+                    title="Sign out"
+                  >
+                    <LogOut size={22} className="text-gray-700" />
+                  </button>
+                </>
               ) : (
                 <div className="hidden lg:flex items-center gap-3">
                   <Link 
@@ -271,11 +293,7 @@ const Header = () => {
                 {isAuthenticated ? (
                   <div className="border-t border-gray-200 pt-4 mt-2 space-y-3">
                     <div className="flex items-center gap-3 px-2 py-2">
-                      <img 
-                        src={user?.avatar} 
-                        alt={user?.name} 
-                        className="w-10 h-10 rounded-lg object-cover"
-                      />
+                      <Avatar name={user?.name} src={user?.avatar} sizeClasses="w-10 h-10" rounded="rounded-lg" />
                       <div>
                         <p className="font-accent font-semibold text-gray-900">{user?.name}</p>
                         <p className="font-caption text-sm text-gray-500">{user?.email}</p>

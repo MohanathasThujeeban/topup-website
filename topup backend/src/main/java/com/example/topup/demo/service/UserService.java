@@ -226,6 +226,16 @@ public class UserService {
     }
 
     /**
+     * Validate reset token without using it
+     */
+    public boolean validateResetToken(String email, String token) {
+        Optional<VerificationToken> verificationToken = verificationTokenRepository
+            .findValidToken(token, email, VerificationToken.TokenType.PASSWORD_RESET, LocalDateTime.now());
+        
+        return verificationToken.isPresent();
+    }
+    
+    /**
      * Approve business account
      */
     public void approveBusinessAccount(String userId, String temporaryPassword) {
@@ -305,5 +315,10 @@ public class UserService {
     public void cleanupOldUsedTokens() {
         LocalDateTime cutoffDate = LocalDateTime.now().minusDays(7);
         verificationTokenRepository.deleteUsedTokensOlderThan(cutoffDate);
+    }
+
+    // Expose encoder for controller-level checks (dev only)
+    public PasswordEncoder getPasswordEncoder() {
+        return passwordEncoder;
     }
 }
