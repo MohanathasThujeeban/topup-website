@@ -281,6 +281,13 @@ public class UserService {
     }
 
     /**
+     * Find user by ID
+     */
+    public Optional<User> findById(String userId) {
+        return userRepository.findById(userId);
+    }
+
+    /**
      * Check if email exists
      */
     public boolean emailExists(String email) {

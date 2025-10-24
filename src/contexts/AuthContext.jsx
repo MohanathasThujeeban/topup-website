@@ -11,8 +11,8 @@ export const useAuth = () => {
 };
 
 // API Base URL - In production, this should come from environment variables
-// Using local network IP so that mobile devices on the same network can access it
-const API_BASE_URL = 'http://172.20.10.3:8080/api';
+// Using localhost for local development
+const API_BASE_URL = 'http://localhost:8080/api';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -30,8 +30,11 @@ export const AuthProvider = ({ children }) => {
         setUser(userData);
         setIsAuthenticated(true);
         
-        // Verify token is still valid by making a request to the backend
-        verifyToken(storedToken);
+        // Skip token verification for admin users (local admin account)
+        if (userData.accountType !== 'ADMIN') {
+          // Verify token is still valid by making a request to the backend
+          verifyToken(storedToken);
+        }
       } catch (error) {
         console.error('Error parsing user data:', error);
         localStorage.removeItem('user');
@@ -43,6 +46,11 @@ export const AuthProvider = ({ children }) => {
 
   const verifyToken = async (token) => {
     try {
+      // Skip verification for admin tokens
+      if (token.startsWith('admin-token-')) {
+        return;
+      }
+
       const response = await fetch(`${API_BASE_URL}/auth/verify`, {
         method: 'GET',
         headers: {
@@ -288,13 +296,19 @@ export const AuthProvider = ({ children }) => {
 
   const updateUser = (userData) => {
     setUser(userData);
+    setIsAuthenticated(true);
     localStorage.setItem('user', JSON.stringify(userData));
+  };
+
+  const isAdmin = () => {
+    return user?.accountType === 'ADMIN' || user?.role === 'ADMIN';
   };
 
   const value = {
     user,
     isAuthenticated,
     isLoading,
+    isAdmin,
     login,
     logout,
     updateUser,

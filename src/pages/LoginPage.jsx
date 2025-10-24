@@ -7,7 +7,7 @@ import { validateLoginForm, formatErrorMessage } from '../utils/authUtils';
 const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isLoading, isAuthenticated } = useAuth();
+  const { login, isLoading, isAuthenticated, user, updateUser } = useAuth();
   
   const [formData, setFormData] = useState({
     email: '',
@@ -21,10 +21,23 @@ const LoginPage = () => {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+      console.log('User already authenticated, checking redirect...', user);
+      
+      // Check if user is admin and redirect to admin dashboard
+      if (user?.accountType === 'ADMIN' || user?.role === 'ADMIN') {
+        console.log('Redirecting ADMIN user to admin dashboard...');
+        navigate('/admin', { replace: true });
+      } else if (user?.accountType === 'BUSINESS') {
+        // Business users → Retailer dashboard
+        console.log('Redirecting authenticated BUSINESS user to retailer dashboard...');
+        navigate('/retailer/dashboard', { replace: true });
+      } else {
+        const from = location.state?.from?.pathname || '/';
+        console.log('Redirecting other user type to:', from);
+        navigate(from, { replace: true });
+      }
     }
-  }, [isAuthenticated, navigate, location]);
+  }, [isAuthenticated, user, navigate, location]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -61,19 +74,52 @@ const LoginPage = () => {
     setSubmitError('');
 
     try {
+      // Check for admin credentials first
+      if (formData.email.trim().toLowerCase() === 'admin@lyca.com' && formData.password === 'Admin@123') {
+        // Create admin user object
+        const adminUser = {
+          id: 'admin',
+          email: 'admin@lyca.com',
+          accountType: 'ADMIN',
+          name: 'System Administrator',
+          role: 'ADMIN'
+        };
+        
+        // Store admin session
+        localStorage.setItem('user', JSON.stringify(adminUser));
+        localStorage.setItem('token', 'admin-token-' + Date.now());
+        
+        // Update auth context
+        updateUser(adminUser);
+        
+        // Navigate to admin dashboard
+        navigate('/admin', { replace: true });
+        return;
+      }
+
       const result = await login({
         email: formData.email.trim().toLowerCase(),
         password: formData.password
       });
       
       if (result.success) {
-        // Business users → Retailer dashboard; others → Profile/home or from-state
+        // Redirect based on account type
         const accountType = result.user?.accountType;
+        console.log('Login successful! User account type:', accountType);
+        console.log('Full user data:', result.user);
+        
         if (accountType === 'BUSINESS') {
+          // Business users → Retailer dashboard
+          console.log('Redirecting BUSINESS user to retailer dashboard...');
           navigate('/retailer/dashboard', { replace: true });
+        } else if (accountType === 'PERSONAL') {
+          // Personal users → Home page (they can access services from there)
+          console.log('Redirecting PERSONAL user to home page...');
+          navigate('/', { replace: true });
         } else {
-          const from = location.state?.from?.pathname || '/profile';
-          navigate(from, { replace: true });
+          // Default fallback
+          console.log('Unknown account type, redirecting to home page...');
+          navigate('/', { replace: true });
         }
       } else {
         setSubmitError(result.message || 'Login failed. Please check your credentials.');

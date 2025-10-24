@@ -1,9 +1,21 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowRight, Smartphone, Zap, Shield, Clock, Globe, Check, Star, QrCode, Phone, MessageCircle, CheckCircle } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, Smartphone, Zap, Shield, Clock, Globe, Check, Star, QrCode, Phone, MessageCircle, CheckCircle, Settings, BarChart3 } from 'lucide-react';
 import AnimatedPhone from '../components/AnimatedPhone';
+import { useAuth } from '../contexts/AuthContext';
 
 const HomePage = () => {
+  const { isAuthenticated, user, isAdmin } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect business users to their dashboard
+  useEffect(() => {
+    if (isAuthenticated && user?.accountType === 'BUSINESS') {
+      console.log('Business user detected on HomePage, redirecting to retailer dashboard...');
+      navigate('/retailer/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
+  
   const features = [
     {
       icon: <Zap size={48} className="text-white" />,
@@ -90,6 +102,63 @@ const HomePage = () => {
           </div>
         </div>
       </section>
+
+      {/* Dashboard Navigation for Authenticated Users */}
+      {isAuthenticated && (
+        <section className="py-12 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-b border-gray-200">
+          <div className="container-custom">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome back, {user?.name}!</h2>
+              <p className="text-gray-600">Access your dashboard and manage your account</p>
+            </div>
+            
+            <div className="flex flex-wrap justify-center gap-4">
+              {isAdmin() && (
+                <Link 
+                  to="/admin"
+                  className="flex items-center gap-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-4 rounded-xl font-semibold shadow-lg transform hover:scale-105 transition-all duration-300"
+                >
+                  <Settings size={20} />
+                  Admin Dashboard
+                  <ArrowRight size={16} />
+                </Link>
+              )}
+              
+              {user?.accountType === 'BUSINESS' && (
+                <Link 
+                  to="/retailer/dashboard"
+                  className="flex items-center gap-3 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white px-6 py-4 rounded-xl font-semibold shadow-lg transform hover:scale-105 transition-all duration-300"
+                >
+                  <BarChart3 size={20} />
+                  Retailer Dashboard
+                  <ArrowRight size={16} />
+                </Link>
+              )}
+              
+              {user?.accountType === 'PERSONAL' && (
+                <div className="flex flex-wrap gap-4">
+                  <Link 
+                    to="/bundles"
+                    className="flex items-center gap-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-6 py-4 rounded-xl font-semibold shadow-lg transform hover:scale-105 transition-all duration-300"
+                  >
+                    <Smartphone size={20} />
+                    Browse Bundles
+                    <ArrowRight size={16} />
+                  </Link>
+                  <Link 
+                    to="/esim"
+                    className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-4 rounded-xl font-semibold shadow-lg transform hover:scale-105 transition-all duration-300"
+                  >
+                    <QrCode size={20} />
+                    Get eSIM
+                    <ArrowRight size={16} />
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* How It Works Section */}
       <section className="section-padding bg-gradient-to-br from-gray-50 to-gray-100">

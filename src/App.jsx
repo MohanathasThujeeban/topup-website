@@ -23,6 +23,7 @@ import RetailerDashboard from './pages/RetailerDashboard';
 import RetailerOrderConfirmationPage from './pages/RetailerOrderConfirmationPage';
 import AdminDashboard from './pages/AdminDashboard';
 import RequireBusiness from './components/RequireBusiness';
+import RequireAdmin from './components/RequireAdmin';
 // Signup flow pages
 import AccountTypeSelectionPage from './pages/AccountTypeSelectionPage';
 import PersonalRegistrationPage from './pages/PersonalRegistrationPage';
@@ -61,10 +62,10 @@ function App() {
             <Route path="/profile" element={<ProfilePage />} />
             {/* B2B (Retailer) */}
             <Route path="/retailer/login" element={<RetailerLoginPage />} />
-            <Route path="/retailer/dashboard" element={<RetailerDashboard />} />
+            <Route path="/retailer/dashboard" element={<RequireBusiness><RetailerDashboard /></RequireBusiness>} />
             <Route path="/retailer/order/:orderId/confirmation" element={<RequireBusiness><RetailerOrderConfirmationPage /></RequireBusiness>} />
             {/* Admin */}
-            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
           </Routes>
         </main>
         <Footer />

@@ -1,6 +1,8 @@
 package com.example.topup.demo.repository;
 
 import com.example.topup.demo.entity.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -33,16 +35,19 @@ public interface UserRepository extends MongoRepository<User, String> {
      * Find users by account type
      */
     List<User> findByAccountType(User.AccountType accountType);
+    Page<User> findByAccountType(User.AccountType accountType, Pageable pageable);
 
     /**
      * Find users by account status
      */
     List<User> findByAccountStatus(User.AccountStatus accountStatus);
+    Page<User> findByAccountStatus(User.AccountStatus accountStatus, Pageable pageable);
 
     /**
      * Find users by account type and status
      */
     List<User> findByAccountTypeAndAccountStatus(User.AccountType accountType, User.AccountStatus accountStatus);
+    Page<User> findByAccountTypeAndAccountStatus(User.AccountType accountType, User.AccountStatus accountStatus, Pageable pageable);
 
     /**
      * Find business users pending approval
@@ -78,6 +83,16 @@ public interface UserRepository extends MongoRepository<User, String> {
      */
     @Query("{'createdDate': {$gte: ?0, $lte: ?1}}")
     List<User> findUsersCreatedBetween(LocalDateTime startDate, LocalDateTime endDate);
+    
+    /**
+     * Count users created between dates
+     */
+    long countByCreatedDateBetween(LocalDateTime startDate, LocalDateTime endDate);
+
+    /**
+     * Find recent users ordered by creation date
+     */
+    List<User> findTop10ByOrderByCreatedDateDesc();
 
     /**
      * Count users by account type
@@ -123,6 +138,17 @@ public interface UserRepository extends MongoRepository<User, String> {
     List<User> findByNameContainingIgnoreCase(String nameFragment);
 
     /**
+     * Search users by name or email (for admin search with pagination)
+     */
+    @Query("{$or: [" +
+           "{'firstName': {$regex: ?0, $options: 'i'}}, " +
+           "{'lastName': {$regex: ?1, $options: 'i'}}, " +
+           "{'email': {$regex: ?2, $options: 'i'}}" +
+           "]}")
+    Page<User> findByFirstNameContainingIgnoreCaseOrLastNameContainingIgnoreCaseOrEmailContainingIgnoreCase(
+        String firstName, String lastName, String email, Pageable pageable);
+
+    /**
      * Find recently registered users (last 7 days)
      */
     @Query("{'createdDate': {$gte: ?0}}")
@@ -154,6 +180,11 @@ public interface UserRepository extends MongoRepository<User, String> {
      * Find expired accounts
      */
     List<User> findByAccountNonExpired(boolean accountNonExpired);
+
+    /**
+     * Find user by ID
+     */
+    Optional<User> findById(String id);
 
     /**
      * Custom aggregation queries can be added here for complex reporting

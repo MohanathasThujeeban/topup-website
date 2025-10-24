@@ -31,14 +31,14 @@ const BusinessRegistrationPage = () => {
     streetAddress: '',
     city: '',
     postalCode: '',
-    country: 'Sweden',
+    country: 'Norway',
     
     // Billing Address (same as postal by default)
     billingAddressSame: true,
     billingStreetAddress: '',
     billingCity: '',
     billingPostalCode: '',
-    billingCountry: 'Sweden',
+    billingCountry: 'Norway',
     
     // Verification Method
     verificationMethod: 'bankid', // 'bankid' or 'manual'
@@ -105,14 +105,16 @@ const BusinessRegistrationPage = () => {
           newErrors.organizationNumber = 'Organization number is required';
         } else {
           const orgDigits = formData.organizationNumber.replace(/\D/g, '');
-          if (orgDigits.length !== 9) {
-            newErrors.organizationNumber = 'Organization number must be exactly 9 digits';
+          // Accept 8-9 digits for different country formats (Norway 9 digits, Sweden 10 but we'll be flexible)
+          if (orgDigits.length < 8 || orgDigits.length > 10) {
+            newErrors.organizationNumber = 'Organization number must be 8-10 digits';
           }
         }
         if (formData.vatNumber && formData.vatNumber.trim()) {
           const vatDigits = formData.vatNumber.replace(/\D/g, '');
-          if (vatDigits.length !== 12) {
-            newErrors.vatNumber = 'VAT number must be exactly 12 digits';
+          // Norwegian VAT is usually 9 digits, allow reasonable range
+          if (vatDigits.length > 0 && (vatDigits.length < 6 || vatDigits.length > 12)) {
+            newErrors.vatNumber = 'VAT number must be 6-12 digits or leave empty';
           }
         }
         if (!formData.companyEmail.trim()) {
@@ -183,14 +185,21 @@ const BusinessRegistrationPage = () => {
   };
 
   const handleNextStep = () => {
+    console.log('Next Step clicked, current step:', currentStep);
+    console.log('Form data:', formData);
+    
     const stepErrors = validateStep(currentStep);
+    console.log('Validation errors:', stepErrors);
+    
     if (Object.keys(stepErrors).length > 0) {
       setErrors(stepErrors);
+      console.log('Validation failed, errors set:', stepErrors);
       return;
     }
     
     setErrors({});
     if (currentStep < totalSteps) {
+      console.log('Moving to next step:', currentStep + 1);
       setCurrentStep(currentStep + 1);
     }
   };
@@ -529,10 +538,17 @@ const BusinessRegistrationPage = () => {
                     name="vatNumber"
                     value={formData.vatNumber}
                     onChange={handleInputChange}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                      errors.vatNumber 
+                        ? 'border-red-300 focus:ring-red-500 bg-red-50' 
+                        : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                    }`}
                     placeholder="Optional VAT number"
                   />
                 </div>
+                {errors.vatNumber && (
+                  <p className="mt-1 text-sm text-red-600">{errors.vatNumber}</p>
+                )}
               </div>
             </div>
 
