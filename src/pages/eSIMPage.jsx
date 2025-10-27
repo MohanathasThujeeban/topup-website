@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Smartphone, 
@@ -19,6 +19,47 @@ import {
 } from 'lucide-react';
 
 const ESIMPage = () => {
+  const [selectedPlan, setSelectedPlan] = useState(null);
+
+  const esimPlans = [
+    {
+      id: 1,
+      name: 'eSIM Smart S',
+      data: '1GB',
+      price: 99,
+      originalPrice: null,
+      calls: 'Unlimited',
+      sms: 'Unlimited',
+      validity: '30 days',
+      popular: false,
+      features: ['Instant activation', 'No physical SIM needed', 'Perfect for light users']
+    },
+    {
+      id: 2,
+      name: 'eSIM Smart M',
+      data: '5GB',
+      price: 149,
+      originalPrice: 199,
+      calls: 'Unlimited',
+      sms: 'Unlimited',
+      validity: '30 days',
+      popular: true,
+      features: ['Great for social media', 'Video streaming', 'Travel friendly']
+    },
+    {
+      id: 3,
+      name: 'eSIM Smart XL',
+      data: '30GB',
+      price: 199,
+      originalPrice: 299,
+      calls: 'Unlimited',
+      sms: 'Unlimited',
+      validity: '30 days',
+      popular: false,
+      features: ['Heavy data usage', 'Work from anywhere', 'Best value']
+    }
+  ];
+
   const esimFeatures = [
     {
       icon: <Zap className="w-8 h-8 text-teal-500" />,
@@ -175,20 +216,20 @@ const ESIMPage = () => {
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
               <Link 
-                to="/bundles?filter=esim" 
+                to="/esim/dashboard" 
                 className="group px-8 py-4 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 hover:from-teal-600 hover:via-cyan-600 hover:to-blue-600 text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 font-heading flex items-center gap-2 text-lg"
               >
-                <Smartphone size={24} />
-                View eSIM Bundles
+                <QrCode size={24} />
+                Manage My eSIM
                 <ArrowRight className="group-hover:translate-x-1 transition-transform" size={20} />
               </Link>
-              <a 
-                href="#how-it-works" 
+              <Link 
+                to="/sim/register" 
                 className="px-8 py-4 bg-white hover:bg-gray-50 text-gray-700 rounded-2xl font-bold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 font-heading border-2 border-gray-200 flex items-center gap-2 text-lg"
               >
-                <QrCode size={24} />
-                How It Works
-              </a>
+                <Smartphone size={24} />
+                Register New SIM
+              </Link>
             </div>
 
             {/* Payment Methods */}
@@ -210,8 +251,125 @@ const ESIMPage = () => {
         </div>
       </section>
 
+      {/* eSIM Plans Section */}
+      <section className="py-20 bg-white">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4 font-display text-gray-900">
+              Choose Your <span className="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">eSIM Plan</span>
+            </h2>
+            <p className="text-xl text-gray-600 font-body">Instant delivery, no physical SIM required</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {esimPlans.map((plan) => (
+              <div key={plan.id} className={`relative bg-white border-2 rounded-3xl p-8 transition-all duration-300 hover:shadow-2xl hover:scale-105 ${
+                plan.popular 
+                  ? 'border-blue-500 shadow-xl' 
+                  : 'border-gray-200 hover:border-blue-300 shadow-lg'
+              }`}>
+                {plan.popular && (
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                    <span className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg">
+                      MOST POPULAR
+                    </span>
+                  </div>
+                )}
+                
+                <div className="text-center mb-8">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
+                  
+                  <div className="mb-4">
+                    <div className="flex items-baseline justify-center gap-2">
+                      <span className="text-4xl font-bold text-gray-900">kr{plan.price}</span>
+                      {plan.originalPrice && (
+                        <span className="text-lg text-gray-400 line-through">kr{plan.originalPrice}</span>
+                      )}
+                    </div>
+                    {plan.originalPrice && (
+                      <div className="inline-block bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm font-bold mt-2">
+                        Save kr{plan.originalPrice - plan.price}
+                      </div>
+                    )}
+                    <p className="text-gray-600 mt-1">{plan.validity}</p>
+                  </div>
+
+                  <div className="w-16 h-16 bg-gradient-to-br from-teal-500 to-blue-500 rounded-2xl mx-auto flex items-center justify-center mb-6">
+                    <QrCode className="text-white" size={32} />
+                  </div>
+                </div>
+
+                <div className="space-y-4 mb-8">
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                    <span className="text-gray-700">Data</span>
+                    <span className="text-2xl font-bold text-green-600">{plan.data}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                    <span className="text-gray-700">Calls</span>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="text-green-600" size={16} />
+                      <span className="font-medium text-green-600">{plan.calls}</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                    <span className="text-gray-700">SMS</span>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="text-green-600" size={16} />
+                      <span className="font-medium text-green-600">{plan.sms}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-8">
+                  <h4 className="font-bold text-gray-900 mb-3">Features included:</h4>
+                  <ul className="space-y-2">
+                    {plan.features.map((feature, index) => (
+                      <li key={index} className="flex items-center gap-2">
+                        <CheckCircle2 className="text-green-600 flex-shrink-0" size={16} />
+                        <span className="text-sm text-gray-700">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="space-y-3">
+                  <button 
+                    onClick={() => setSelectedPlan(plan)}
+                    className={`w-full py-4 px-6 rounded-xl font-bold transition-all duration-300 ${
+                      plan.popular
+                        ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl'
+                        : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
+                    }`}
+                  >
+                    Get eSIM Now
+                  </button>
+                  <button className="w-full py-3 px-6 border-2 border-gray-300 hover:border-gray-400 text-gray-700 font-medium rounded-xl transition-colors">
+                    Add to Basket
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-center mt-12">
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 max-w-4xl mx-auto">
+              <div className="flex items-start gap-4">
+                <Zap className="text-blue-600 flex-shrink-0 mt-1" size={24} />
+                <div className="text-left">
+                  <h3 className="font-bold text-blue-900 mb-2">Instant eSIM Delivery</h3>
+                  <p className="text-blue-800">
+                    Your eSIM QR code will be delivered to your email immediately after payment. 
+                    No waiting for physical delivery - activate your eSIM in seconds!
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features Grid */}
-      <section className="py-20 bg-white/50 backdrop-blur-sm">
+      <section className="py-20 bg-gray-50">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4 font-display text-gray-900">

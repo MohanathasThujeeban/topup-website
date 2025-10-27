@@ -2,14 +2,19 @@ package com.example.topup.demo.service;
 
 import com.example.topup.demo.entity.User;
 import com.example.topup.demo.entity.BusinessDetails;
+import com.example.topup.demo.entity.Order;
+import com.example.topup.demo.entity.RetailerOrder;
 import com.example.topup.demo.repository.UserRepository;
 import com.example.topup.demo.repository.BusinessDetailsRepository;
+import com.example.topup.demo.repository.OrderRepository;
+import com.example.topup.demo.repository.RetailerOrderRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -23,6 +28,12 @@ public class AdminService {
 
     @Autowired
     private BusinessDetailsRepository businessDetailsRepository;
+
+    @Autowired
+    private OrderRepository orderRepository;
+
+    @Autowired
+    private RetailerOrderRepository retailerOrderRepository;
 
     @Autowired
     private EmailService emailService;
@@ -46,11 +57,16 @@ public class AdminService {
         analytics.put("businessUsers", businessUsers);
         analytics.put("personalUsers", personalUsers);
         
-        // Revenue data (mock data - replace with actual order/transaction data)
-        analytics.put("totalRevenue", 245680.0);
-        analytics.put("monthlyRevenue", 45200.0);
-        analytics.put("dailyRevenue", 12450.0);
-        analytics.put("revenueGrowth", 15.3);
+        // Real revenue data from orders
+        double totalRevenue = calculateTotalRevenue();
+        double monthlyRevenue = calculateMonthlyRevenue();
+        double dailyRevenue = calculateDailyRevenue();
+        double revenueGrowth = calculateRevenueGrowth();
+        
+        analytics.put("totalRevenue", totalRevenue);
+        analytics.put("monthlyRevenue", monthlyRevenue);
+        analytics.put("dailyRevenue", dailyRevenue);
+        analytics.put("revenueGrowth", revenueGrowth);
         
         // User registration trends (last 7 days)
         List<Map<String, Object>> registrationTrends = new ArrayList<>();
@@ -383,11 +399,16 @@ public class AdminService {
     public Map<String, Object> getRevenueAnalytics(String period, String startDate, String endDate) {
         Map<String, Object> analytics = new HashMap<>();
         
-        // Mock revenue data - replace with actual transaction data
-        analytics.put("totalRevenue", 245680.0);
-        analytics.put("b2cRevenue", 156800.0);
-        analytics.put("b2bRevenue", 88880.0);
-        analytics.put("growthRate", 15.3);
+        // Real revenue data from actual transactions
+        double totalRevenue = calculateTotalRevenue();
+        double b2cRevenue = calculateB2CRevenue();
+        double b2bRevenue = calculateB2BRevenue();
+        double growthRate = calculateRevenueGrowth();
+        
+        analytics.put("totalRevenue", totalRevenue);
+        analytics.put("b2cRevenue", b2cRevenue);
+        analytics.put("b2bRevenue", b2bRevenue);
+        analytics.put("growthRate", growthRate);
         
         // Daily revenue for the last 30 days
         List<Map<String, Object>> dailyRevenue = new ArrayList<>();
@@ -439,5 +460,146 @@ public class AdminService {
         enquiry.put("assignedAgent", assignedAgent);
         enquiry.put("createdDate", createdDate);
         return enquiry;
+    }
+    
+    // Revenue calculation methods
+    private double calculateTotalRevenue() {
+        try {
+            // Calculate revenue from customer orders (Order entity)
+            List<Order> allOrders = orderRepository.findAll();
+            double customerRevenue = allOrders.stream()
+                .filter(order -> order.getStatus() == Order.OrderStatus.COMPLETED)
+                .mapToDouble(order -> order.getAmount() != null ? order.getAmount().doubleValue() : 0.0)
+                .sum();
+            
+            // Calculate revenue from retailer orders (RetailerOrder entity)
+            List<RetailerOrder> allRetailerOrders = retailerOrderRepository.findAll();
+            double retailerRevenue = allRetailerOrders.stream()
+                .filter(order -> order.getStatus() == RetailerOrder.OrderStatus.DELIVERED)
+                .mapToDouble(order -> order.getTotalAmount() != null ? order.getTotalAmount().doubleValue() : 0.0)
+                .sum();
+            
+            return customerRevenue + retailerRevenue;
+        } catch (Exception e) {
+            System.err.println("Error calculating total revenue: " + e.getMessage());
+            return 0.0;
+        }
+    }
+    
+    private double calculateMonthlyRevenue() {
+        try {
+            LocalDateTime startOfMonth = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
+            LocalDateTime endOfMonth = LocalDateTime.now();
+            
+            // Customer orders for this month
+            List<Order> monthlyOrders = orderRepository.findByCreatedDateBetween(startOfMonth, endOfMonth);
+            double customerRevenue = monthlyOrders.stream()
+                .filter(order -> order.getStatus() == Order.OrderStatus.COMPLETED)
+                .mapToDouble(order -> order.getAmount() != null ? order.getAmount().doubleValue() : 0.0)
+                .sum();
+            
+            // Retailer orders for this month
+            List<RetailerOrder> monthlyRetailerOrders = retailerOrderRepository.findByCreatedDateBetween(startOfMonth, endOfMonth);
+            double retailerRevenue = monthlyRetailerOrders.stream()
+                .filter(order -> order.getStatus() == RetailerOrder.OrderStatus.DELIVERED)
+                .mapToDouble(order -> order.getTotalAmount() != null ? order.getTotalAmount().doubleValue() : 0.0)
+                .sum();
+            
+            return customerRevenue + retailerRevenue;
+        } catch (Exception e) {
+            System.err.println("Error calculating monthly revenue: " + e.getMessage());
+            return 0.0;
+        }
+    }
+    
+    private double calculateDailyRevenue() {
+        try {
+            LocalDateTime startOfDay = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0);
+            LocalDateTime endOfDay = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59);
+            
+            // Customer orders for today
+            List<Order> todayOrders = orderRepository.findByCreatedDateBetween(startOfDay, endOfDay);
+            double customerRevenue = todayOrders.stream()
+                .filter(order -> order.getStatus() == Order.OrderStatus.COMPLETED)
+                .mapToDouble(order -> order.getAmount() != null ? order.getAmount().doubleValue() : 0.0)
+                .sum();
+            
+            // Retailer orders for today
+            List<RetailerOrder> todayRetailerOrders = retailerOrderRepository.findByCreatedDateBetween(startOfDay, endOfDay);
+            double retailerRevenue = todayRetailerOrders.stream()
+                .filter(order -> order.getStatus() == RetailerOrder.OrderStatus.DELIVERED)
+                .mapToDouble(order -> order.getTotalAmount() != null ? order.getTotalAmount().doubleValue() : 0.0)
+                .sum();
+            
+            return customerRevenue + retailerRevenue;
+        } catch (Exception e) {
+            System.err.println("Error calculating daily revenue: " + e.getMessage());
+            return 0.0;
+        }
+    }
+    
+    private double calculateRevenueGrowth() {
+        try {
+            // Calculate current month revenue
+            double currentMonthRevenue = calculateMonthlyRevenue();
+            
+            // Calculate previous month revenue
+            LocalDateTime startOfLastMonth = LocalDateTime.now().minusMonths(1).withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
+            LocalDateTime endOfLastMonth = LocalDateTime.now().withDayOfMonth(1).minusDays(1).withHour(23).withMinute(59).withSecond(59);
+            
+            // Customer orders for last month
+            List<Order> lastMonthOrders = orderRepository.findByCreatedDateBetween(startOfLastMonth, endOfLastMonth);
+            double lastMonthCustomerRevenue = lastMonthOrders.stream()
+                .filter(order -> order.getStatus() == Order.OrderStatus.COMPLETED)
+                .mapToDouble(order -> order.getAmount() != null ? order.getAmount().doubleValue() : 0.0)
+                .sum();
+            
+            // Retailer orders for last month
+            List<RetailerOrder> lastMonthRetailerOrders = retailerOrderRepository.findByCreatedDateBetween(startOfLastMonth, endOfLastMonth);
+            double lastMonthRetailerRevenue = lastMonthRetailerOrders.stream()
+                .filter(order -> order.getStatus() == RetailerOrder.OrderStatus.DELIVERED)
+                .mapToDouble(order -> order.getTotalAmount() != null ? order.getTotalAmount().doubleValue() : 0.0)
+                .sum();
+            
+            double lastMonthRevenue = lastMonthCustomerRevenue + lastMonthRetailerRevenue;
+            
+            // Calculate growth percentage
+            if (lastMonthRevenue == 0) {
+                return currentMonthRevenue > 0 ? 100.0 : 0.0; // 100% growth if we had no revenue last month
+            }
+            
+            return ((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100.0;
+        } catch (Exception e) {
+            System.err.println("Error calculating revenue growth: " + e.getMessage());
+            return 0.0;
+        }
+    }
+    
+    private double calculateB2CRevenue() {
+        try {
+            // B2C revenue comes from direct customer orders (Order entity)
+            List<Order> allOrders = orderRepository.findAll();
+            return allOrders.stream()
+                .filter(order -> order.getStatus() == Order.OrderStatus.COMPLETED)
+                .mapToDouble(order -> order.getAmount() != null ? order.getAmount().doubleValue() : 0.0)
+                .sum();
+        } catch (Exception e) {
+            System.err.println("Error calculating B2C revenue: " + e.getMessage());
+            return 0.0;
+        }
+    }
+    
+    private double calculateB2BRevenue() {
+        try {
+            // B2B revenue comes from retailer orders (RetailerOrder entity)
+            List<RetailerOrder> allRetailerOrders = retailerOrderRepository.findAll();
+            return allRetailerOrders.stream()
+                .filter(order -> order.getStatus() == RetailerOrder.OrderStatus.DELIVERED)
+                .mapToDouble(order -> order.getTotalAmount() != null ? order.getTotalAmount().doubleValue() : 0.0)
+                .sum();
+        } catch (Exception e) {
+            System.err.println("Error calculating B2B revenue: " + e.getMessage());
+            return 0.0;
+        }
     }
 }

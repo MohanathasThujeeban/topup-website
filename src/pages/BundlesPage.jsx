@@ -1,112 +1,151 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronRight, Database, Calendar, Phone, Zap, Smartphone, Filter, Search } from 'lucide-react';
+import { ChevronRight, Database, Calendar, Phone, Zap, Smartphone, Filter, Search, CheckCircle } from 'lucide-react';
 
 const bundles = [
   {
     id: 1,
-    name: 'Lycamobile 5GB',
+    name: 'Lyca Smart S',
     type: 'epin',
-    badge: 'POPULAR',
-    badgeColor: 'badge-popular',
-    icon: '📱',
-    data: '5GB',
+    badge: null,
+    data: '1GB',
     validity: '30 days',
-    calls: 'Unlimited Norway',
     price: 99,
+    originalPrice: null,
+    discount: null,
+    features: [
+      'Unlimited national minutes',
+      '100* Minutes to United Kingdom and more',
+      '1GB EU Roaming Data'
+    ],
     delivery: 'Instant Email Delivery',
   },
   {
     id: 2,
-    name: 'Lycamobile 10GB',
+    name: 'Lyca Smart XL',
     type: 'epin',
-    badge: 'BEST VALUE',
-    badgeColor: 'badge-value',
-    icon: '📱',
-    data: '10GB',
+    badge: '3 Months Price Discount !',
+    data: '30GB',
     validity: '30 days',
-    calls: 'Unlimited Norway',
-    price: 149,
+    price: 99,
+    originalPrice: 225,
+    discount: '3 Months Price Discount !',
+    features: [
+      'Unlimited national minutes',
+      'Unlimited minutes to UK, EU, USA, Canada, India and China',
+      '30GB EU Roaming Data'
+    ],
     delivery: 'Instant Email Delivery',
+    popular: true
   },
   {
     id: 3,
-    name: 'Lycamobile 20GB',
+    name: 'Lyca Smart M',
     type: 'epin',
-    badge: 'NEW',
-    badgeColor: 'badge-new',
-    icon: '📱',
-    data: '20GB',
+    badge: null,
+    data: '5GB',
     validity: '30 days',
-    calls: 'Unlimited Norway & EU',
-    price: 249,
+    price: 149,
+    originalPrice: null,
+    discount: null,
+    features: [
+      'Unlimited national minutes',
+      '500* Minutes to United Kingdom and more',
+      '5GB EU Roaming Data'
+    ],
     delivery: 'Instant Email Delivery',
   },
   {
     id: 4,
-    name: 'Lycamobile eSIM 5GB',
+    name: 'Lyca Smart eSIM S',
     type: 'esim',
-    badge: 'eSIM',
-    badgeColor: 'badge-esim',
-    icon: '📲',
-    data: '5GB',
+    badge: 'eSIM available',
+    data: '1GB',
     validity: '30 days',
-    calls: 'Unlimited Norway',
     price: 119,
+    originalPrice: null,
+    discount: null,
+    features: [
+      'Unlimited national minutes',
+      '100* Minutes to United Kingdom and more',
+      '1GB EU Roaming Data',
+      'eSIM available'
+    ],
     delivery: 'Instant QR Code',
     note: 'Scan QR code to activate',
   },
   {
     id: 5,
-    name: 'Lycamobile eSIM 10GB',
+    name: 'Lyca Smart eSIM XL',
     type: 'esim',
-    badge: 'eSIM',
-    badgeColor: 'badge-esim',
-    icon: '📲',
-    data: '10GB',
+    badge: 'kr50 Discount',
+    data: '30GB',
     validity: '30 days',
-    calls: 'Unlimited Norway',
-    price: 169,
+    price: 149,
+    originalPrice: 199,
+    discount: 'kr50 Discount',
+    features: [
+      'Unlimited national minutes',
+      'Unlimited minutes to UK, EU, USA, Canada, India and China',
+      '30GB EU Roaming Data',
+      'eSIM available'
+    ],
     delivery: 'Instant QR Code',
     note: 'Scan QR code to activate',
   },
   {
     id: 6,
-    name: 'Lycamobile 3GB',
+    name: 'Lyca Smart L',
     type: 'epin',
     badge: null,
-    icon: '☎️',
-    data: '3GB',
+    data: '10GB',
     validity: '30 days',
-    calls: 'Unlimited Norway',
-    price: 79,
+    price: 199,
+    originalPrice: null,
+    discount: null,
+    features: [
+      'Unlimited national minutes',
+      'Unlimited minutes to United Kingdom and more',
+      '10GB EU Roaming Data'
+    ],
     delivery: 'Instant Email Delivery',
   },
   {
     id: 7,
-    name: 'Lycamobile 15GB',
-    type: 'epin',
-    badge: null,
-    icon: '🌐',
-    data: '15GB',
+    name: 'Lyca Smart eSIM M',
+    type: 'esim',
+    badge: 'eSIM available',
+    data: '5GB',
     validity: '30 days',
-    calls: 'Unlimited Norway & EU',
-    price: 199,
-    delivery: 'Instant Email Delivery',
+    price: 169,
+    originalPrice: null,
+    discount: null,
+    features: [
+      'Unlimited national minutes',
+      '500* Minutes to United Kingdom and more',
+      '5GB EU Roaming Data',
+      'eSIM available'
+    ],
+    delivery: 'Instant QR Code',
+    note: 'Scan QR code to activate',
   },
   {
     id: 8,
-    name: 'Lycamobile eSIM 20GB',
-    type: 'esim',
-    badge: 'eSIM',
-    badgeColor: 'badge-esim',
-    icon: '📲',
-    data: '20GB',
+    name: 'Lyca Smart XXL',
+    type: 'epin',
+    badge: 'BEST VALUE',
+    data: '50GB',
     validity: '30 days',
-    calls: 'Unlimited Norway & EU',
-    price: 269,
-    delivery: 'Instant QR Code',
-    note: 'Scan QR code to activate',
+    price: 349,
+    originalPrice: null,
+    discount: null,
+    features: [
+      'Unlimited national minutes',
+      'Unlimited minutes to UK, EU, USA, Canada, India and China',
+      '50GB EU Roaming Data',
+      'Data Rollover'
+    ],
+    delivery: 'Instant Email Delivery',
   },
 ];
 
@@ -217,89 +256,88 @@ const BundlesPage = () => {
           </div>
 
           {/* Bundle Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredBundles.map((bundle) => (
-              <div key={bundle.id} className="bg-white rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 group relative overflow-hidden border border-gray-100 hover:border-cyan-200">
-                {/* Badge */}
+              <div key={bundle.id} className="relative bg-white rounded-3xl border-2 border-gray-200 hover:border-blue-300 hover:shadow-xl transition-all duration-300 overflow-hidden group">
+                {/* Discount Badge */}
                 {bundle.badge && (
-                  <div className="absolute top-5 right-5 z-10">
-                    <span className={`badge ${bundle.badgeColor} text-xs font-semibold px-4 py-2 shadow-md`}>{bundle.badge}</span>
+                  <div className="absolute top-4 left-4 z-10">
+                    <div className={`px-3 py-1 rounded-full text-xs font-bold text-white ${
+                      bundle.badge.includes('Discount') ? 'bg-gradient-to-r from-yellow-400 to-orange-500' :
+                      bundle.badge.includes('eSIM') ? 'bg-gradient-to-r from-blue-500 to-purple-500' :
+                      bundle.badge.includes('BEST') ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
+                      'bg-gradient-to-r from-gray-500 to-gray-600'
+                    }`}>
+                      {bundle.badge}
+                    </div>
                   </div>
                 )}
 
-                {/* Background Gradient */}
-                <div className="absolute inset-0 bg-gradient-to-br from-teal-50/50 via-cyan-50/50 to-blue-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-
-                <div className="relative z-10 p-6">
-                  {/* Product Icon */}
-                  <div className="w-20 h-20 mx-auto mb-5 bg-gradient-to-br from-teal-100 to-cyan-100 rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-md">
-                    <span className="text-4xl">{bundle.icon}</span>
-                  </div>
-
+                <div className="p-6 pt-16">
                   {/* Bundle Name */}
-                  <h3 className="text-xl font-bold text-center mb-6 text-gray-800 font-heading leading-tight">{bundle.name}</h3>
-
-                  {/* Key Features */}
-                  <div className="space-y-3 mb-6">
-                    <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-teal-50 to-teal-100/50 rounded-2xl border border-teal-100 group-hover:border-teal-200 transition-all duration-300">
-                      <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-md flex-shrink-0">
-                        <Database size={18} className="text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <span className="text-sm text-gray-600 font-body block">Data:</span>
-                        <span className="font-bold text-gray-900 font-heading text-lg">{bundle.data}</span>
-                      </div>
+                  <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">{bundle.name}</h3>
+                  
+                  {/* Data Display */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-1 h-12 bg-green-500 rounded-full"></div>
+                    <div>
+                      <div className="text-3xl font-bold text-gray-900">{bundle.data}</div>
+                      <div className="text-sm text-gray-600">Data</div>
                     </div>
-                    <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-cyan-50 to-cyan-100/50 rounded-2xl border border-cyan-100 group-hover:border-cyan-200 transition-all duration-300">
-                      <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md flex-shrink-0">
-                        <Calendar size={18} className="text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <span className="text-sm text-gray-600 font-body block">Validity:</span>
-                        <span className="font-bold text-gray-900 font-heading text-lg">{bundle.validity}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-emerald-50 to-emerald-100/50 rounded-2xl border border-emerald-100 group-hover:border-emerald-200 transition-all duration-300">
-                      <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-green-500 rounded-xl flex items-center justify-center shadow-md flex-shrink-0">
-                        <Phone size={18} className="text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <span className="text-sm text-gray-600 font-body block">Calls:</span>
-                        <span className="font-bold text-gray-900 font-heading text-base">{bundle.calls}</span>
-                      </div>
+                    <div className="ml-auto text-right">
+                      {bundle.originalPrice && (
+                        <div className="text-sm line-through text-gray-400">kr{bundle.originalPrice}.00</div>
+                      )}
+                      <div className="text-2xl font-bold text-gray-900">kr{bundle.price}.00</div>
+                      <div className="text-sm text-gray-600">/{bundle.validity}</div>
                     </div>
                   </div>
 
-                  {/* Delivery Tag */}
-                  <div className="flex items-center justify-center gap-2 text-sm text-emerald-700 mb-5 p-3 bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl border border-emerald-200 shadow-sm">
-                    <Zap size={18} className="text-emerald-600" />
-                    <span className="font-semibold font-body">{bundle.delivery}</span>
+                  {/* Features List */}
+                  <div className="space-y-2 mb-6">
+                    {bundle.features.map((feature, index) => (
+                      <div key={index} className="flex items-center gap-2 text-sm text-gray-700">
+                        <CheckCircle className="text-green-500 flex-shrink-0" size={16} />
+                        <span>{feature}</span>
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Note for eSIM */}
+                  {/* View More Link */}
+                  <div className="text-center mb-4">
+                    <Link 
+                      to={`/product/${bundle.id}`} 
+                      className="text-blue-600 hover:text-blue-700 font-medium text-sm hover:underline"
+                    >
+                      View more
+                    </Link>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2">
+                    <button 
+                      className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-2xl font-medium text-sm hover:bg-gray-50 transition-colors"
+                      onClick={() => {
+                        // Add to basket functionality
+                        alert(`Added ${bundle.name} to basket!`);
+                      }}
+                    >
+                      Add to basket
+                    </button>
+                    <Link
+                      to={`/product/${bundle.id}`}
+                      className="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-2xl font-medium text-sm text-center transition-colors"
+                    >
+                      Buy now
+                    </Link>
+                  </div>
+
+                  {/* Delivery Info */}
                   {bundle.note && (
-                    <p className="text-sm text-center text-blue-700 mb-5 flex items-center justify-center gap-2 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-200 font-body">
-                      <Smartphone size={16} />
-                      {bundle.note}
-                    </p>
+                    <div className="mt-4 text-center">
+                      <p className="text-xs text-gray-500">{bundle.note}</p>
+                    </div>
                   )}
-
-                  {/* Price */}
-                  <div className="text-center mb-6 py-4 bg-gradient-to-r from-teal-50 to-cyan-50 rounded-2xl border border-teal-100">
-                    <div className="text-xs text-gray-600 font-body mb-1">Price</div>
-                    <span className="text-5xl font-bold bg-gradient-to-r from-teal-600 via-cyan-500 to-blue-600 bg-clip-text text-transparent font-display">
-                      NOK {bundle.price}
-                    </span>
-                  </div>
-
-                  {/* CTA Button */}
-                  <Link
-                    to={`/product/${bundle.id}`}
-                    className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 hover:from-teal-600 hover:via-cyan-600 hover:to-blue-600 text-white font-bold py-4 px-6 rounded-2xl shadow-lg hover:shadow-xl group-hover:scale-105 transform transition-all duration-300 font-heading text-lg"
-                  >
-                    Buy Now
-                    <ChevronRight size={22} className="group-hover:translate-x-1 transition-transform" />
-                  </Link>
                 </div>
               </div>
             ))}

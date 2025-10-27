@@ -5,21 +5,28 @@ import {
   Clock, AlertCircle, CheckCircle, XCircle, Eye, Edit, Trash2, Plus,
   Search, RefreshCw, Bell, Settings, Upload, FileText, Target,
   MessageCircle, Mail, Phone, Calendar, User, Activity, Award,
-  PieChart, LineChart, ShoppingCart, Percent, Database, Zap
+  PieChart, LineChart, ShoppingCart, Percent, Database, Zap, LogOut
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import BundleBulkImport from '../components/BundleBulkImport';
 
 // API Base URL - should match AuthContext
 const API_BASE_URL = 'http://localhost:8080/api';
 
 export default function AdminDashboard() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
   const [users, setUsers] = useState([]);
   const [businessUsers, setBusinessUsers] = useState([]);
   const [enquiries, setEnquiries] = useState([]);
   const [products, setProducts] = useState([]);
+  const [bundles, setBundles] = useState([]);
   const [analytics, setAnalytics] = useState({});
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting', 'connected', 'offline'
+  const [showBulkImport, setShowBulkImport] = useState(false);
 
   // Fetch data from backend
   useEffect(() => {
@@ -33,6 +40,160 @@ export default function AdminDashboard() {
     
     return () => clearTimeout(loadingTimeout);
   }, []);
+
+  // Bundle Management Functions
+  const [showCreateBundle, setShowCreateBundle] = useState(false);
+  const [editingBundle, setEditingBundle] = useState(null);
+  const [bundleForm, setBundleForm] = useState({
+    name: '',
+    description: '',
+    productType: 'BUNDLE',
+    category: 'NORWAY',
+    basePrice: '',
+    retailerCommissionPercentage: 30,
+    stockQuantity: '',
+    status: 'ACTIVE'
+  });
+
+  const createBundle = async (bundleData) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/admin/bundles`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(bundleData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Bundle created successfully:', result);
+        
+        if (result.success) {
+          alert('Bundle created successfully!');
+          await fetchAllData(); // Refresh data
+          setShowCreateBundle(false);
+          setBundleForm({
+            name: '',
+            description: '',
+            productType: 'BUNDLE',
+            category: 'NORWAY',
+            basePrice: '',
+            retailerCommissionPercentage: 30,
+            stockQuantity: '',
+            status: 'ACTIVE'
+          });
+        } else {
+          throw new Error(result.error || 'Unknown error occurred');
+        }
+        return result;
+      } else {
+        const errorResult = await response.json();
+        console.error('Failed to create bundle:', errorResult);
+        throw new Error(errorResult.error || `Server error: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Error creating bundle:', error);
+      throw error;
+    }
+  };
+
+  const updateBundle = async (bundleId, bundleData) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/admin/bundles/${bundleId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(bundleData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Bundle updated successfully:', result);
+        await fetchAllData(); // Refresh data
+        setEditingBundle(null);
+        return result;
+      } else {
+        console.error('Failed to update bundle:', response.statusText);
+        throw new Error(`Failed to update bundle: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('Error updating bundle:', error);
+      throw error;
+    }
+  };
+
+  const deleteBundle = async (bundleId) => {
+    if (!confirm('Are you sure you want to delete this bundle? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/admin/bundles/${bundleId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        console.log('Bundle deleted successfully');
+        await fetchAllData(); // Refresh data
+      } else {
+        console.error('Failed to delete bundle:', response.statusText);
+        throw new Error(`Failed to delete bundle: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('Error deleting bundle:', error);
+      alert('Failed to delete bundle. Please try again.');
+    }
+  };
+
+  const fetchAnalytics = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/admin/analytics', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Analytics response:', result);
+        
+        if (result.success && result.data) {
+          setAnalytics(prevAnalytics => ({
+            ...prevAnalytics,
+            totalUsers: result.data.totalUsers || 0,
+            activeUsers: result.data.activeUsers || 0,
+            pendingApprovals: result.data.pendingApprovals || 0,
+            totalRevenue: result.data.totalRevenue || 0,
+            monthlyRevenue: result.data.monthlyRevenue || 0,
+            dailyRevenue: result.data.dailyRevenue || 0,
+            monthlyGrowth: result.data.revenueGrowth || 0,
+            // Keep existing mock data for other fields until we implement them
+            topProducts: prevAnalytics.topProducts || [],
+            totalOrders: prevAnalytics.totalOrders || 0,
+            conversionRate: prevAnalytics.conversionRate || 0,
+            activeProducts: prevAnalytics.activeProducts || 0
+          }));
+        }
+      } else {
+        console.error('Failed to fetch analytics:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+    }
+  };
 
   const fetchAllData = async () => {
     try {
@@ -93,7 +254,7 @@ export default function AdminDashboard() {
       setConnectionStatus('connected');
       
       // Fetch real data from backend APIs
-      const [usersResponse, businessResponse, enquiriesResponse, analyticsResponse] = await Promise.all([
+      const [usersResponse, businessResponse, enquiriesResponse, analyticsResponse, bundlesResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/admin/users`, { headers }).catch(err => {
           console.log('Users API failed:', err);
           return { ok: false };
@@ -108,6 +269,10 @@ export default function AdminDashboard() {
         }),
         fetch(`${API_BASE_URL}/admin/analytics`, { headers }).catch(err => {
           console.log('Analytics API failed:', err);
+          return { ok: false };
+        }),
+        fetch(`${API_BASE_URL}/admin/bundles`, { headers }).catch(err => {
+          console.log('Bundles API failed:', err);
           return { ok: false };
         })
       ]);
@@ -215,6 +380,24 @@ export default function AdminDashboard() {
         });
       }
 
+      // Process bundles data
+      if (bundlesResponse.ok) {
+        const bundlesData = await bundlesResponse.json();
+        console.log('Bundles data received:', bundlesData);
+        if (bundlesData.bundles) {
+          // Server returns bundles in 'bundles' field
+          setBundles(Array.isArray(bundlesData.bundles) ? bundlesData.bundles : []);
+        } else if (bundlesData.data) {
+          // Fallback to 'data' field
+          setBundles(Array.isArray(bundlesData.data) ? bundlesData.data : []);
+        } else {
+          setBundles([]);
+        }
+      } else {
+        console.log('Failed to fetch bundles, using empty array');
+        setBundles([]);
+      }
+
       console.log('Real data loaded successfully');
 
     } catch (error) {
@@ -224,23 +407,81 @@ export default function AdminDashboard() {
       setUsers([]);
       setBusinessUsers([]);
       setEnquiries([]);
-      setAnalytics({
-        totalUsers: 0,
-        activeUsers: 0,
-        pendingApprovals: 0,
-        totalRevenue: 0,
-        monthlyGrowth: 0,
-        topProducts: [],
-        dailyRevenue: 0,
-        totalOrders: 0,
-        conversionRate: 0,
-        activeProducts: 0,
-        dailyRevenueGrowth: 0,
-        orderGrowth: 0,
-        conversionGrowth: 0,
-        revenueByUserType: null,
-        salesPerformance: null
-      });
+      setBundles([
+        {
+          id: '1',
+          name: 'Lycamobile 5GB ePIN',
+          description: 'Works for all Lycamobile Norway SIMs. PIN delivered instantly.',
+          productType: 'EPIN',
+          category: 'NORWAY',
+          basePrice: 99,
+          retailerCommissionPercentage: 30,
+          stockQuantity: 150,
+          soldQuantity: 45,
+          status: 'ACTIVE',
+          createdDate: new Date('2024-10-01'),
+          lastModifiedDate: new Date('2024-10-20')
+        },
+        {
+          id: '2',
+          name: 'Nordic Data Bundle 10GB',
+          description: 'High-speed data for Nordic countries. Instant activation.',
+          productType: 'BUNDLE',
+          category: 'NORDIC',
+          basePrice: 199,
+          retailerCommissionPercentage: 25,
+          stockQuantity: 80,
+          soldQuantity: 28,
+          status: 'ACTIVE',
+          createdDate: new Date('2024-09-15'),
+          lastModifiedDate: new Date('2024-10-18')
+        },
+        {
+          id: '3',
+          name: 'Europe Travel eSIM 15GB',
+          description: 'Perfect for European travel. Multiple carrier support.',
+          productType: 'ESIM',
+          category: 'EUROPE',
+          basePrice: 349,
+          retailerCommissionPercentage: 35,
+          stockQuantity: 200,
+          soldQuantity: 72,
+          status: 'ACTIVE',
+          createdDate: new Date('2024-08-20'),
+          lastModifiedDate: new Date('2024-10-22')
+        },
+        {
+          id: '4',
+          name: 'Global Voice & Data Plan',
+          description: 'Worldwide coverage with voice and data. Premium service.',
+          productType: 'BUNDLE',
+          category: 'GLOBAL',
+          basePrice: 599,
+          retailerCommissionPercentage: 40,
+          stockQuantity: 50,
+          soldQuantity: 12,
+          status: 'ACTIVE',
+          createdDate: new Date('2024-09-30'),
+          lastModifiedDate: new Date('2024-10-25')
+        },
+        {
+          id: '5',
+          name: 'Norway Unlimited Voice',
+          description: 'Unlimited calls within Norway. Draft version for testing.',
+          productType: 'ADDON',
+          category: 'NORWAY',
+          basePrice: 149,
+          retailerCommissionPercentage: 20,
+          stockQuantity: 0,
+          soldQuantity: 0,
+          status: 'DRAFT',
+          createdDate: new Date('2024-10-24'),
+          lastModifiedDate: new Date('2024-10-24')
+        }
+      ]);
+      
+      // Fetch real analytics data from backend
+      fetchAnalytics();
     } finally {
       setLoading(false);
     }
@@ -320,6 +561,54 @@ export default function AdminDashboard() {
       console.error('Error rejecting user:', error);
       alert('Error rejecting user: ' + error.message);
     }
+  };
+
+  const handleBulkImport = async (importedBundles) => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      
+      // Convert imported bundles to CSV format
+      const csvHeaders = ['name', 'description', 'productType', 'category', 'basePrice', 'retailerCommissionPercentage', 'stockQuantity', 'status'];
+      const csvData = [
+        csvHeaders.join(','),
+        ...importedBundles.map(bundle => csvHeaders.map(header => bundle[header] || '').join(','))
+      ].join('\n');
+      
+      // Create a Blob and add to FormData
+      const csvBlob = new Blob([csvData], { type: 'text/csv' });
+      formData.append('file', csvBlob, 'bulk_import.csv');
+      
+      const response = await fetch(`${API_BASE_URL}/admin/bundles/bulk-import`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Bulk import successful:', result);
+        await fetchAllData(); // Refresh data to show imported bundles
+        alert(`Successfully imported ${importedBundles.length} bundles!`);
+      } else {
+        console.error('Bulk import failed:', response.statusText);
+        throw new Error(`Failed to import bundles: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('Error during bulk import:', error);
+      alert('Failed to import bundles. Please try again.');
+    }
+    
+    setShowBulkImport(false);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/', { replace: true });
   };
 
   const StatCard = ({ title, value, change, icon: Icon, color, description }) => (
@@ -405,9 +694,12 @@ export default function AdminDashboard() {
           Quick Actions
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <button className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
+          <button 
+            onClick={() => setActiveTab('bundles')}
+            className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+          >
             <Plus className="text-indigo-600 mb-2" size={24} />
-            <span className="text-sm font-medium">Add Product</span>
+            <span className="text-sm font-medium">Create Bundle</span>
           </button>
           <button className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-colors">
             <Upload className="text-green-600 mb-2" size={24} />
@@ -502,6 +794,217 @@ export default function AdminDashboard() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderBundles = () => (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-gray-900">Bundle Management</h3>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => setShowCreateBundle(true)}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+          >
+            <Plus size={16} />
+            Create Bundle
+          </button>
+          <button 
+            onClick={() => setShowBulkImport(true)}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+          >
+            <Package size={16} />
+            Bundle Manager
+          </button>
+          <button 
+            onClick={() => fetchAllData()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          >
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* Bundle Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Bundles</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{bundles.length || 0}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white flex items-center justify-center">
+              <Package size={24} />
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Active Bundles</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{bundles.filter(b => b.status === 'ACTIVE').length || 0}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-600 to-green-700 text-white flex items-center justify-center">
+              <CheckCircle size={24} />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Revenue</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">NOK {bundles.reduce((sum, b) => sum + (b.basePrice * (b.soldQuantity || 0)), 0).toLocaleString()}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-600 to-purple-700 text-white flex items-center justify-center">
+              <DollarSign size={24} />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Units Sold</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{bundles.reduce((sum, b) => sum + (b.soldQuantity || 0), 0).toLocaleString()}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-600 to-yellow-700 text-white flex items-center justify-center">
+              <ShoppingCart size={24} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bundle Table */}
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bundle Details</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pricing (NOK)</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sales</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {bundles && bundles.length > 0 ? (
+                bundles.map((bundle) => (
+                  <tr key={bundle.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                          <Package size={20} className="text-indigo-600" />
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{bundle.name}</div>
+                          <div className="text-sm text-gray-500">{bundle.description}</div>
+                          <div className="text-xs text-gray-400">{bundle.productType} • {bundle.category}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        <div className="font-medium">Retail: NOK {bundle.basePrice?.toLocaleString()}</div>
+                        <div className="text-green-600">Wholesale: NOK {(bundle.basePrice * 0.7)?.toFixed(2)}</div>
+                        <div className="text-purple-600">Margin: {bundle.retailerCommissionPercentage || 30}%</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        <div className="font-medium">{bundle.stockQuantity || 0} available</div>
+                        <div className={`text-xs ${(bundle.stockQuantity || 0) < 10 ? 'text-red-600' : 'text-green-600'}`}>
+                          {(bundle.stockQuantity || 0) < 10 ? 'Low Stock' : 'In Stock'}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        <div className="font-medium">{bundle.soldQuantity || 0} sold</div>
+                        <div className="text-green-600">NOK {((bundle.basePrice || 0) * (bundle.soldQuantity || 0)).toLocaleString()}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        bundle.status === 'ACTIVE' 
+                          ? 'bg-green-100 text-green-800'
+                          : bundle.status === 'DRAFT'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {bundle.status === 'ACTIVE' && <CheckCircle size={12} className="mr-1" />}
+                        {bundle.status === 'DRAFT' && <Clock size={12} className="mr-1" />}
+                        {bundle.status === 'INACTIVE' && <XCircle size={12} className="mr-1" />}
+                        {bundle.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {bundle.createdDate ? new Date(bundle.createdDate).toLocaleDateString() : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => alert(`Bundle Details:\nName: ${bundle.name}\nType: ${bundle.productType}\nCategory: ${bundle.category}\nPrice: NOK ${bundle.basePrice}\nStock: ${bundle.stockQuantity}\nSold: ${bundle.soldQuantity || 0}`)}
+                          className="text-indigo-600 hover:text-indigo-900"
+                          title="View Details"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setEditingBundle(bundle);
+                            setBundleForm({
+                              name: bundle.name || '',
+                              description: bundle.description || '',
+                              productType: bundle.productType || 'BUNDLE',
+                              category: bundle.category || 'NORWAY',
+                              basePrice: bundle.basePrice?.toString() || '',
+                              retailerCommissionPercentage: bundle.retailerCommissionPercentage || 30,
+                              stockQuantity: bundle.stockQuantity?.toString() || '',
+                              status: bundle.status || 'ACTIVE'
+                            });
+                          }}
+                          className="text-green-600 hover:text-green-900"
+                          title="Edit Bundle"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button 
+                          onClick={() => deleteBundle(bundle.id)}
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete Bundle"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center">
+                    <Package size={32} className="text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No bundles found</p>
+                    <p className="text-sm text-gray-400">Create your first bundle to start offering services to retailers</p>
+                    <button 
+                      onClick={() => setShowCreateBundle(true)}
+                      className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 mx-auto"
+                    >
+                      <Plus size={16} />
+                      Create Bundle
+                    </button>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -1052,6 +1555,15 @@ export default function AdminDashboard() {
               <Bell size={16}/>
               <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
             </button>
+            
+            <button 
+              onClick={handleLogout}
+              className="px-3 py-2 rounded-xl bg-red-100 hover:bg-red-200 border border-red-300 hover:border-red-400 text-red-700 hover:text-red-800 text-sm flex items-center gap-2 transition-all font-medium"
+              title="Sign out"
+            >
+              <LogOut size={16}/>
+              Logout
+            </button>
           </div>
         </div>
 
@@ -1070,6 +1582,13 @@ export default function AdminDashboard() {
               label="User Management"
               icon={Users}
               active={activeTab === 'users'}
+              onClick={setActiveTab}
+            />
+            <TabButton
+              id="bundles"
+              label="Bundle Management"
+              icon={Package}
+              active={activeTab === 'bundles'}
               onClick={setActiveTab}
             />
             <TabButton
@@ -1101,10 +1620,262 @@ export default function AdminDashboard() {
         {/* Content */}
         {activeTab === 'overview' && renderOverview()}
         {activeTab === 'users' && renderUserManagement()}
+        {activeTab === 'bundles' && renderBundles()}
         {activeTab === 'business-approvals' && renderBusinessApprovals()}
         {activeTab === 'enquiries' && renderEnquiries()}
         {activeTab === 'analytics' && renderAnalytics()}
       </div>
+
+      {/* Bundle Manager Modal */}
+      {showBulkImport && (
+        <BundleBulkImport
+          onClose={() => setShowBulkImport(false)}
+          onImport={handleBulkImport}
+        />
+      )}
+
+      {/* Create/Edit Bundle Modal */}
+      {(showCreateBundle || editingBundle) && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[95vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  {editingBundle ? 'Edit Bundle' : 'Create New Bundle'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowCreateBundle(false);
+                    setEditingBundle(null);
+                    setBundleForm({
+                      name: '',
+                      description: '',
+                      productType: 'BUNDLE',
+                      category: 'NORWAY',
+                      basePrice: '',
+                      retailerCommissionPercentage: 30,
+                      stockQuantity: '',
+                      status: 'ACTIVE'
+                    });
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XCircle size={24} />
+                </button>
+              </div>
+            </div>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                if (!bundleForm.name || !bundleForm.basePrice || !bundleForm.stockQuantity) {
+                  alert('Please fill in all required fields: Bundle Name, Base Price, and Stock Quantity');
+                  return;
+                }
+                
+                const bundleData = {
+                  ...bundleForm,
+                  basePrice: parseFloat(bundleForm.basePrice),
+                  stockQuantity: parseInt(bundleForm.stockQuantity),
+                  retailerCommissionPercentage: parseFloat(bundleForm.retailerCommissionPercentage)
+                };
+                
+                if (editingBundle) {
+                  await updateBundle(editingBundle.id, bundleData);
+                } else {
+                  await createBundle(bundleData);
+                }
+              } catch (error) {
+                console.error('Bundle save error:', error);
+                alert('Failed to save bundle: ' + (error.message || 'Please try again'));
+              }
+            }} className="p-8 space-y-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h4 className="text-blue-800 font-medium mb-2">💡 Quick Start Tips</h4>
+                <p className="text-blue-700 text-sm">
+                  Fill in the bundle name, price, and stock quantity to get started. Use the pricing preview below to see retailer margins.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Bundle Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={bundleForm.name}
+                    onChange={(e) => setBundleForm({...bundleForm, name: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg"
+                    placeholder="e.g., Nordic Travel eSIM 5GB"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Product Type</label>
+                  <select
+                    value={bundleForm.productType}
+                    onChange={(e) => setBundleForm({...bundleForm, productType: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg bg-white"
+                  >
+                    <option value="BUNDLE">📱 Data Bundle</option>
+                    <option value="EPIN">🔢 ePIN</option>
+                    <option value="ESIM">📶 eSIM</option>
+                    <option value="TOPUP">💳 Top-up</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                  <select
+                    value={bundleForm.category}
+                    onChange={(e) => setBundleForm({...bundleForm, category: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg bg-white"
+                  >
+                    <option value="NORWAY">🇳🇴 Norway</option>
+                    <option value="NORDIC">🏔️ Nordic</option>
+                    <option value="EUROPE">🇪🇺 Europe</option>
+                    <option value="GLOBAL">🌍 Global</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Base Price (NOK) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={bundleForm.basePrice}
+                      onChange={(e) => setBundleForm({...bundleForm, basePrice: e.target.value})}
+                      className="w-full px-4 py-3 pl-12 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg"
+                      placeholder="149.00"
+                    />
+                    <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">NOK</span>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Stock Quantity <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={bundleForm.stockQuantity}
+                    onChange={(e) => setBundleForm({...bundleForm, stockQuantity: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg"
+                    placeholder="100"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Retailer Commission (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    required
+                    value={bundleForm.retailerCommissionPercentage}
+                    onChange={(e) => setBundleForm({...bundleForm, retailerCommissionPercentage: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="30"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea
+                  rows={3}
+                  value={bundleForm.description}
+                  onChange={(e) => setBundleForm({...bundleForm, description: e.target.value})}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base"
+                  placeholder="Describe what's included in this bundle (e.g., data allowance, calling features, validity period)..."
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <select
+                  value={bundleForm.status}
+                  onChange={(e) => setBundleForm({...bundleForm, status: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="DRAFT">Draft</option>
+                  <option value="INACTIVE">Inactive</option>
+                </select>
+              </div>
+              
+              {bundleForm.basePrice && (
+                <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 rounded-xl p-6">
+                  <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    💰 Pricing Breakdown
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                      <div className="text-sm text-gray-600 mb-1">Customer Pays</div>
+                      <div className="text-2xl font-bold text-blue-600">
+                        NOK {parseFloat(bundleForm.basePrice || 0).toFixed(2)}
+                      </div>
+                      <div className="text-xs text-gray-500">Retail Price</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                      <div className="text-sm text-gray-600 mb-1">Retailer Pays</div>
+                      <div className="text-2xl font-bold text-green-600">
+                        NOK {(parseFloat(bundleForm.basePrice || 0) * (1 - parseFloat(bundleForm.retailerCommissionPercentage || 30) / 100)).toFixed(2)}
+                      </div>
+                      <div className="text-xs text-gray-500">Wholesale Price</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                      <div className="text-sm text-gray-600 mb-1">Retailer Profit</div>
+                      <div className="text-2xl font-bold text-purple-600">
+                        NOK {(parseFloat(bundleForm.basePrice || 0) * parseFloat(bundleForm.retailerCommissionPercentage || 30) / 100).toFixed(2)}
+                      </div>
+                      <div className="text-xs text-gray-500">{bundleForm.retailerCommissionPercentage || 30}% Margin</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex justify-end gap-4 pt-6 border-t-2 border-gray-200 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateBundle(false);
+                    setEditingBundle(null);
+                    setBundleForm({
+                      name: '',
+                      description: '',
+                      productType: 'BUNDLE',
+                      category: 'NORWAY',
+                      basePrice: '',
+                      retailerCommissionPercentage: 30,
+                      stockQuantity: '',
+                      status: 'ACTIVE'
+                    });
+                  }}
+                  className="px-6 py-3 text-gray-600 border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 flex items-center gap-2 font-semibold text-lg shadow-lg transform hover:scale-105 transition-all duration-200"
+                >
+                  <Package size={20} />
+                  {editingBundle ? '✏️ Update Bundle' : '🚀 Create Bundle'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

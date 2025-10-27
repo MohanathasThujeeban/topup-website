@@ -52,7 +52,7 @@ public interface ProductRepository extends MongoRepository<Product, String> {
     List<Product> findByStockQuantityLessThan(Integer stockQuantity);
     
     // Find products ordered by creation date (newest first)
-    List<Product> findByStatusOrderByCreatedAtDesc(ProductStatus status);
+    List<Product> findByStatusOrderByCreatedDateDesc(ProductStatus status);
     
     // Find products ordered by popularity (sold quantity)
     List<Product> findByStatusOrderBySoldQuantityDesc(ProductStatus status);

@@ -6,6 +6,7 @@ import com.example.topup.demo.entity.User;
 import com.example.topup.demo.entity.Order.OrderStatus;
 import com.example.topup.demo.service.RetailerService;
 import com.example.topup.demo.service.UserService;
+import com.example.topup.demo.service.BundleService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/retailer")
@@ -26,6 +28,9 @@ public class RetailerController {
 
     @Autowired
     private RetailerService retailerService;
+    
+    @Autowired
+    private BundleService bundleService;
     
     @Autowired
     private UserService userService;
@@ -242,6 +247,180 @@ public class RetailerController {
         
         public Integer getQuantity() { return quantity; }
         public void setQuantity(Integer quantity) { this.quantity = quantity; }
+    }
+
+    // Bundle endpoints for retailers
+
+    /**
+     * Get available bundles for retailers to purchase
+     */
+    @GetMapping("/bundles")
+    public ResponseEntity<?> getAvailableBundles(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String search) {
+        try {
+            List<Product> bundles;
+            
+            if (search != null && !search.trim().isEmpty()) {
+                bundles = bundleService.searchBundles(search);
+            } else if (category != null) {
+                bundles = bundleService.getBundlesByCategory(Product.Category.valueOf(category.toUpperCase()));
+            } else if (type != null) {
+                bundles = bundleService.getBundlesByType(Product.ProductType.valueOf(type.toUpperCase()));
+            } else {
+                bundles = bundleService.getBundlesByStatus(Product.ProductStatus.ACTIVE);
+            }
+
+            // Filter only active and visible bundles for retailers
+            List<Map<String, Object>> retailerBundles = bundles.stream()
+                .filter(bundle -> bundle.getStatus() == Product.ProductStatus.ACTIVE && bundle.isVisible())
+                .map(bundle -> {
+                    Map<String, Object> bundleInfo = new HashMap<>();
+                    bundleInfo.put("id", bundle.getId());
+                    bundleInfo.put("name", bundle.getName());
+                    bundleInfo.put("description", bundle.getDescription());
+                    bundleInfo.put("productType", bundle.getProductType());
+                    bundleInfo.put("category", bundle.getCategory());
+                    bundleInfo.put("basePrice", bundle.getBasePrice()); // Retail price
+                    bundleInfo.put("wholesalePrice", bundleService.calculateWholesalePrice(
+                        bundle.getBasePrice(), bundle.getRetailerCommissionPercentage()));
+                    bundleInfo.put("retailerCommissionPercentage", bundle.getRetailerCommissionPercentage());
+                    bundleInfo.put("stockQuantity", bundle.getStockQuantity());
+                    bundleInfo.put("dataAmount", bundle.getDataAmount());
+                    bundleInfo.put("validity", bundle.getValidity());
+                    bundleInfo.put("supportedCountries", bundle.getSupportedCountries());
+                    bundleInfo.put("supportedNetworks", bundle.getSupportedNetworks());
+                    bundleInfo.put("imageUrl", bundle.getImageUrl());
+                    bundleInfo.put("tags", bundle.getTags());
+                    bundleInfo.put("metadata", bundle.getMetadata());
+                    bundleInfo.put("isFeatured", bundle.isFeatured());
+                    return bundleInfo;
+                })
+                .toList();
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("bundles", retailerBundles);
+            response.put("totalCount", retailerBundles.size());
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Failed to fetch bundles: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    /**
+     * Get bundle details by ID for retailers
+     */
+    @GetMapping("/bundles/{id}")
+    public ResponseEntity<?> getBundleDetails(@PathVariable String id) {
+        try {
+            Product bundle = bundleService.getBundleById(id);
+            
+            if (bundle.getStatus() != Product.ProductStatus.ACTIVE || !bundle.isVisible()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Bundle not available");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+
+            Map<String, Object> bundleInfo = new HashMap<>();
+            bundleInfo.put("id", bundle.getId());
+            bundleInfo.put("name", bundle.getName());
+            bundleInfo.put("description", bundle.getDescription());
+            bundleInfo.put("productType", bundle.getProductType());
+            bundleInfo.put("category", bundle.getCategory());
+            bundleInfo.put("basePrice", bundle.getBasePrice());
+            bundleInfo.put("wholesalePrice", bundleService.calculateWholesalePrice(
+                bundle.getBasePrice(), bundle.getRetailerCommissionPercentage()));
+            bundleInfo.put("retailerCommissionPercentage", bundle.getRetailerCommissionPercentage());
+            bundleInfo.put("profitMargin", bundle.getBasePrice().subtract(bundleService.calculateWholesalePrice(
+                bundle.getBasePrice(), bundle.getRetailerCommissionPercentage())));
+            bundleInfo.put("stockQuantity", bundle.getStockQuantity());
+            bundleInfo.put("dataAmount", bundle.getDataAmount());
+            bundleInfo.put("validity", bundle.getValidity());
+            bundleInfo.put("supportedCountries", bundle.getSupportedCountries());
+            bundleInfo.put("supportedNetworks", bundle.getSupportedNetworks());
+            bundleInfo.put("imageUrl", bundle.getImageUrl());
+            bundleInfo.put("tags", bundle.getTags());
+            bundleInfo.put("metadata", bundle.getMetadata());
+            bundleInfo.put("isFeatured", bundle.isFeatured());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("bundle", bundleInfo);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Failed to fetch bundle details: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        }
+    }
+
+    /**
+     * Get retailer's purchased bundle inventory
+     */
+    @GetMapping("/inventory")
+    public ResponseEntity<?> getRetailerInventory(Authentication authentication) {
+        try {
+            String retailerEmail = authentication.getName();
+            Optional<User> retailerOpt = userService.findByEmail(retailerEmail);
+            
+            if (!retailerOpt.isPresent()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Retailer not found");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+            
+            User retailer = retailerOpt.get();
+
+            // For now, return mock inventory data since we don't have the order relationship set up yet
+            List<Map<String, Object>> mockInventory = java.util.Arrays.asList(
+                createMockInventoryItem("1", "Lycamobile Smart S", "1GB", "30 days", 99.0, 69.30, 5),
+                createMockInventoryItem("2", "Nordic Bundle M", "5GB", "30 days", 199.0, 139.30, 3),
+                createMockInventoryItem("3", "Europe Travel eSIM", "10GB", "30 days", 349.0, 244.30, 8)
+            );
+            
+            // Calculate total inventory value from mock data
+            double totalInventoryValue = mockInventory.stream()
+                    .mapToDouble(item -> (Double) item.get("wholesalePrice") * (Integer) item.get("quantity"))
+                    .sum();
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("inventory", mockInventory);
+            response.put("totalItems", mockInventory.size());
+            response.put("totalValue", totalInventoryValue);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Failed to fetch inventory: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    // Helper method for creating mock inventory items
+    private Map<String, Object> createMockInventoryItem(String id, String name, String dataAllowance, 
+                                                       String validity, Double retailPrice, Double wholesalePrice, Integer quantity) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", id);
+        item.put("name", name);
+        item.put("dataAllowance", dataAllowance);
+        item.put("validity", validity);
+        item.put("retailPrice", retailPrice);
+        item.put("wholesalePrice", wholesalePrice);
+        item.put("quantity", quantity);
+        item.put("totalValue", wholesalePrice * quantity);
+        return item;
     }
 
     public static class UpdateOrderStatusRequest {

@@ -105,6 +105,10 @@ const Header = () => {
                   eSIM
                   <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
                 </Link>
+                <Link to="/sim/register" className="nav-link-clean group relative px-3 py-2 text-gray-900 hover:text-cyan-600 font-semibold transition-all duration-300 whitespace-nowrap">
+                  SIM Registration
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
+                </Link>
                 <Link to="/offers" className="nav-link-clean group relative px-3 py-2 text-gray-900 hover:text-cyan-600 font-semibold transition-all duration-300 whitespace-nowrap">
                   Offers
                   <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600 group-hover:w-full transition-all duration-300"></span>
@@ -235,6 +239,13 @@ const Header = () => {
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   eSIM
+                </Link>
+                <Link 
+                  to="/sim/register" 
+                  className="nav-link text-gray-900 hover:text-cyan-600 font-semibold py-3 px-2 rounded-lg hover:bg-white/50 transition-all duration-300" 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  SIM Registration
                 </Link>
                 <Link 
                   to="/offers" 

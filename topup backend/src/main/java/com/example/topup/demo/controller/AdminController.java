@@ -1,8 +1,10 @@
 package com.example.topup.demo.controller;
 
 import com.example.topup.demo.entity.User;
+import com.example.topup.demo.entity.Product;
 import com.example.topup.demo.service.UserService;
 import com.example.topup.demo.service.AdminService;
+import com.example.topup.demo.service.BundleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +29,9 @@ public class AdminController {
 
     @Autowired
     private AdminService adminService;
+
+    @Autowired
+    private BundleService bundleService;
 
     /**
      * Get dashboard analytics
@@ -303,6 +308,48 @@ public class AdminController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Failed to fetch revenue analytics");
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    /**
+     * Get bundle analytics and statistics
+     */
+    @GetMapping("/bundle-analytics")
+    public ResponseEntity<?> getBundleAnalytics() {
+        try {
+            Map<String, Object> bundleStats = bundleService.getBundleStatistics();
+            List<Product> topBundles = bundleService.getTopSellingBundles(5);
+            List<Product> allBundles = bundleService.getAllBundles();
+            
+            Map<String, Object> analytics = new HashMap<>();
+            analytics.putAll(bundleStats);
+            analytics.put("topProducts", topBundles.stream().map(bundle -> {
+                Map<String, Object> bundleInfo = new HashMap<>();
+                bundleInfo.put("name", bundle.getName());
+                bundleInfo.put("sales", bundle.getSoldQuantity() != null ? bundle.getSoldQuantity() : 0);
+                bundleInfo.put("revenue", bundle.getBasePrice().doubleValue() * (bundle.getSoldQuantity() != null ? bundle.getSoldQuantity() : 0));
+                return bundleInfo;
+            }).toList());
+            
+            // Calculate revenue by category
+            Map<String, Double> revenueByCategory = new HashMap<>();
+            for (Product bundle : allBundles) {
+                String category = bundle.getCategory() != null ? bundle.getCategory().toString() : "OTHER";
+                double revenue = bundle.getBasePrice().doubleValue() * (bundle.getSoldQuantity() != null ? bundle.getSoldQuantity() : 0);
+                revenueByCategory.put(category, revenueByCategory.getOrDefault(category, 0.0) + revenue);
+            }
+            analytics.put("revenueByCategory", revenueByCategory);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", analytics);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Failed to fetch bundle analytics: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
     }

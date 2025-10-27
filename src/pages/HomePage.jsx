@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Smartphone, Zap, Shield, Clock, Globe, Check, Star, QrCode, Phone, MessageCircle, CheckCircle, Settings, BarChart3 } from 'lucide-react';
+import { ArrowRight, Smartphone, Zap, Shield, Clock, Globe, Check, Star, QrCode, Phone, MessageCircle, CheckCircle, Settings, BarChart3, User } from 'lucide-react';
 import AnimatedPhone from '../components/AnimatedPhone';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -103,6 +103,200 @@ const HomePage = () => {
         </div>
       </section>
 
+      {/* Existing Customer Section - Only show for unauthenticated users */}
+      {!isAuthenticated && (
+        <section className="py-16 bg-gradient-to-br from-gray-50 to-gray-100">
+          <div className="container-custom">
+            <div className="grid lg:grid-cols-2 gap-12 items-center">
+              {/* Left Content - Plans Display */}
+              <div>
+                <div className="text-center mb-8">
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Existing customers: Pay as you go bundles</h2>
+                  <p className="text-gray-600">Renew current bundle, upgrade or buy a new bundle</p>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Lyca Smart S Plan */}
+                  <div className="bg-white rounded-3xl border-2 border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-300 overflow-hidden">
+                    <div className="p-6">
+                      <h3 className="text-xl font-bold text-gray-800 mb-4">Lyca Smart S</h3>
+                      
+                      {/* Data Display */}
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-1 h-12 bg-green-500 rounded-full"></div>
+                        <div>
+                          <div className="text-3xl font-bold text-gray-900">1GB</div>
+                          <div className="text-sm text-gray-600">Data</div>
+                        </div>
+                        <div className="ml-auto text-right">
+                          <div className="text-2xl font-bold text-gray-900">kr99.00</div>
+                          <div className="text-sm text-gray-600">/30 days</div>
+                        </div>
+                      </div>
+
+                      {/* Features */}
+                      <div className="space-y-2 mb-6">
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <CheckCircle className="text-green-500" size={16} />
+                          <span>Unlimited national minutes</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <CheckCircle className="text-green-500" size={16} />
+                          <span>100* Minutes to United Kingdom and more</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <CheckCircle className="text-green-500" size={16} />
+                          <span>1GB EU Roaming Data</span>
+                        </div>
+                      </div>
+
+                      <div className="text-center mb-4">
+                        <Link 
+                          to="/bundles" 
+                          className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+                        >
+                          View more
+                        </Link>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-2">
+                        <button className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-2xl font-medium text-sm hover:bg-gray-50">
+                          Add to basket
+                        </button>
+                        <button className="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-2xl font-medium text-sm">
+                          Buy now
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lyca Smart XL Plan */}
+                  <div className="bg-white rounded-3xl border-2 border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-300 overflow-hidden relative">
+                    {/* Discount Badge */}
+                    <div className="absolute top-4 left-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold z-10">
+                      3 Months Price Discount !
+                    </div>
+                    
+                    <div className="p-6 pt-12">
+                      <h3 className="text-xl font-bold text-gray-800 mb-4">Lyca Smart XL</h3>
+                      
+                      {/* Data Display */}
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-1 h-12 bg-green-500 rounded-full"></div>
+                        <div>
+                          <div className="text-3xl font-bold text-gray-900">30GB</div>
+                          <div className="text-sm text-gray-600">Data</div>
+                        </div>
+                        <div className="ml-auto text-right">
+                          <div className="text-sm line-through text-gray-400">kr225.00</div>
+                          <div className="text-2xl font-bold text-gray-900">kr99.00</div>
+                          <div className="text-sm text-gray-600">/30 days</div>
+                        </div>
+                      </div>
+
+                      {/* Features */}
+                      <div className="space-y-2 mb-6">
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <CheckCircle className="text-green-500" size={16} />
+                          <span>Unlimited national minutes</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <CheckCircle className="text-green-500" size={16} />
+                          <span>Unlimited minutes to UK, EU, USA, Canada, India and China</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <CheckCircle className="text-green-500" size={16} />
+                          <span>30GB EU Roaming Data</span>
+                        </div>
+                      </div>
+
+                      <div className="text-center mb-4">
+                        <Link 
+                          to="/bundles" 
+                          className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+                        >
+                          View more
+                        </Link>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-2">
+                        <button className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-2xl font-medium text-sm hover:bg-gray-50">
+                          Add to basket
+                        </button>
+                        <button className="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-2xl font-medium text-sm">
+                          Buy now
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Content - Existing Customer Panel */}
+              <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-200">
+                <div className="text-center mb-8">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4">Are you an existing customer?</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 text-gray-700">
+                      <CheckCircle className="text-blue-600" size={20} />
+                      <span>Renew current plan</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-gray-700">
+                      <CheckCircle className="text-blue-600" size={20} />
+                      <span>View upgrade options</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-gray-700">
+                      <CheckCircle className="text-blue-600" size={20} />
+                      <span>Add a new plan</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Phone Number Input */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Enter your LycaMobile number
+                  </label>
+                  <div className="flex">
+                    <div className="bg-gray-50 border border-r-0 border-gray-300 rounded-l-lg px-3 py-2 text-gray-600 text-sm">
+                      +47
+                    </div>
+                    <input 
+                      type="tel" 
+                      placeholder="Enter a LycaMobile number"
+                      className="flex-1 border border-gray-300 rounded-r-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    By continuing I agree to <span className="text-blue-600 cursor-pointer hover:underline">Terms & Conditions</span>, and <span className="text-blue-600 cursor-pointer hover:underline">Privacy Policy</span> of LycaMobile
+                  </p>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="space-y-3">
+                  <Link
+                    to="/customer/dashboard"
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-center transition-colors flex items-center justify-center gap-2"
+                  >
+                    Renew/upgrade my plan with one time passcode
+                    <ArrowRight size={16} />
+                  </Link>
+                  <Link
+                    to="/login"
+                    className="w-full py-3 border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-xl font-semibold text-center transition-colors flex items-center justify-center gap-2"
+                  >
+                    Continue without one time passcode
+                    <ArrowRight size={16} />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Dashboard Navigation for Authenticated Users */}
       {isAuthenticated && (
         <section className="py-12 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-b border-gray-200">
@@ -138,8 +332,16 @@ const HomePage = () => {
               {user?.accountType === 'PERSONAL' && (
                 <div className="flex flex-wrap gap-4">
                   <Link 
-                    to="/bundles"
+                    to="/customer/dashboard"
                     className="flex items-center gap-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-6 py-4 rounded-xl font-semibold shadow-lg transform hover:scale-105 transition-all duration-300"
+                  >
+                    <User size={20} />
+                    Customer Dashboard
+                    <ArrowRight size={16} />
+                  </Link>
+                  <Link 
+                    to="/bundles"
+                    className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-4 rounded-xl font-semibold shadow-lg transform hover:scale-105 transition-all duration-300"
                   >
                     <Smartphone size={20} />
                     Browse Bundles
@@ -147,7 +349,7 @@ const HomePage = () => {
                   </Link>
                   <Link 
                     to="/esim"
-                    className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-4 rounded-xl font-semibold shadow-lg transform hover:scale-105 transition-all duration-300"
+                    className="flex items-center gap-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white px-6 py-4 rounded-xl font-semibold shadow-lg transform hover:scale-105 transition-all duration-300"
                   >
                     <QrCode size={20} />
                     Get eSIM
