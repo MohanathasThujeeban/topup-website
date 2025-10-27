@@ -10,9 +10,10 @@ export const useAuth = () => {
   return context;
 };
 
-// API Base URL - In production, this should come from environment variables
-// Using localhost for local development
-const API_BASE_URL = 'http://localhost:8080/api';
+// API Base URL - Dynamically set based on environment
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://your-backend-domain.com/api'
+  : 'http://localhost:8080/api';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);

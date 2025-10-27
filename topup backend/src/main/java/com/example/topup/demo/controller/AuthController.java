@@ -20,7 +20,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173", "http://172.20.10.3:3000", "http://172.20.10.3"}, 
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "http://172.20.10.3:3000", "http://172.20.10.3"}, 
     allowedHeaders = "*", 
     exposedHeaders = {"Authorization", "Content-Type"},
     allowCredentials = "true", 
@@ -57,8 +57,8 @@ public class AuthController {
                 return ResponseEntity.status(401).body(res);
             }
 
-            // Ensure email verified for personal accounts before login
-            if (!user.isEmailVerified()) {
+            // Ensure email verified for personal accounts before login (business accounts can login without verification)
+            if (!user.isEmailVerified() && user.getAccountType() == User.AccountType.PERSONAL) {
                 Map<String, Object> res = new HashMap<>();
                 res.put("success", false);
                 res.put("message", "Please verify your email to continue.");
@@ -468,7 +468,7 @@ public class AuthController {
         @Pattern(regexp = "\\d{9}", message = "Organization number must be exactly 9 digits")
         private String organizationNumber;
 
-        @Pattern(regexp = "\\d{12}", message = "VAT number must be exactly 12 digits")
+        @Pattern(regexp = "^(|\\d{12})$", message = "VAT number must be exactly 12 digits or empty")
         private String vatNumber;
 
         @NotBlank(message = "Company email is required")

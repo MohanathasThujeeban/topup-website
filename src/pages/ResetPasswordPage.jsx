@@ -43,7 +43,9 @@ const ResetPasswordPage = () => {
     const validateToken = async () => {
       try {
         // Call the backend to validate the token
-        const API_BASE_URL = 'http://172.20.10.3:8080'; // This should come from env vars or config
+        const API_BASE_URL = process.env.NODE_ENV === 'production' 
+          ? 'https://your-backend-domain.com'
+          : 'http://localhost:8080';
         const response = await fetch(`${API_BASE_URL}/api/auth/validate-reset-token?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`, {
           method: 'GET',
           headers: {

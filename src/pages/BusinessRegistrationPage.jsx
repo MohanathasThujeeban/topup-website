@@ -105,16 +105,16 @@ const BusinessRegistrationPage = () => {
           newErrors.organizationNumber = 'Organization number is required';
         } else {
           const orgDigits = formData.organizationNumber.replace(/\D/g, '');
-          // Accept 8-9 digits for different country formats (Norway 9 digits, Sweden 10 but we'll be flexible)
-          if (orgDigits.length < 8 || orgDigits.length > 10) {
-            newErrors.organizationNumber = 'Organization number must be 8-10 digits';
+          // Norwegian organization numbers are exactly 9 digits
+          if (orgDigits.length !== 9) {
+            newErrors.organizationNumber = 'Organization number must be exactly 9 digits';
           }
         }
         if (formData.vatNumber && formData.vatNumber.trim()) {
           const vatDigits = formData.vatNumber.replace(/\D/g, '');
-          // Norwegian VAT is usually 9 digits, allow reasonable range
-          if (vatDigits.length > 0 && (vatDigits.length < 6 || vatDigits.length > 12)) {
-            newErrors.vatNumber = 'VAT number must be 6-12 digits or leave empty';
+          // VAT number must be exactly 12 digits when provided
+          if (vatDigits.length !== 12) {
+            newErrors.vatNumber = 'VAT number must be exactly 12 digits or leave empty';
           }
         }
         if (!formData.companyEmail.trim()) {

@@ -7,7 +7,7 @@ import { initializeCursorTrail, initializeHeaderEffects, initializeScrollProgres
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
-  const { user, isAuthenticated, isAdmin, logout } = useAuth();
+  const { user, isAuthenticated, isAdmin, logout, isLoading } = useAuth();
   const navigate = useNavigate();
 
   // Initialize all effects
@@ -140,9 +140,9 @@ const Header = () => {
               </Link>
 
               {/* Authentication Section */}
-              {isAuthenticated ? (
+              {isAuthenticated && !isLoading ? (
                 <>
-                  {/* Simple user indicator for mobile */}
+                  {/* Authenticated user - mobile */}
                   <div className="lg:hidden flex items-center gap-2">
                     {isAdmin() && (
                       <Link 
@@ -163,42 +163,61 @@ const Header = () => {
                     </button>
                   </div>
 
-                  {/* Desktop - Simple logout button */}
-                  <div className="hidden lg:flex items-center gap-1">
+                  {/* Authenticated user - desktop */}
+                  <div className="hidden lg:flex items-center gap-2">
                     {isAdmin() && (
                       <Link 
                         to="/admin"
-                        className="inline-flex items-center gap-1 px-2 py-2 bg-gradient-to-r from-purple-100 to-indigo-100 hover:from-purple-200 hover:to-indigo-200 border border-purple-300 text-purple-700 rounded-lg transition-all font-medium text-xs whitespace-nowrap"
+                        className="inline-flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-100 to-indigo-100 hover:from-purple-200 hover:to-indigo-200 border border-purple-300 text-purple-700 rounded-lg transition-all font-medium text-sm whitespace-nowrap"
                       >
-                        <Settings size={14} />
-                        <span className="hidden xl:inline">Admin</span>
+                        <Settings size={16} />
+                        <span>Admin</span>
                       </Link>
                     )}
                     <button 
                       onClick={handleLogout}
-                      className="inline-flex items-center gap-1 px-2 py-2 bg-red-100 hover:bg-red-200 border border-red-300 hover:border-red-400 text-red-700 hover:text-red-800 rounded-lg transition-all font-semibold text-xs whitespace-nowrap shadow-sm"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 border border-red-300 hover:border-red-400 text-red-700 hover:text-red-800 rounded-lg transition-all font-semibold text-sm whitespace-nowrap shadow-sm"
                       title="Sign out"
                     >
-                      <LogOut size={14} />
+                      <LogOut size={16} />
                       <span>Sign Out</span>
                     </button>
                   </div>
                 </>
               ) : (
-                <div className="hidden lg:flex items-center gap-3">
-                  <Link 
-                    to="/login"
-                    className="px-4 py-3 text-gray-900 hover:text-cyan-600 font-semibold border border-gray-300 hover:border-cyan-500 rounded-xl transition-all duration-300 hover:shadow-md whitespace-nowrap"
-                  >
-                    Sign In
-                  </Link>
-                  <Link 
-                    to="/signup"
-                    className="px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg transform hover:scale-105 transition-all duration-300 whitespace-nowrap"
-                  >
-                    <span className="relative z-10">Sign Up</span>
-                  </Link>
-                </div>
+                <>
+                  {/* Not authenticated - Mobile */}
+                  <div className="flex lg:hidden items-center gap-2">
+                    <Link 
+                      to="/login"
+                      className="px-3 py-2 text-gray-700 hover:text-cyan-600 font-medium border border-gray-300 hover:border-cyan-500 rounded-lg transition-all duration-300 text-sm whitespace-nowrap"
+                    >
+                      Sign In
+                    </Link>
+                    <Link 
+                      to="/signup"
+                      className="px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 text-sm whitespace-nowrap"
+                    >
+                      Sign Up
+                    </Link>
+                  </div>
+
+                  {/* Not authenticated - Desktop */}
+                  <div className="hidden lg:flex items-center gap-3">
+                    <Link 
+                      to="/login"
+                      className="px-4 py-2.5 text-gray-700 hover:text-cyan-600 font-semibold border-2 border-gray-300 hover:border-cyan-500 rounded-lg transition-all duration-300 hover:shadow-md whitespace-nowrap"
+                    >
+                      Sign In
+                    </Link>
+                    <Link 
+                      to="/signup"
+                      className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 whitespace-nowrap"
+                    >
+                      Sign Up
+                    </Link>
+                  </div>
+                </>
               )}
 
               {/* Mobile Menu Button */}

@@ -23,7 +23,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/retailer")
 @PreAuthorize("hasRole('BUSINESS')")
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = {"http://localhost:3001", "http://localhost:5173"})
 public class RetailerController {
 
     @Autowired

@@ -8,7 +8,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 // API Base URL - should match AuthContext
-const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://your-backend-domain.com/api'
+  : 'http://localhost:8080/api';
 
 const RetailerDashboard = () => {
   const { user, logout } = useAuth();

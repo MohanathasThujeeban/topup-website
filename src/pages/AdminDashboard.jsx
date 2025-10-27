@@ -10,9 +10,12 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import BundleBulkImport from '../components/BundleBulkImport';
+import AdminLoadingScreen from '../components/AdminLoadingScreen';
 
 // API Base URL - should match AuthContext
-const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://your-backend-domain.com/api'
+  : 'http://localhost:8080/api';
 
 export default function AdminDashboard() {
   const { logout } = useAuth();
@@ -158,7 +161,7 @@ export default function AdminDashboard() {
   const fetchAnalytics = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8080/api/admin/analytics', {
+      const response = await fetch(`${API_BASE_URL}/admin/analytics`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -1489,22 +1492,12 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50 p-4 flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <RefreshCw className="animate-spin text-indigo-600 mx-auto mb-4" size={32} />
-          <p className="text-gray-600 mb-2">Loading admin dashboard...</p>
-          <p className="text-sm text-gray-500 mb-4">Connecting to backend services</p>
-          <button 
-            onClick={() => {
-              setLoading(false);
-              setTimeout(() => fetchAllData(), 100);
-            }}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
-          >
-            Skip Loading
-          </button>
-        </div>
-      </div>
+      <AdminLoadingScreen 
+        onSkip={() => {
+          setLoading(false);
+          setTimeout(() => fetchAllData(), 100);
+        }}
+      />
     );
   }
 

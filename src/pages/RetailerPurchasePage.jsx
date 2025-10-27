@@ -5,7 +5,9 @@ import {
   Search, SortAsc, Eye, Heart, Plus, Minus, AlertCircle, CheckCircle
 } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://your-backend-domain.com/api'
+  : 'http://localhost:8080/api';
 
 export default function RetailerPurchasePage() {
   const [bundles, setBundles] = useState([]);

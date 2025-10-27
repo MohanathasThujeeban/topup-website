@@ -16,7 +16,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/admin")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173", "http://172.20.10.3:3000", "http://172.20.10.3"}, 
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "http://172.20.10.3:3000", "http://172.20.10.3"}, 
     allowedHeaders = "*", 
     exposedHeaders = {"Authorization", "Content-Type"},
     allowCredentials = "true", 
