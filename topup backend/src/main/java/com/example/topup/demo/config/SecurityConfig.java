@@ -45,7 +45,7 @@ public class SecurityConfig {
             "http://localhost:3001", 
             "http://localhost:5173", 
             "http://172.20.10.3:3000",
-            "https://topup-website.vercel.app",  // Production frontend
+            "https://topup-website-beta.vercel.app",  // Production frontend
             "https://topup-website-*.vercel.app"  // Vercel preview deployments
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));

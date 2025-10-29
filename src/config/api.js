@@ -7,7 +7,7 @@ export const API_CONFIG = {
     
   // Frontend URL for email verification links
   FRONTEND_URL: process.env.NODE_ENV === 'production'
-    ? 'https://topup-website.vercel.app'     // Update with your Vercel frontend URL
+    ? 'https://topup-website-beta.vercel.app'     // Vercel frontend URL
     : 'http://localhost:3000',
     
   // Email configuration
