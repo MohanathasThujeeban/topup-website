@@ -44,7 +44,7 @@ const ResetPasswordPage = () => {
       try {
         // Call the backend to validate the token
         const API_BASE_URL = process.env.NODE_ENV === 'production' 
-          ? 'https://your-backend-domain.com'
+          ? 'https://topup-backend-production.up.railway.app'
           : 'http://localhost:8080';
         const response = await fetch(`${API_BASE_URL}/api/auth/validate-reset-token?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`, {
           method: 'GET',

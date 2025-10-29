@@ -12,7 +12,7 @@ export const useAuth = () => {
 
 // API Base URL - Dynamically set based on environment
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://your-backend-domain.com/api'
+  ? 'https://topup-backend-production.up.railway.app/api'
   : 'http://localhost:8080/api';
 
 export const AuthProvider = ({ children }) => {

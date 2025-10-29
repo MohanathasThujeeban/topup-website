@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://your-backend-domain.com/api'
+  ? 'https://topup-backend-production.up.railway.app/api'
   : 'http://localhost:8080/api';
 
 export default function RetailerPurchasePage() {

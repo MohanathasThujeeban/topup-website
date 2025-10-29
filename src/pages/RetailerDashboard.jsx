@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 
 // API Base URL - should match AuthContext
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://your-backend-domain.com/api'
+  ? 'https://topup-backend-production.up.railway.app/api'
   : 'http://localhost:8080/api';
 
 const RetailerDashboard = () => {
