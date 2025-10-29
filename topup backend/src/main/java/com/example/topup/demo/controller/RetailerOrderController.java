@@ -26,7 +26,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/retailer/order-management")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001", "http://localhost:5173"}, allowCredentials = "true")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "https://topup.neirahtech"}, allowCredentials = "true")
 public class RetailerOrderController {
     
     private static final Logger logger = LoggerFactory.getLogger(RetailerOrderController.class);

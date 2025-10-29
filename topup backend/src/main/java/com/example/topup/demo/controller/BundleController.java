@@ -18,7 +18,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/bundles")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"}, allowCredentials = "true")
+@CrossOrigin(origins = {"http://localhost:3000", "https://topup.neirahtech" "http://localhost:3001"}, allowCredentials = "true")
 public class BundleController {
 
     @Autowired
