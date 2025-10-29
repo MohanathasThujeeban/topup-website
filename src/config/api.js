@@ -2,12 +2,12 @@
 export const API_CONFIG = {
   // Base URL for backend API
   BASE_URL: process.env.NODE_ENV === 'production' 
-    ? 'https://your-backend-domain.com/api'  // Update this with your actual backend URL
+    ? 'https://topup-backend-production.up.railway.app/api'  // Railway backend URL
     : 'http://localhost:8080/api',
     
   // Frontend URL for email verification links
   FRONTEND_URL: process.env.NODE_ENV === 'production'
-    ? 'https://your-frontend-domain.com'     // Update this with your actual frontend URL
+    ? 'https://topup-website.vercel.app'     // Update with your Vercel frontend URL
     : 'http://localhost:3000',
     
   // Email configuration
