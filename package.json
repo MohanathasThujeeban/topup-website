@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "EasyTopup.no - Instant Lycamobile ePIN & eSIM delivery",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
