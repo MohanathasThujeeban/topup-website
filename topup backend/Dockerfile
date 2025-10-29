@@ -3,7 +3,7 @@ FROM maven:3.8.4-openjdk-17
 
 COPY . .
 # Set working directory
-WORKDIR /app
+WORKDIR /backend
 
 # Copy the pom.xml file
 COPY pom.xml .
@@ -15,7 +15,7 @@ COPY src ./src
 RUN mvn clean package -DskipTests
 
 FROM openjdk:17-jdk-slim
-COPY --from=build /target/*.jar /app/app.jar
+COPY --from=build /target/*.jar /backend/topup.jar
 # Expose port (typically 8080 for Spring Boot apps)
 EXPOSE 8080
 
