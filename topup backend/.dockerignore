@@ -1,0 +1,32 @@
+# Ignore target directory (build artifacts)
+target/
+
+# Ignore IDE files
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore git files
+.git/
+.gitignore
+
+# Ignore test files (if you want to skip them)
+src/test/
+
+# Ignore Maven wrapper if not needed
+.mvn/
+
+# Ignore logs
+*.log
+logs/
+
+# Ignore temporary files
+*.tmp
+*.temp
