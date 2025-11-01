@@ -281,6 +281,13 @@ public class UserService {
     }
 
     /**
+     * Find users by account type
+     */
+    public java.util.List<User> findByAccountType(User.AccountType accountType) {
+        return userRepository.findByAccountType(accountType);
+    }
+
+    /**
      * Find user by ID
      */
     public Optional<User> findById(String userId) {

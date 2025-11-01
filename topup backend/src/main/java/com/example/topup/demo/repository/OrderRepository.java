@@ -16,6 +16,9 @@ public interface OrderRepository extends MongoRepository<Order, String> {
     // Find orders by retailer (business user)
     List<Order> findByRetailerOrderByCreatedDateDesc(User retailer);
     
+    // Find orders by retailer ID
+    List<Order> findByRetailer_Id(String retailerId);
+    
     // Find orders by retailer and status
     List<Order> findByRetailerAndStatusOrderByCreatedDateDesc(User retailer, OrderStatus status);
     

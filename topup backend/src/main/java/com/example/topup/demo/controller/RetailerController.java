@@ -252,9 +252,10 @@ public class RetailerController {
     // Bundle endpoints for retailers
 
     /**
-     * Get available bundles for retailers to purchase
+     * Get available bundles catalog for retailers (legacy endpoint)
+     * Use /api/retailer/bundles from RetailerBundlePurchaseController for new functionality
      */
-    @GetMapping("/bundles")
+    @GetMapping("/bundles/catalog")
     public ResponseEntity<?> getAvailableBundles(
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String type,
@@ -365,8 +366,9 @@ public class RetailerController {
 
     /**
      * Get retailer's purchased bundle inventory
+     * @deprecated Use RetailerBundlePurchaseController#getInventory instead
      */
-    @GetMapping("/inventory")
+    @GetMapping("/inventory/legacy")
     public ResponseEntity<?> getRetailerInventory(Authentication authentication) {
         try {
             String retailerEmail = authentication.getName();

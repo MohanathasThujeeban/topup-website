@@ -7,9 +7,8 @@ import WhatsAppWidget from './components/WhatsAppWidget';
 import HomePage from './pages/HomePage';
 import BundlesPage from './pages/BundlesPage';
 import ESIMPage from './pages/eSIMPage';
-import SIMRegistrationPage from './pages/SIMRegistrationPage';
-import SIMDashboardPage from './pages/SIMDashboardPage';
 import ESIMDashboardPage from './pages/ESIMDashboardPage';
+import ESIMActivationPage from './pages/ESIMActivationPage';
 import OffersPage from './pages/OffersPage';
 import SupportPage from './pages/SupportPage';
 import FAQPage from './pages/FAQPage';
@@ -41,7 +40,7 @@ function AppLayout() {
   const location = useLocation();
   
   // Define routes that should not have header and footer (dashboard-only routes)
-  const dashboardRoutes = ['/admin', '/retailer/dashboard', '/customer/dashboard', '/sim/dashboard', '/esim/dashboard'];
+  const dashboardRoutes = ['/admin', '/retailer/dashboard', '/customer/dashboard', '/esim/dashboard'];
   const isDashboardRoute = dashboardRoutes.some(route => location.pathname.startsWith(route));
 
   return (
@@ -53,8 +52,7 @@ function AppLayout() {
           <Route path="/bundles" element={<BundlesPage />} />
           <Route path="/esim" element={<ESIMPage />} />
           <Route path="/esim/dashboard" element={<ESIMDashboardPage />} />
-          <Route path="/sim/register" element={<SIMRegistrationPage />} />
-          <Route path="/sim/dashboard" element={<SIMDashboardPage />} />
+          <Route path="/esim/activate" element={<ESIMActivationPage />} />
           <Route path="/offers" element={<OffersPage />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/faq" element={<FAQPage />} />

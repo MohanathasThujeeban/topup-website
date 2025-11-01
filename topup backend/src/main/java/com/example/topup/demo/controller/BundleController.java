@@ -18,7 +18,12 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/bundles")
-@CrossOrigin(origins = {"http://localhost:3000", "https://topup.neirahtech" }, allowCredentials = "true")
+@CrossOrigin(
+    origins = {"http://localhost:3000", "http://localhost:5173", "https://topup.neirahtech"}, 
+    allowCredentials = "true",
+    allowedHeaders = {"Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"},
+    methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS}
+)
 public class BundleController {
 
     @Autowired

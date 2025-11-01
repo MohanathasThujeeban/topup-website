@@ -1,0 +1,11 @@
+iccid,serialNumber,activationUrl,qrCodeUrl,productId,notes
+89470000000000000001,ESIM-SN-001,https://activate.example.com/esim/001,https://qr.example.com/001.png,674245cf95fc9e3e08b29fac,Norway 10GB eSIM
+89470000000000000002,ESIM-SN-002,https://activate.example.com/esim/002,https://qr.example.com/002.png,674245cf95fc9e3e08b29fac,Norway 10GB eSIM
+89470000000000000003,ESIM-SN-003,https://activate.example.com/esim/003,https://qr.example.com/003.png,674245cf95fc9e3e08b29fac,Norway 10GB eSIM
+89470000000000000004,ESIM-SN-004,https://activate.example.com/esim/004,https://qr.example.com/004.png,674245cf95fc9e3e08b29fac,Norway 10GB eSIM
+89470000000000000005,ESIM-SN-005,https://activate.example.com/esim/005,https://qr.example.com/005.png,674245cf95fc9e3e08b29fac,Norway 10GB eSIM
+89470000000000000006,ESIM-SN-006,https://activate.example.com/esim/006,https://qr.example.com/006.png,674245cf95fc9e3e08b29fac,Norway 10GB eSIM
+89470000000000000007,ESIM-SN-007,https://activate.example.com/esim/007,https://qr.example.com/007.png,674245cf95fc9e3e08b29fac,Norway 10GB eSIM
+89470000000000000008,ESIM-SN-008,https://activate.example.com/esim/008,https://qr.example.com/008.png,674245cf95fc9e3e08b29fac,Norway 10GB eSIM
+89470000000000000009,ESIM-SN-009,https://activate.example.com/esim/009,https://qr.example.com/009.png,674245cf95fc9e3e08b29fac,Norway 10GB eSIM
+89470000000000000010,ESIM-SN-010,https://activate.example.com/esim/010,https://qr.example.com/010.png,674245cf95fc9e3e08b29fac,Norway 10GB eSIM

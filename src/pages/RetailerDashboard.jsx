@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, Users, Package, DollarSign, TrendingUp, Clock, 
   AlertCircle, CheckCircle, Eye, Edit, Plus, Search, RefreshCw,
-  ShoppingCart, Award, Activity, Bell, Download, LogOut
+  ShoppingCart, Award, Activity, Bell, Download, LogOut, Tag,
+  Menu, X, Building, Box, MessageCircle, PieChart
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import FeaturedPromotions from '../components/FeaturedPromotions';
+import RetailerBundlePurchaseDashboard from '../components/RetailerBundlePurchaseDashboard';
 
 // API Base URL - should match AuthContext
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -16,6 +19,7 @@ const RetailerDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
@@ -61,7 +65,7 @@ const RetailerDashboard = () => {
         console.log('Backend connection test failed:', err);
         // Try a more basic test
         try {
-          const basicTest = await fetch(`${API_BASE_URL}/admin/analytics`, { headers });
+          const basicTest = await fetch(`${API_BASE_URL}/retailer/bundles`, { headers });
           backendConnected = basicTest.status !== 0; // Any response means backend is running
           console.log('Basic backend test result:', backendConnected, 'Status:', basicTest.status);
         } catch (basicErr) {
@@ -355,22 +359,71 @@ const RetailerDashboard = () => {
     }
   };
 
+  // Sidebar Navigation Item Component
+  const SidebarNavItem = ({ id, label, icon: Icon, active, onClick, badge }) => (
+    <button
+      onClick={() => onClick(id)}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${
+        active 
+          ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-200 scale-105' 
+          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:scale-102'
+      }`}
+    >
+      {/* Animated background for active state */}
+      {active && (
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 animate-gradient"></div>
+      )}
+      
+      {/* Icon with bounce animation */}
+      <Icon size={20} className={`flex-shrink-0 relative z-10 transition-transform duration-300 ${
+        active ? 'scale-110' : 'group-hover:scale-110 group-hover:rotate-3'
+      }`} />
+      
+      {sidebarOpen && (
+        <>
+          {/* Label */}
+          <span className={`font-medium flex-1 text-left relative z-10 transition-all duration-300 ${
+            active ? 'translate-x-0' : 'group-hover:translate-x-1'
+          }`}>
+            {label}
+          </span>
+          
+          {/* Badge with pulse animation */}
+          {badge && badge > 0 && (
+            <span className={`relative z-10 px-2 py-0.5 rounded-full text-xs font-semibold transition-all duration-300 ${
+              active 
+                ? 'bg-white/20 text-white animate-pulse' 
+                : 'bg-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white group-hover:scale-110'
+            }`}>
+              {badge}
+            </span>
+          )}
+        </>
+      )}
+      
+      {/* Hover effect line */}
+      {!active && (
+        <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-blue-600 to-purple-600 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300 rounded-r-full"></div>
+      )}
+    </button>
+  );
+
   const StatCard = ({ title, value, change, icon: Icon, color, description }) => (
-    <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+    <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 border border-gray-100">
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-          {description && <p className="text-xs text-gray-500 mt-1">{description}</p>}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs sm:text-sm font-medium text-gray-600 truncate">{title}</p>
+          <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1 truncate">{value}</p>
+          {description && <p className="text-[10px] sm:text-xs text-gray-500 mt-1">{description}</p>}
         </div>
-        <div className={`w-12 h-12 rounded-xl ${color} text-white flex items-center justify-center`}>
-          <Icon size={24} />
+        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${color} text-white flex items-center justify-center flex-shrink-0 ml-2`}>
+          <Icon size={20} className="sm:w-6 sm:h-6" />
         </div>
       </div>
-      {change && (
-        <div className="mt-4">
-          <span className={`inline-flex items-center text-sm ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
-            <TrendingUp size={16} className="mr-1" />
+      {change !== undefined && change !== null && (
+        <div className="mt-3 sm:mt-4">
+          <span className={`inline-flex items-center text-xs sm:text-sm ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <TrendingUp size={14} className="mr-1 sm:w-4 sm:h-4" />
             {change > 0 ? '+' : ''}{change}% from last month
           </span>
         </div>
@@ -378,24 +431,31 @@ const RetailerDashboard = () => {
     </div>
   );
 
-  const TabButton = ({ id, label, icon: Icon, active, onClick, badge }) => (
-    <button
-      onClick={() => onClick(id)}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-        active 
-          ? 'bg-blue-600 text-white' 
-          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-      }`}
-    >
-      <Icon size={18} />
-      {label}
-      {badge && (
-        <span className="ml-1 px-2 py-0.5 text-xs bg-red-500 text-white rounded-full">
-          {badge}
-        </span>
-      )}
-    </button>
-  );
+  const TabButton = ({ id, label, icon: Icon, active, onClick, badge }) => {
+    // Create shortened label for mobile
+    const shortLabel = label.split(' ')[0]; // Take first word
+    const isSingleWord = label.split(' ').length === 1;
+    
+    return (
+      <button
+        onClick={() => onClick(id)}
+        className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 rounded-lg font-medium transition-all duration-200 whitespace-nowrap text-xs sm:text-sm flex-shrink-0 ${
+          active 
+            ? 'bg-blue-600 text-white shadow-md' 
+            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+        }`}
+      >
+        <Icon size={16} className="sm:w-[18px] sm:h-[18px] flex-shrink-0" />
+        <span className="hidden lg:inline">{label}</span>
+        <span className="lg:hidden">{isSingleWord ? label : shortLabel}</span>
+        {badge > 0 && (
+          <span className="ml-1 px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs bg-red-500 text-white rounded-full min-w-[18px] text-center">
+            {badge}
+          </span>
+        )}
+      </button>
+    );
+  };
 
   if (loading) {
     return (
@@ -409,107 +469,173 @@ const RetailerDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50 p-4">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-purple-600 text-white flex items-center justify-center">
-              <ShoppingCart />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-gray-900">Retailer Dashboard</div>
-              <div className="text-sm text-gray-600">Manage your business operations</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Connection Status */}
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
-              connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
-              connectionStatus === 'offline' ? 'bg-red-100 text-red-700' :
-              'bg-yellow-100 text-yellow-700'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${
-                connectionStatus === 'connected' ? 'bg-green-500' :
-                connectionStatus === 'offline' ? 'bg-red-500' :
-                'bg-yellow-500'
-              }`}></div>
-              {connectionStatus === 'connected' ? 'Backend Connected' :
-               connectionStatus === 'offline' ? 'Backend Offline' :
-               'Connecting...'}
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50 overflow-hidden">
+      {/* Sidebar */}
+      <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-gray-200 transition-all duration-300 ease-in-out flex flex-col shadow-xl`}>
+        {/* Logo & Brand */}
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          {sidebarOpen ? (
+            <>
+              <div className="flex items-center gap-2 animate-fade-in">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-purple-600 text-white flex items-center justify-center shadow-lg animate-pulse-slow">
+                  <Building size={20} />
+                </div>
+                <div>
+                  <h1 className="font-bold text-gray-900">Retailer Panel</h1>
+                  <p className="text-[10px] text-gray-500">EasyTopup.no</p>
+                </div>
+              </div>
+              <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X size={18} className="text-gray-500" />
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setSidebarOpen(true)} className="p-2 hover:bg-gray-100 rounded-lg mx-auto">
+              <Menu size={20} className="text-gray-600" />
+            </button>
+          )}
+        </div>
+
+        {/* Navigation Items */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {sidebarOpen ? (
+            <>
+              <SidebarNavItem
+                id="overview"
+                label="Dashboard"
+                icon={BarChart3}
+                active={activeTab === 'overview'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="orders"
+                label="Orders"
+                icon={ShoppingCart}
+                active={activeTab === 'orders'}
+                onClick={setActiveTab}
+                badge={analytics.pendingOrders}
+              />
+              <SidebarNavItem
+                id="bundles"
+                label="Buy Bundles"
+                icon={Package}
+                active={activeTab === 'bundles'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="inventory"
+                label="Inventory"
+                icon={Box}
+                active={activeTab === 'inventory'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="offers"
+                label="Offers"
+                icon={Tag}
+                active={activeTab === 'offers'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="analytics"
+                label="Analytics"
+                icon={PieChart}
+                active={activeTab === 'analytics'}
+                onClick={setActiveTab}
+              />
+            </>
+          ) : (
+            <>
+              <button onClick={() => setActiveTab('overview')} className={`w-full p-3 rounded-xl ${activeTab === 'overview' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                <BarChart3 size={20} />
+              </button>
+              <button onClick={() => setActiveTab('orders')} className={`w-full p-3 rounded-xl relative ${activeTab === 'orders' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                <ShoppingCart size={20} />
+                {analytics.pendingOrders > 0 && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                )}
+              </button>
+              <button onClick={() => setActiveTab('bundles')} className={`w-full p-3 rounded-xl ${activeTab === 'bundles' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                <Package size={20} />
+              </button>
+              <button onClick={() => setActiveTab('inventory')} className={`w-full p-3 rounded-xl ${activeTab === 'inventory' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                <Box size={20} />
+              </button>
+              <button onClick={() => setActiveTab('offers')} className={`w-full p-3 rounded-xl ${activeTab === 'offers' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                <Tag size={20} />
+              </button>
+              <button onClick={() => setActiveTab('analytics')} className={`w-full p-3 rounded-xl ${activeTab === 'analytics' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                <PieChart size={20} />
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Logout Button */}
+        <div className="p-4 border-t border-gray-200">
+          <button
+            onClick={handleLogout}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-all ${!sidebarOpen && 'justify-center'}`}
+          >
+            <LogOut size={20} />
+            {sidebarOpen && <span className="font-medium">Logout</span>}
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header Bar */}
+        <div className="bg-white border-b border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold text-gray-900">
+                {activeTab === 'overview' && 'Dashboard'}
+                {activeTab === 'orders' && 'Orders'}
+                {activeTab === 'bundles' && 'Buy Bundles'}
+                {activeTab === 'inventory' && 'Inventory'}
+                {activeTab === 'offers' && 'Offers'}
+                {activeTab === 'analytics' && 'Analytics'}
+              </h2>
             </div>
             
-            <button 
-              onClick={() => fetchRetailerData()}
-              className="px-3 py-2 rounded-xl border border-gray-200 hover:border-gray-300 text-gray-700 text-sm flex items-center gap-2"
-            >
-              <RefreshCw size={16}/>
-              Refresh
-            </button>
-            
-            <button className="px-3 py-2 rounded-xl border border-gray-200 hover:border-gray-300 text-gray-700 text-sm flex items-center gap-2">
-              <Download size={16}/>
-              Export Data
-            </button>
-            <button className="relative p-2 rounded-xl border border-gray-200 hover:border-gray-300 text-gray-700">
-              <Bell size={16}/>
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
-            </button>
-            
-            <button 
-              onClick={handleLogout}
-              className="px-3 py-2 rounded-xl bg-red-100 hover:bg-red-200 border border-red-300 hover:border-red-400 text-red-700 hover:text-red-800 text-sm flex items-center gap-2 transition-all font-medium"
-              title="Sign out"
-            >
-              <LogOut size={16}/>
-              Logout
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Connection Status */}
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
+                connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
+                connectionStatus === 'offline' ? 'bg-red-100 text-red-700' :
+                'bg-yellow-100 text-yellow-700'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  connectionStatus === 'connected' ? 'bg-green-500' :
+                  connectionStatus === 'offline' ? 'bg-red-500' :
+                  'bg-yellow-500'
+                }`}></div>
+                {connectionStatus === 'connected' ? 'Connected' :
+                 connectionStatus === 'offline' ? 'Offline' :
+                 'Connecting'}
+              </div>
+              
+              <button 
+                onClick={() => fetchRetailerData()}
+                className="p-2 hover:bg-gray-100 rounded-lg text-gray-600"
+                title="Refresh"
+              >
+                <RefreshCw size={20} />
+              </button>
+              
+              <button className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 relative" title="Notifications">
+                <Bell size={20} />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-          <div className="flex flex-wrap gap-2">
-            <TabButton
-              id="overview"
-              label="Overview"
-              icon={BarChart3}
-              active={activeTab === 'overview'}
-              onClick={setActiveTab}
-            />
-            <TabButton
-              id="orders"
-              label="Orders"
-              icon={ShoppingCart}
-              active={activeTab === 'orders'}
-              onClick={setActiveTab}
-              badge={analytics.pendingOrders}
-            />
-            <TabButton
-              id="bundles"
-              label="Buy Bundles"
-              icon={Package}
-              active={activeTab === 'bundles'}
-              onClick={setActiveTab}
-            />
-            <TabButton
-              id="inventory"
-              label="My Inventory"
-              icon={DollarSign}
-              active={activeTab === 'inventory'}
-              onClick={setActiveTab}
-            />
-            <TabButton
-              id="analytics"
-              label="Analytics"
-              icon={BarChart3}
-              active={activeTab === 'analytics'}
-              onClick={setActiveTab}
-            />
-          </div>
-        </div>
-
-        {/* Content */}
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-7xl mx-auto space-y-6">
+            {/* Content */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
             {/* Key Metrics */}
@@ -741,213 +867,7 @@ const RetailerDashboard = () => {
         )}
 
         {activeTab === 'bundles' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900">Available Bundles for Purchase</h3>
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => fetchAvailableBundles()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                >
-                  <RefreshCw size={16} />
-                  Refresh Catalog
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-              {availableBundles && availableBundles.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 p-8">
-                  {availableBundles.map((bundle) => (
-                    <div key={bundle.id} className="relative bg-gradient-to-br from-white to-gray-50 rounded-3xl border-2 border-gray-200 hover:border-blue-300 hover:shadow-2xl transition-all duration-300 overflow-hidden group">
-                      {/* Discount Badge */}
-                      {bundle.discountPercentage > 0 && (
-                        <div className="absolute top-4 left-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold z-10">
-                          {bundle.discountPercentage}% Price Discount !
-                        </div>
-                      )}
-                      
-                      {/* Status Badge */}
-                      <div className="absolute top-4 right-4 z-10">
-                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
-                          Available
-                        </span>
-                      </div>
-
-                      {/* Bundle Image/Icon Area */}
-                      <div className="relative pt-16 pb-6 px-6">
-                        <div className="flex items-center justify-center mb-4">
-                          <div className="w-24 h-24 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-                            <Package className="text-white" size={48} />
-                          </div>
-                        </div>
-                        
-                        {/* Bundle Name */}
-                        <h3 className="text-2xl font-bold text-gray-800 text-center mb-2">
-                          {bundle.name}
-                        </h3>
-                        
-                        {/* Category */}
-                        <div className="text-center text-sm text-gray-500 mb-4">
-                          {bundle.category} • {bundle.productType}
-                        </div>
-
-                        {/* Price Display */}
-                        <div className="text-center mb-6">
-                          <div className="flex items-center justify-center gap-2 mb-2">
-                            {bundle.discountPercentage > 0 && (
-                              <span className="text-lg line-through text-gray-400">
-                                kr{bundle.basePrice.toLocaleString()}
-                              </span>
-                            )}
-                            <span className="text-4xl font-bold text-gray-800">
-                              kr{(bundle.basePrice * (100 - (bundle.discountPercentage || 0)) / 100).toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="text-sm text-gray-500">Retail Price</div>
-                        </div>
-
-                        {/* Your Pricing Info */}
-                        <div className="bg-blue-50 rounded-2xl p-4 mb-6">
-                          <div className="text-sm font-semibold text-blue-800 mb-2">Your Retailer Pricing:</div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs text-gray-600">Wholesale Cost:</span>
-                              <span className="font-bold text-green-600">NOK {(bundle.basePrice * 0.7).toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs text-gray-600">Your Profit ({bundle.retailerCommissionPercentage || 30}%):</span>
-                              <span className="font-bold text-purple-600">NOK {(bundle.basePrice * (bundle.retailerCommissionPercentage || 30) / 100).toFixed(2)}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Features List */}
-                        <div className="space-y-2 mb-6">
-                          <div className="flex items-center gap-2 text-sm text-gray-700">
-                            <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
-                              <div className="w-2 h-2 bg-white rounded-full"></div>
-                            </div>
-                            Bundle Type: {bundle.productType}
-                          </div>
-                          <div className="flex items-center gap-2 text-sm text-gray-700">
-                            <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
-                              <div className="w-2 h-2 bg-white rounded-full"></div>
-                            </div>
-                            Category: {bundle.category}
-                          </div>
-                          <div className="flex items-center gap-2 text-sm text-gray-700">
-                            <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
-                              <div className="w-2 h-2 bg-white rounded-full"></div>
-                            </div>
-                            Stock Available: {bundle.stockQuantity || 0} units
-                          </div>
-                          {bundle.description && (
-                            <div className="flex items-start gap-2 text-sm text-gray-700">
-                              <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center mt-0.5">
-                                <div className="w-2 h-2 bg-white rounded-full"></div>
-                              </div>
-                              <span>{bundle.description}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Purchase Section */}
-                        <div className="space-y-3">
-                          {/* Quantity Selector */}
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-700">Quantity:</span>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                min="1"
-                                max={bundle.stockQuantity || 1}
-                                defaultValue="1"
-                                id={`quantity-${bundle.id}`}
-                                className="w-16 px-2 py-1 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              />
-                              <span className="text-xs text-gray-500">units</span>
-                            </div>
-                          </div>
-
-                          {/* Purchase Button */}
-                          <button 
-                            onClick={() => {
-                              const quantity = parseInt(document.getElementById(`quantity-${bundle.id}`).value) || 1;
-                              const wholesalePrice = bundle.basePrice * 0.7;
-                              const profitPerUnit = bundle.basePrice * (bundle.retailerCommissionPercentage || 30) / 100;
-                              const totalCost = wholesalePrice * quantity;
-                              const totalProfit = profitPerUnit * quantity;
-                              
-                              const confirmPurchase = window.confirm(
-                                `Confirm Purchase:\n\n` +
-                                `Bundle: ${bundle.name}\n` +
-                                `Quantity: ${quantity} units\n` +
-                                `Unit Cost: NOK ${wholesalePrice.toFixed(2)}\n` +
-                                `Total Cost: NOK ${totalCost.toFixed(2)}\n` +
-                                `Expected Profit: NOK ${totalProfit.toFixed(2)}\n\n` +
-                                `Proceed with purchase?`
-                              );
-                              if (confirmPurchase) {
-                                handlePurchaseBundle(bundle, quantity);
-                              }
-                            }}
-                            disabled={purchaseLoading || (bundle.stockQuantity || 0) === 0}
-                            className="w-full py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-bold rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
-                          >
-                            {purchaseLoading ? (
-                              <>
-                                <RefreshCw size={16} className="animate-spin" />
-                                Purchasing...
-                              </>
-                            ) : (
-                              <>
-                                <ShoppingCart size={16} />
-                                Buy now
-                              </>
-                            )}
-                          </button>
-
-                          {/* Details Button */}
-                          <button 
-                            onClick={() => {
-                              const createdDate = bundle.createdDate ? new Date(bundle.createdDate).toLocaleDateString() : 'N/A';
-                              const wholesalePrice = (bundle.basePrice * 0.7).toFixed(2);
-                              const margin = bundle.retailerCommissionPercentage || 30;
-                              
-                              alert(`Bundle Details:\n\nID: ${bundle.id}\nName: ${bundle.name}\nDescription: ${bundle.description || 'N/A'}\nCategory: ${bundle.category || 'N/A'}\nType: ${bundle.productType || 'BUNDLE'}\nRetail Price: NOK ${bundle.basePrice}\nWholesale Price: NOK ${wholesalePrice}\nYour Margin: ${margin}%\nStock Available: ${bundle.stockQuantity || 0} units\nDiscount: ${bundle.discountPercentage || 0}%\nStatus: ${bundle.status}\nFeatured: ${bundle.isFeatured ? 'Yes' : 'No'}\nVisible: ${bundle.isVisible ? 'Yes' : 'No'}\nCreated: ${createdDate}\nCreated By: ${bundle.createdBy || 'N/A'}`);
-                            }}
-                            className="w-full py-2 border border-gray-300 hover:border-gray-400 text-gray-700 hover:text-gray-900 font-medium rounded-2xl transition-all duration-300 flex items-center justify-center gap-2"
-                          >
-                            <Eye size={14} />
-                            View Details
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <Package size={32} className="text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-500">No bundles available for purchase</p>
-                  <p className="text-sm text-gray-400">
-                    {connectionStatus === 'connected' 
-                      ? 'Bundles will appear here once admin adds them to the catalog'
-                      : 'Bundles will appear here once backend is connected'
-                    }
-                  </p>
-                  <button 
-                    onClick={() => fetchAvailableBundles()}
-                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
-                  >
-                    <RefreshCw size={16} />
-                    Refresh Catalog
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          <RetailerBundlePurchaseDashboard />
         )}
 
         {activeTab === 'inventory' && (
@@ -1136,6 +1056,24 @@ const RetailerDashboard = () => {
             </div>
           </div>
         )}
+
+        {/* Special Offers Tab */}
+        {activeTab === 'offers' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Tag className="text-indigo-600" size={24} />
+                Special Offers & Promotions
+              </h3>
+              <p className="text-gray-600 mb-6">
+                Take advantage of exclusive promotional offers and reward campaigns to boost your sales and earn more rewards!
+              </p>
+              <FeaturedPromotions />
+            </div>
+          </div>
+        )}
+          </div>
+        </div>
       </div>
     </div>
   );

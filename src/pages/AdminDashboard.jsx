@@ -1,16 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Globe2, MapPin, BarChart3, Languages, CreditCard, Users, Download, Filter,
   Shield, UserCheck, UserX, Building, Package, DollarSign, TrendingUp,
   Clock, AlertCircle, CheckCircle, XCircle, Eye, Edit, Trash2, Plus,
   Search, RefreshCw, Bell, Settings, Upload, FileText, Target,
   MessageCircle, Mail, Phone, Calendar, User, Activity, Award,
-  PieChart, LineChart, ShoppingCart, Percent, Database, Zap, LogOut
+  PieChart, LineChart, ShoppingCart, Percent, Database, Zap, LogOut, Box, Menu, X,
+  QrCode, Share2, Copy, Send
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import BundleBulkImport from '../components/BundleBulkImport';
 import AdminLoadingScreen from '../components/AdminLoadingScreen';
+import StockManagement from '../components/StockManagement';
+import PromotionCampaignManager from '../components/PromotionCampaignManager';
+import RetailerCreditManagement from '../components/RetailerCreditManagement';
+import { QRCodeSVG } from 'qrcode.react';
 
 // API Base URL - should match AuthContext
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -18,6 +22,8 @@ const API_BASE_URL = process.env.NODE_ENV === 'production'
   : 'http://localhost:8080/api';
 
 export default function AdminDashboard() {
+  console.log('🎯 AdminDashboard component mounted - Code timestamp:', new Date().toISOString());
+  
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
@@ -26,14 +32,26 @@ export default function AdminDashboard() {
   const [enquiries, setEnquiries] = useState([]);
   const [products, setProducts] = useState([]);
   const [bundles, setBundles] = useState([]);
+  const [stockBundles, setStockBundles] = useState([]); // CSV uploaded bundles (EPIN only)
+  const [esimBundles, setEsimBundles] = useState([]); // CSV uploaded eSIM bundles
+  const [selectedBundle, setSelectedBundle] = useState(null); // For viewing PINs
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [selectedEsim, setSelectedEsim] = useState(null); // For QR code modal
+  const [showQrModal, setShowQrModal] = useState(false);
+  const qrCodeRef = useRef(null);
   const [analytics, setAnalytics] = useState({});
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting', 'connected', 'offline'
-  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true); // Sidebar state
 
   // Fetch data from backend
   useEffect(() => {
-    fetchAllData();
+    console.log('🎯 useEffect triggered - calling fetchAllData()');
+    try {
+      fetchAllData();
+    } catch (err) {
+      console.error('❌ Error in useEffect calling fetchAllData:', err);
+    }
     
     // Add a timeout to prevent infinite loading
     const loadingTimeout = setTimeout(() => {
@@ -44,124 +62,19 @@ export default function AdminDashboard() {
     return () => clearTimeout(loadingTimeout);
   }, []);
 
-  // Bundle Management Functions
-  const [showCreateBundle, setShowCreateBundle] = useState(false);
-  const [editingBundle, setEditingBundle] = useState(null);
-  const [bundleForm, setBundleForm] = useState({
-    name: '',
-    description: '',
-    productType: 'BUNDLE',
-    category: 'NORWAY',
-    basePrice: '',
-    retailerCommissionPercentage: 30,
-    stockQuantity: '',
-    status: 'ACTIVE'
-  });
-
-  const createBundle = async (bundleData) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/admin/bundles`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(bundleData)
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Bundle created successfully:', result);
-        
-        if (result.success) {
-          alert('Bundle created successfully!');
-          await fetchAllData(); // Refresh data
-          setShowCreateBundle(false);
-          setBundleForm({
-            name: '',
-            description: '',
-            productType: 'BUNDLE',
-            category: 'NORWAY',
-            basePrice: '',
-            retailerCommissionPercentage: 30,
-            stockQuantity: '',
-            status: 'ACTIVE'
-          });
-        } else {
-          throw new Error(result.error || 'Unknown error occurred');
-        }
-        return result;
-      } else {
-        const errorResult = await response.json();
-        console.error('Failed to create bundle:', errorResult);
-        throw new Error(errorResult.error || `Server error: ${response.status}`);
-      }
-    } catch (error) {
-      console.error('Error creating bundle:', error);
-      throw error;
-    }
-  };
-
-  const updateBundle = async (bundleId, bundleData) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/admin/bundles/${bundleId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(bundleData)
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Bundle updated successfully:', result);
-        await fetchAllData(); // Refresh data
-        setEditingBundle(null);
-        return result;
-      } else {
-        console.error('Failed to update bundle:', response.statusText);
-        throw new Error(`Failed to update bundle: ${response.statusText}`);
-      }
-    } catch (error) {
-      console.error('Error updating bundle:', error);
-      throw error;
-    }
-  };
-
-  const deleteBundle = async (bundleId) => {
-    if (!confirm('Are you sure you want to delete this bundle? This action cannot be undone.')) {
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/admin/bundles/${bundleId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        console.log('Bundle deleted successfully');
-        await fetchAllData(); // Refresh data
-      } else {
-        console.error('Failed to delete bundle:', response.statusText);
-        throw new Error(`Failed to delete bundle: ${response.statusText}`);
-      }
-    } catch (error) {
-      console.error('Error deleting bundle:', error);
-      alert('Failed to delete bundle. Please try again.');
-    }
-  };
+  // Debug: Log bundles state changes
+  useEffect(() => {
+    console.log('🔄 Bundles state changed:', {
+      length: bundles?.length,
+      isArray: Array.isArray(bundles),
+      bundles: bundles
+    });
+  }, [bundles]);
 
   const fetchAnalytics = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/admin/analytics`, {
+      const response = await fetch(`${API_BASE_URL}/admin/bundles/statistics`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -199,6 +112,8 @@ export default function AdminDashboard() {
   };
 
   const fetchAllData = async () => {
+    console.log('🔄 ==== fetchAllData() STARTED ====');
+    console.log('🔄 Current bundles state before fetch:', bundles?.length || 0);
     try {
       setLoading(true);
       setConnectionStatus('connecting');
@@ -215,25 +130,29 @@ export default function AdminDashboard() {
       
       // Test backend connection first
       let backendConnected = false;
+      console.log('🔍 Testing backend connection...');
       try {
-        const testResponse = await fetch(`${API_BASE_URL}/admin/analytics`, { headers });
-        console.log('Backend connection test response status:', testResponse.status);
+        const testResponse = await fetch(`${API_BASE_URL}/admin/bundles`, { headers });
+        console.log('✅ Backend connection test response status:', testResponse.status);
         backendConnected = testResponse.ok || testResponse.status === 401; // 401 means server is running but auth issue
         
         if (testResponse.status === 401) {
-          console.warn('Authentication failed - token may be invalid or expired');
+          console.warn('⚠️ Authentication failed - token may be invalid or expired');
         }
       } catch (err) {
-        console.log('Backend connection test failed:', err);
+        console.log('❌ Backend connection test failed:', err);
         backendConnected = false;
       }
       
+      console.log('🔍 Backend connected:', backendConnected);
+      
       if (!backendConnected) {
         setConnectionStatus('offline');
-        console.log('Backend is offline, using empty data');
+        console.log('❌ Backend is offline, using empty data');
         setUsers([]);
         setBusinessUsers([]);
         setEnquiries([]);
+        setBundles([]); // Set empty bundles when offline
         setAnalytics({
           totalUsers: 0,
           activeUsers: 0,
@@ -251,46 +170,75 @@ export default function AdminDashboard() {
           revenueByUserType: null,
           salesPerformance: null
         });
+        console.log('❌ Early return due to no backend connection');
         return;
       }
       
+      console.log('✅ Backend connected! Proceeding to fetch data...');
       setConnectionStatus('connected');
       
       // Fetch real data from backend APIs
+      console.log('🚀 Starting to fetch all backend data...');
       const [usersResponse, businessResponse, enquiriesResponse, analyticsResponse, bundlesResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/admin/users`, { headers }).catch(err => {
-          console.log('Users API failed:', err);
+          console.log('❌ Users API failed:', err);
           return { ok: false };
         }),
         fetch(`${API_BASE_URL}/admin/business-registrations`, { headers }).catch(err => {
-          console.log('Business API failed:', err);
+          console.log('❌ Business API failed:', err);
           return { ok: false };
         }),
         fetch(`${API_BASE_URL}/admin/enquiries`, { headers }).catch(err => {
-          console.log('Enquiries API failed:', err);
+          console.log('❌ Enquiries API failed:', err);
           return { ok: false };
         }),
-        fetch(`${API_BASE_URL}/admin/analytics`, { headers }).catch(err => {
-          console.log('Analytics API failed:', err);
+        fetch(`${API_BASE_URL}/admin/bundles/statistics`, { headers }).catch(err => {
+          console.log('❌ Analytics API failed:', err);
           return { ok: false };
         }),
         fetch(`${API_BASE_URL}/admin/bundles`, { headers }).catch(err => {
-          console.log('Bundles API failed:', err);
-          return { ok: false };
+          console.log('❌ Bundles API failed:', err.message || err);
+          return { ok: false, status: 0 };
         })
       ]);
+
+      console.log('📡 API Responses received:', {
+        users: usersResponse.ok,
+        business: businessResponse.ok,
+        enquiries: enquiriesResponse.ok,
+        analytics: analyticsResponse.ok,
+        bundles: bundlesResponse.ok
+      });
 
       // Process users data
       if (usersResponse.ok) {
         const usersResponse_data = await usersResponse.json();
         console.log('Users data received:', usersResponse_data);
-        if (usersResponse_data.success && usersResponse_data.data && usersResponse_data.data.users) {
-          setUsers(usersResponse_data.data.users);
+        
+        // Handle different response structures
+        if (usersResponse_data.users) {
+          // Direct 'users' field
+          setUsers(Array.isArray(usersResponse_data.users) ? usersResponse_data.users : []);
+        } else if (usersResponse_data.data && usersResponse_data.data.users) {
+          // Nested in 'data.users'
+          setUsers(Array.isArray(usersResponse_data.data.users) ? usersResponse_data.data.users : []);
+        } else if (usersResponse_data.success && usersResponse_data.data && usersResponse_data.data.users) {
+          // Nested in 'success.data.users'
+          setUsers(Array.isArray(usersResponse_data.data.users) ? usersResponse_data.data.users : []);
+        } else if (Array.isArray(usersResponse_data)) {
+          // Direct array
+          setUsers(usersResponse_data);
         } else {
+          console.warn('Unexpected users response structure:', usersResponse_data);
           setUsers([]);
         }
       } else {
-        console.log('Failed to fetch users, using empty array');
+        const status = usersResponse.status;
+        if (status === 404) {
+          console.log('Users endpoint not found (404) - admin user management endpoint may not be implemented yet');
+        } else {
+          console.log(`Failed to fetch users (status: ${status}), using empty array`);
+        }
         setUsers([]);
       }
 
@@ -384,24 +332,142 @@ export default function AdminDashboard() {
       }
 
       // Process bundles data
+      console.log('🔍 Processing bundles response...');
+      console.log('🔍 bundlesResponse:', bundlesResponse);
+      console.log('🔍 bundlesResponse.ok:', bundlesResponse.ok);
+      console.log('🔍 bundlesResponse.status:', bundlesResponse.status);
+      
       if (bundlesResponse.ok) {
+        console.log('✅ Bundles response is OK, parsing JSON...');
         const bundlesData = await bundlesResponse.json();
-        console.log('Bundles data received:', bundlesData);
+        console.log('📦 Bundles API Response - Status: OK');
+        console.log('📦 Bundles data received:', bundlesData);
+        console.log('📦 Bundles data type:', typeof bundlesData);
+        console.log('📦 Bundles data keys:', bundlesData ? Object.keys(bundlesData) : 'null');
+        
         if (bundlesData.bundles) {
           // Server returns bundles in 'bundles' field
-          setBundles(Array.isArray(bundlesData.bundles) ? bundlesData.bundles : []);
+          const bundlesArray = Array.isArray(bundlesData.bundles) ? bundlesData.bundles : [];
+          console.log('✅ Setting bundles from bundles field:', bundlesArray.length, 'items');
+          console.log('📦 Bundle items:', bundlesArray);
+          setBundles(bundlesArray);
         } else if (bundlesData.data) {
           // Fallback to 'data' field
-          setBundles(Array.isArray(bundlesData.data) ? bundlesData.data : []);
+          const bundlesArray = Array.isArray(bundlesData.data) ? bundlesData.data : [];
+          console.log('✅ Setting bundles from data field:', bundlesArray.length, 'items');
+          console.log('📦 Bundle items:', bundlesArray);
+          setBundles(bundlesArray);
+        } else if (Array.isArray(bundlesData)) {
+          // Direct array response
+          console.log('✅ Setting bundles from direct array:', bundlesData.length, 'items');
+          console.log('📦 Bundle items:', bundlesData);
+          setBundles(bundlesData);
         } else {
-          setBundles([]);
+          console.warn('⚠️ Unexpected bundles response structure, setting empty array');
+          console.warn('⚠️ Response structure:', JSON.stringify(bundlesData, null, 2));
+          console.warn('⚠️ Setting mock data instead...');
+          setBundles([
+            {
+              id: '1',
+              name: 'Lycamobile 5GB ePIN',
+              description: 'Works for all Lycamobile Norway SIMs',
+              productType: 'EPIN',
+              category: 'NORWAY',
+              basePrice: 99,
+              retailerCommissionPercentage: 30,
+              stockQuantity: 150,
+              soldQuantity: 45,
+              status: 'ACTIVE',
+              createdDate: new Date('2024-10-01'),
+              lastModifiedDate: new Date('2024-10-20')
+            },
+            {
+              id: '2',
+              name: 'Nordic Data Bundle 10GB',
+              description: 'High-speed data for Nordic countries',
+              productType: 'BUNDLE',
+              category: 'NORDIC',
+              basePrice: 199,
+              retailerCommissionPercentage: 25,
+              stockQuantity: 80,
+              soldQuantity: 28,
+              status: 'ACTIVE',
+              createdDate: new Date('2024-09-15'),
+              lastModifiedDate: new Date('2024-10-18')
+            },
+            {
+              id: '3',
+              name: 'Europe Travel eSIM 15GB',
+              description: 'Perfect for European travel',
+              productType: 'ESIM',
+              category: 'EUROPE',
+              basePrice: 349,
+              retailerCommissionPercentage: 35,
+              stockQuantity: 200,
+              soldQuantity: 72,
+              status: 'ACTIVE',
+              createdDate: new Date('2024-08-20'),
+              lastModifiedDate: new Date('2024-10-22')
+            }
+          ]);
         }
       } else {
-        console.log('Failed to fetch bundles, using empty array');
-        setBundles([]);
+        console.log('❌ Failed to fetch bundles, status:', bundlesResponse.status);
+        console.log('❌ Using mock data for demonstration');
+        // Set mock data when backend fails
+        setBundles([
+          {
+            id: '1',
+            name: 'Lycamobile 5GB ePIN',
+            description: 'Works for all Lycamobile Norway SIMs',
+            productType: 'EPIN',
+            category: 'NORWAY',
+            basePrice: 99,
+            retailerCommissionPercentage: 30,
+            stockQuantity: 150,
+            soldQuantity: 45,
+            status: 'ACTIVE',
+            createdDate: new Date('2024-10-01'),
+            lastModifiedDate: new Date('2024-10-20')
+          },
+          {
+            id: '2',
+            name: 'Nordic Data Bundle 10GB',
+            description: 'High-speed data for Nordic countries',
+            productType: 'BUNDLE',
+            category: 'NORDIC',
+            basePrice: 199,
+            retailerCommissionPercentage: 25,
+            stockQuantity: 80,
+            soldQuantity: 28,
+            status: 'ACTIVE',
+            createdDate: new Date('2024-09-15'),
+            lastModifiedDate: new Date('2024-10-18')
+          },
+          {
+            id: '3',
+            name: 'Europe Travel eSIM 15GB',
+            description: 'Perfect for European travel',
+            productType: 'ESIM',
+            category: 'EUROPE',
+            basePrice: 349,
+            retailerCommissionPercentage: 35,
+            stockQuantity: 200,
+            soldQuantity: 72,
+            status: 'ACTIVE',
+            createdDate: new Date('2024-08-20'),
+            lastModifiedDate: new Date('2024-10-22')
+          }
+        ]);
       }
 
       console.log('Real data loaded successfully');
+      
+      // Fetch real analytics data from backend
+      fetchAnalytics();
+      
+      // Fetch stock bundles (CSV uploaded bundles)
+      fetchStockBundles();
 
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -482,11 +548,176 @@ export default function AdminDashboard() {
           lastModifiedDate: new Date('2024-10-24')
         }
       ]);
-      
-      // Fetch real analytics data from backend
-      fetchAnalytics();
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch stock bundles (CSV uploaded PIN bundles)
+  const fetchStockBundles = async () => {
+    console.log('🚀 fetchStockBundles() CALLED - Starting to fetch bundles');
+    try {
+      const token = localStorage.getItem('token');
+      console.log('📡 Making request to:', `${API_BASE_URL}/admin/stock/pools/bundles`);
+      const response = await fetch(`${API_BASE_URL}/admin/stock/pools/bundles`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('📥 Response status:', response.status);
+      if (response.ok) {
+        const pools = await response.json();
+        console.log('✅ Stock pools fetched successfully:', pools);
+        
+        // Now fetch individual items for each pool
+        const allItems = [];
+        for (const pool of pools) {
+          console.log(`📦 Fetching items for pool: ${pool.id} (${pool.bundleName})`);
+          try {
+            const itemsResponse = await fetch(`${API_BASE_URL}/admin/stock/pools/${pool.id}/items/decrypted`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (itemsResponse.ok) {
+              const itemsData = await itemsResponse.json();
+              console.log(`✅ Fetched ${itemsData.items?.length || 0} items for pool ${pool.bundleName}`);
+              
+              // Add pool info to each item and flatten
+              if (itemsData.items && Array.isArray(itemsData.items)) {
+                itemsData.items.forEach(item => {
+                  allItems.push({
+                    ...item,
+                    poolId: pool.id,
+                    poolName: pool.bundleName,
+                    csvFileName: pool.csvFileName,
+                    stockType: pool.stockType,
+                    productId: item.productId || pool.productId,
+                    notes: item.notes || pool.notes || itemsData.notes
+                  });
+                });
+              }
+            }
+          } catch (err) {
+            console.error(`❌ Error fetching items for pool ${pool.id}:`, err);
+          }
+        }
+        
+        console.log(`📦 Total items fetched: ${allItems.length}`);
+        console.log('📦 Setting stockBundles state with:', allItems);
+        
+        // Separate EPIN and ESIM items
+        const epinItems = allItems.filter(item => item.stockType === 'EPIN' || item.stockType === 'SERVICE_PIN');
+        const esimItems = allItems.filter(item => item.stockType === 'ESIM');
+        
+        console.log(`📦 EPIN items: ${epinItems.length}`);
+        console.log(`📦 ESIM items: ${esimItems.length}`);
+        
+        setStockBundles(epinItems);
+        setEsimBundles(esimItems);
+      } else {
+        console.error('❌ Failed to fetch stock bundles:', response.status);
+        setStockBundles([]);
+        setEsimBundles([]);
+      }
+    } catch (error) {
+      console.error('💥 Error fetching stock bundles:', error);
+      setStockBundles([]);
+      setEsimBundles([]);
+    }
+  };
+
+  // View encrypted PINs for a bundle
+  const viewBundlePins = async (bundleId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/admin/stock/pools/${bundleId}/items/decrypted`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedBundle(data);
+        setShowPinModal(true);
+      } else {
+        alert('Failed to load PINs');
+      }
+    } catch (error) {
+      console.error('Error fetching bundle PINs:', error);
+      alert('Error loading PINs');
+    }
+  };
+
+  // Delete individual PIN item from Bundle Management
+  const handleDeleteItem = async (poolId, itemId, itemData) => {
+    if (!confirm(`Are you sure you want to delete PIN ${itemData}?`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/admin/stock/pools/${poolId}/items/${itemId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        alert('PIN deleted successfully!');
+        // Refresh the bundle data
+        fetchStockBundles();
+      } else {
+        const error = await response.json();
+        alert(`Failed to delete PIN: ${error.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error deleting PIN:', error);
+      alert('Failed to delete PIN');
+    }
+  };
+
+  // Edit individual PIN item from Bundle Management
+  const handleEditItem = async (poolId, item) => {
+    const newPrice = prompt('Enter new price:', item.price || '');
+    if (newPrice === null) return; // User cancelled
+
+    const newNotes = prompt('Enter new notes:', item.notes || '');
+    if (newNotes === null) return; // User cancelled
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/admin/stock/pools/${poolId}/items/${item.itemId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          price: newPrice,
+          notes: newNotes
+        })
+      });
+
+      if (response.ok) {
+        alert('PIN updated successfully!');
+        // Refresh the bundle data
+        fetchStockBundles();
+      } else {
+        const error = await response.json();
+        alert(`Failed to update PIN: ${error.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error updating PIN:', error);
+      alert('Failed to update PIN');
     }
   };
 
@@ -566,70 +797,198 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleBulkImport = async (importedBundles) => {
-    try {
-      const token = localStorage.getItem('token');
-      
-      // Create FormData for file upload
-      const formData = new FormData();
-      
-      // Convert imported bundles to CSV format
-      const csvHeaders = ['name', 'description', 'productType', 'category', 'basePrice', 'retailerCommissionPercentage', 'stockQuantity', 'status'];
-      const csvData = [
-        csvHeaders.join(','),
-        ...importedBundles.map(bundle => csvHeaders.map(header => bundle[header] || '').join(','))
-      ].join('\n');
-      
-      // Create a Blob and add to FormData
-      const csvBlob = new Blob([csvData], { type: 'text/csv' });
-      formData.append('file', csvBlob, 'bulk_import.csv');
-      
-      const response = await fetch(`${API_BASE_URL}/admin/bundles/bulk-import`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Bulk import successful:', result);
-        await fetchAllData(); // Refresh data to show imported bundles
-        alert(`Successfully imported ${importedBundles.length} bundles!`);
-      } else {
-        console.error('Bulk import failed:', response.statusText);
-        throw new Error(`Failed to import bundles: ${response.statusText}`);
-      }
-    } catch (error) {
-      console.error('Error during bulk import:', error);
-      alert('Failed to import bundles. Please try again.');
-    }
-    
-    setShowBulkImport(false);
-  };
-
   const handleLogout = () => {
     logout();
     navigate('/', { replace: true });
   };
 
+  // Helper functions to calculate bundle statistics
+  const getTotalBundles = () => {
+    if (!bundles || !Array.isArray(bundles)) {
+      console.log('getTotalBundles: bundles is not an array', bundles);
+      // Fallback to stockBundles count if regular bundles are empty
+      if (stockBundles && Array.isArray(stockBundles)) {
+        console.log('getTotalBundles: Using stockBundles count instead:', stockBundles.length);
+        return stockBundles.length;
+      }
+      return 0;
+    }
+    if (bundles.length === 0 && stockBundles && Array.isArray(stockBundles) && stockBundles.length > 0) {
+      console.log('getTotalBundles: Bundles empty, using stockBundles:', stockBundles.length);
+      return stockBundles.length;
+    }
+    console.log('getTotalBundles: Counting bundles', bundles.length);
+    return bundles.length;
+  };
+
+  const getActiveBundles = () => {
+    if (!bundles || !Array.isArray(bundles)) {
+      console.log('getActiveBundles: bundles is not an array', bundles);
+      // Fallback to available stockBundles count if regular bundles are empty
+      if (stockBundles && Array.isArray(stockBundles)) {
+        const availableCount = stockBundles.filter(item => item.status === 'AVAILABLE').length;
+        console.log('getActiveBundles: Using available stockBundles count instead:', availableCount);
+        return availableCount;
+      }
+      return 0;
+    }
+    if (bundles.length === 0 && stockBundles && Array.isArray(stockBundles) && stockBundles.length > 0) {
+      const availableCount = stockBundles.filter(item => item.status === 'AVAILABLE').length;
+      console.log('getActiveBundles: Bundles empty, using available stockBundles:', availableCount);
+      return availableCount;
+    }
+    const activeCount = bundles.filter(b => {
+      const isActive = b.status === 'ACTIVE';
+      console.log(`Bundle ${b.name || b.id}: status=${b.status}, isActive=${isActive}`);
+      return isActive;
+    }).length;
+    console.log('getActiveBundles: Active bundles count', activeCount);
+    return activeCount;
+  };
+
+  const getTotalRevenue = () => {
+    if (!bundles || !Array.isArray(bundles) || bundles.length === 0) {
+      // Calculate from stockBundles if regular bundles are empty
+      if (stockBundles && Array.isArray(stockBundles)) {
+        return stockBundles.reduce((sum, item) => {
+          const price = parseFloat(item.price) || 0;
+          // Count as revenue if status is ASSIGNED or USED
+          if (item.status === 'ASSIGNED' || item.status === 'USED') {
+            return sum + price;
+          }
+          return sum;
+        }, 0);
+      }
+      return 0;
+    }
+    return bundles.reduce((sum, b) => {
+      const revenue = (b.basePrice || 0) * (b.soldQuantity || 0);
+      return sum + revenue;
+    }, 0);
+  };
+
+  const getTotalUnitsSold = () => {
+    if (!bundles || !Array.isArray(bundles) || bundles.length === 0) {
+      // Count sold stockBundles if regular bundles are empty
+      if (stockBundles && Array.isArray(stockBundles)) {
+        return stockBundles.filter(item => item.status === 'ASSIGNED' || item.status === 'USED').length;
+      }
+      return 0;
+    }
+    return bundles.reduce((sum, b) => sum + (b.soldQuantity || 0), 0);
+  };
+
+  // QR Code Functions
+  const generateEsimQrData = (esim) => {
+    // Generate URL for eSIM activation
+    const activationUrl = `${window.location.origin}/esim/activate?code=${esim.itemData}&serial=${esim.serialNumber}`;
+    return activationUrl;
+  };
+
+  const handleViewQrCode = (esim) => {
+    setSelectedEsim(esim);
+    setShowQrModal(true);
+  };
+
+  const handleDownloadQrCode = async () => {
+    if (!qrCodeRef.current) return;
+    
+    try {
+      const svg = qrCodeRef.current.querySelector('svg');
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      canvas.width = 512;
+      canvas.height = 512;
+      
+      img.onload = () => {
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        canvas.toBlob((blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `esim-${selectedEsim.itemData}-qrcode.png`;
+          link.click();
+          URL.revokeObjectURL(url);
+        });
+      };
+      
+      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    } catch (error) {
+      console.error('Error downloading QR code:', error);
+      alert('Failed to download QR code');
+    }
+  };
+
+  const handleCopyQrUrl = () => {
+    if (!selectedEsim) return;
+    const url = generateEsimQrData(selectedEsim);
+    navigator.clipboard.writeText(url);
+    alert('eSIM activation URL copied to clipboard!');
+  };
+
+  const handleShareEsim = async () => {
+    if (!selectedEsim) return;
+    
+    const url = generateEsimQrData(selectedEsim);
+    const shareText = `eSIM Activation\n\neSIM Code: ${selectedEsim.itemData}\nSerial: ${selectedEsim.serialNumber}\n\nActivation URL: ${url}\n\nScan the QR code or visit the URL to activate your eSIM.`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'eSIM Activation',
+          text: shareText,
+          url: url
+        });
+      } catch (error) {
+        console.error('Error sharing:', error);
+      }
+    } else {
+      // Fallback: copy to clipboard
+      navigator.clipboard.writeText(shareText);
+      alert('eSIM details copied to clipboard!');
+    }
+  };
+
+  const handleSendEsimEmail = async () => {
+    if (!selectedEsim) return;
+    
+    const url = generateEsimQrData(selectedEsim);
+    const subject = encodeURIComponent('Your eSIM Activation Details');
+    const body = encodeURIComponent(
+      `Hello,\n\nHere are your eSIM activation details:\n\n` +
+      `eSIM Code: ${selectedEsim.itemData}\n` +
+      `Serial Number: ${selectedEsim.serialNumber}\n` +
+      `Pool: ${selectedEsim.poolName || 'N/A'}\n\n` +
+      `Activation URL: ${url}\n\n` +
+      `You can scan the QR code or visit the activation URL to set up your eSIM.\n\n` +
+      `Best regards,\nEasyTopup.no Team`
+    );
+    
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+
   const StatCard = ({ title, value, change, icon: Icon, color, description }) => (
-    <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+    <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 border border-gray-100">
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-          {description && <p className="text-xs text-gray-500 mt-1">{description}</p>}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs sm:text-sm font-medium text-gray-600 truncate">{title}</p>
+          <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1 truncate">{value}</p>
+          {description && <p className="text-[10px] sm:text-xs text-gray-500 mt-1">{description}</p>}
         </div>
-        <div className={`w-12 h-12 rounded-xl ${color} text-white flex items-center justify-center`}>
-          <Icon size={24} />
+        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${color} text-white flex items-center justify-center flex-shrink-0 ml-2`}>
+          <Icon size={20} className="sm:w-6 sm:h-6" />
         </div>
       </div>
       {change && (
-        <div className="mt-4">
-          <span className={`inline-flex items-center text-sm ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
-            <TrendingUp size={16} className="mr-1" />
+        <div className="mt-3 sm:mt-4">
+          <span className={`inline-flex items-center text-xs sm:text-sm ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <TrendingUp size={14} className="mr-1 sm:w-4 sm:h-4" />
             {change > 0 ? '+' : ''}{change}% from last month
           </span>
         </div>
@@ -637,24 +996,31 @@ export default function AdminDashboard() {
     </div>
   );
 
-  const TabButton = ({ id, label, icon: Icon, active, onClick, badge }) => (
-    <button
-      onClick={() => onClick(id)}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-        active 
-          ? 'bg-indigo-600 text-white' 
-          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-      }`}
-    >
-      <Icon size={18} />
-      {label}
-      {badge && (
-        <span className="ml-1 px-2 py-0.5 text-xs bg-red-500 text-white rounded-full">
-          {badge}
-        </span>
-      )}
-    </button>
-  );
+  const TabButton = ({ id, label, icon: Icon, active, onClick, badge }) => {
+    // Create shortened label for mobile
+    const shortLabel = label.split(' ')[0]; // Take first word
+    const isSingleWord = label.split(' ').length === 1;
+    
+    return (
+      <button
+        onClick={() => onClick(id)}
+        className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 rounded-lg font-medium transition-all duration-200 whitespace-nowrap text-xs sm:text-sm flex-shrink-0 ${
+          active 
+            ? 'bg-indigo-600 text-white shadow-md' 
+            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+        }`}
+      >
+        <Icon size={16} className="sm:w-[18px] sm:h-[18px] flex-shrink-0" />
+        <span className="hidden lg:inline">{label}</span>
+        <span className="lg:hidden">{isSingleWord ? label : shortLabel}</span>
+        {badge > 0 && (
+          <span className="ml-1 px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs bg-red-500 text-white rounded-full min-w-[18px] text-center">
+            {badge}
+          </span>
+        )}
+      </button>
+    );
+  };
 
   const renderOverview = () => (
     <div className="space-y-6">
@@ -696,13 +1062,20 @@ export default function AdminDashboard() {
           <Zap className="text-indigo-600" size={20} />
           Quick Actions
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <button 
-            onClick={() => setActiveTab('bundles')}
+            onClick={() => setActiveTab('stock')}
             className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
           >
-            <Plus className="text-indigo-600 mb-2" size={24} />
-            <span className="text-sm font-medium">Create Bundle</span>
+            <Package className="text-indigo-600 mb-2" size={24} />
+            <span className="text-sm font-medium">Stock Management</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('promotions')}
+            className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors"
+          >
+            <Target className="text-purple-600 mb-2" size={24} />
+            <span className="text-sm font-medium">Promotions & Campaigns</span>
           </button>
           <button className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-colors">
             <Upload className="text-green-600 mb-2" size={24} />
@@ -711,10 +1084,6 @@ export default function AdminDashboard() {
           <button className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors">
             <FileText className="text-blue-600 mb-2" size={24} />
             <span className="text-sm font-medium">Generate Report</span>
-          </button>
-          <button className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors">
-            <Target className="text-purple-600 mb-2" size={24} />
-            <span className="text-sm font-medium">Create Offer</span>
           </button>
           <button className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-yellow-300 hover:bg-yellow-50 transition-colors">
             <Bell className="text-yellow-600 mb-2" size={24} />
@@ -805,22 +1174,28 @@ export default function AdminDashboard() {
   const renderBundles = () => (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-900">Bundle Management</h3>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Bundle Management</h3>
+          {connectionStatus === 'offline' && bundles.length > 0 && (
+            <p className="text-xs text-orange-600 mt-1 flex items-center gap-1">
+              <AlertCircle size={12} />
+              Using demo data - Backend unavailable
+            </p>
+          )}
+          {bundles.length === 0 && stockBundles.length > 0 && (
+            <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+              <AlertCircle size={12} />
+              Showing CSV uploaded items - No product bundles in database yet
+            </p>
+          )}
+          {bundles.length === 0 && stockBundles.length === 0 && (
+            <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+              <AlertCircle size={12} />
+              No bundle data available - Check MongoDB connection
+            </p>
+          )}
+        </div>
         <div className="flex gap-3">
-          <button 
-            onClick={() => setShowCreateBundle(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
-          >
-            <Plus size={16} />
-            Create Bundle
-          </button>
-          <button 
-            onClick={() => setShowBulkImport(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-          >
-            <Package size={16} />
-            Bundle Manager
-          </button>
           <button 
             onClick={() => fetchAllData()}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
@@ -837,7 +1212,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Bundles</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{bundles.length || 0}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{getTotalBundles()}</p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white flex items-center justify-center">
               <Package size={24} />
@@ -849,7 +1224,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Active Bundles</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{bundles.filter(b => b.status === 'ACTIVE').length || 0}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{getActiveBundles()}</p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-600 to-green-700 text-white flex items-center justify-center">
               <CheckCircle size={24} />
@@ -861,7 +1236,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">NOK {bundles.reduce((sum, b) => sum + (b.basePrice * (b.soldQuantity || 0)), 0).toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">NOK {getTotalRevenue().toLocaleString()}</p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-600 to-purple-700 text-white flex items-center justify-center">
               <DollarSign size={24} />
@@ -873,7 +1248,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Units Sold</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{bundles.reduce((sum, b) => sum + (b.soldQuantity || 0), 0).toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{getTotalUnitsSold().toLocaleString()}</p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-600 to-yellow-700 text-white flex items-center justify-center">
               <ShoppingCart size={24} />
@@ -882,107 +1257,328 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Bundle Table */}
+      {/* CSV Stock Bundles Section */}
+      {/* CSV Uploaded Data Table - Individual PIN Items (EPIN Only) */}
       <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Database className="text-purple-600" size={20} />
+                CSV Uploaded PIN Bundles ({stockBundles?.length || 0})
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">Individual PIN items from your CSV uploads (eSIM items excluded, see eSIM Management tab)</p>
+            </div>
+            <button 
+              onClick={() => setActiveTab('stock')}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+            >
+              <Database size={16} />
+              Upload More
+            </button>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bundle Details</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pricing (NOK)</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sales</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PIN Number</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial Number</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pool Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {bundles && bundles.length > 0 ? (
-                bundles.map((bundle) => (
-                  <tr key={bundle.id} className="hover:bg-gray-50">
+              {stockBundles && stockBundles.length > 0 ? (
+                stockBundles.map((item, index) => (
+                  <tr key={item.itemId || index} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                          <Package size={20} className="text-indigo-600" />
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          <Package size={20} className="text-blue-600" />
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{bundle.name}</div>
-                          <div className="text-sm text-gray-500">{bundle.description}</div>
-                          <div className="text-xs text-gray-400">{bundle.productType} • {bundle.category}</div>
+                          <div className="text-sm font-mono font-medium text-gray-900">{item.itemData || 'N/A'}</div>
+                          <div className="text-xs text-gray-400">PIN #{index + 1}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        <div className="font-medium">Retail: NOK {bundle.basePrice?.toLocaleString()}</div>
-                        <div className="text-green-600">Wholesale: NOK {(bundle.basePrice * 0.7)?.toFixed(2)}</div>
-                        <div className="text-purple-600">Margin: {bundle.retailerCommissionPercentage || 30}%</div>
+                      <div className="text-sm font-mono text-gray-900">{item.serialNumber || 'N/A'}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-700 max-w-xs" title={item.notes || 'No notes'}>
+                        {item.notes || '-'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        <div className="font-medium">{bundle.stockQuantity || 0} available</div>
-                        <div className={`text-xs ${(bundle.stockQuantity || 0) < 10 ? 'text-red-600' : 'text-green-600'}`}>
-                          {(bundle.stockQuantity || 0) < 10 ? 'Low Stock' : 'In Stock'}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        <div className="font-medium">{bundle.soldQuantity || 0} sold</div>
-                        <div className="text-green-600">NOK {((bundle.basePrice || 0) * (bundle.soldQuantity || 0)).toLocaleString()}</div>
+                      <div className="text-sm font-semibold text-green-600">
+                        {item.price ? `${item.price} NOK` : '-'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        bundle.status === 'ACTIVE' 
+                        item.stockType === 'EPIN' 
+                          ? 'bg-blue-100 text-blue-800'
+                          : item.stockType === 'ESIM'
                           ? 'bg-green-100 text-green-800'
-                          : bundle.status === 'DRAFT'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-red-100 text-red-800'
+                          : 'bg-purple-100 text-purple-800'
                       }`}>
-                        {bundle.status === 'ACTIVE' && <CheckCircle size={12} className="mr-1" />}
-                        {bundle.status === 'DRAFT' && <Clock size={12} className="mr-1" />}
-                        {bundle.status === 'INACTIVE' && <XCircle size={12} className="mr-1" />}
-                        {bundle.status}
+                        {item.stockType || 'N/A'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {bundle.createdDate ? new Date(bundle.createdDate).toLocaleDateString() : 'N/A'}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{item.poolName || item.csvFileName || 'N/A'}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        item.status === 'AVAILABLE' 
+                          ? 'bg-green-100 text-green-800'
+                          : item.status === 'ASSIGNED'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : item.status === 'USED'
+                          ? 'bg-gray-100 text-gray-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {item.status || 'AVAILABLE'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button 
+                        onClick={() => viewBundlePins(item.poolId)}
+                        className="text-indigo-600 hover:text-indigo-900 mr-3"
+                        title="View all PINs in this pool"
+                      >
+                        <Eye size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleEditItem(item.poolId, item)}
+                        className="text-blue-600 hover:text-blue-900 mr-3"
+                        title="Edit this PIN"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteItem(item.poolId, item.itemId, item.itemData)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Delete this PIN"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center">
+                    <Package size={32} className="text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No CSV uploaded bundles found</p>
+                    <p className="text-sm text-gray-400">Upload CSV files in Stock Management to create bundles</p>
+                    <button 
+                      onClick={() => setActiveTab('stock')}
+                      className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                    >
+                      Go to Stock Management
+                    </button>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderEsimManagement = () => (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-gray-900">eSIM Management</h3>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => fetchAllData()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          >
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* eSIM Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total eSIMs</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{esimBundles.length || 0}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-600 to-green-700 text-white flex items-center justify-center">
+              <Globe2 size={24} />
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Available eSIMs</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{esimBundles.filter(b => b.status === 'AVAILABLE').length || 0}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white flex items-center justify-center">
+              <CheckCircle size={24} />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Assigned eSIMs</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{esimBundles.filter(b => b.status === 'ASSIGNED').length || 0}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-600 to-yellow-700 text-white flex items-center justify-center">
+              <Clock size={24} />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Used eSIMs</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{esimBundles.filter(b => b.status === 'USED').length || 0}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gray-600 to-gray-700 text-white flex items-center justify-center">
+              <XCircle size={24} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* eSIM Data Table */}
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Globe2 className="text-green-600" size={20} />
+                CSV Uploaded eSIM Data ({esimBundles?.length || 0})
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">Individual eSIM items from your CSV uploads</p>
+            </div>
+            <button 
+              onClick={() => setActiveTab('stock')}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+            >
+              <Upload size={16} />
+              Upload More eSIMs
+            </button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">eSIM Number</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial Number</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Code</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pool Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {esimBundles && esimBundles.length > 0 ? (
+                esimBundles.map((item, index) => (
+                  <tr key={item.itemId || index} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                          <Globe2 size={20} className="text-green-600" />
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-mono font-medium text-gray-900">{item.itemData || 'N/A'}</div>
+                          <div className="text-xs text-gray-400">eSIM #{index + 1}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-mono text-gray-900">{item.serialNumber || 'N/A'}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleViewQrCode(item)}
+                          className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                          title="View QR Code"
+                        >
+                          <QrCode size={20} />
+                        </button>
+                        <div className="text-xs text-gray-500">
+                          Click to view
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-700 max-w-xs" title={item.notes || 'No notes'}>
+                        {item.notes || '-'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-semibold text-green-600">
+                        {item.price ? `${item.price} NOK` : '-'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{item.poolName || item.csvFileName || 'N/A'}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        item.status === 'AVAILABLE' 
+                          ? 'bg-green-100 text-green-800'
+                          : item.status === 'ASSIGNED'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : item.status === 'USED'
+                          ? 'bg-gray-100 text-gray-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {item.status || 'AVAILABLE'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
                         <button 
-                          onClick={() => alert(`Bundle Details:\nName: ${bundle.name}\nType: ${bundle.productType}\nCategory: ${bundle.category}\nPrice: NOK ${bundle.basePrice}\nStock: ${bundle.stockQuantity}\nSold: ${bundle.soldQuantity || 0}`)}
+                          onClick={() => handleViewQrCode(item)}
+                          className="text-green-600 hover:text-green-900"
+                          title="View QR Code & Share"
+                        >
+                          <QrCode size={16} />
+                        </button>
+                        <button 
+                          onClick={() => viewBundlePins(item.poolId)}
                           className="text-indigo-600 hover:text-indigo-900"
-                          title="View Details"
+                          title="View all eSIMs in this pool"
                         >
                           <Eye size={16} />
                         </button>
                         <button 
-                          onClick={() => {
-                            setEditingBundle(bundle);
-                            setBundleForm({
-                              name: bundle.name || '',
-                              description: bundle.description || '',
-                              productType: bundle.productType || 'BUNDLE',
-                              category: bundle.category || 'NORWAY',
-                              basePrice: bundle.basePrice?.toString() || '',
-                              retailerCommissionPercentage: bundle.retailerCommissionPercentage || 30,
-                              stockQuantity: bundle.stockQuantity?.toString() || '',
-                              status: bundle.status || 'ACTIVE'
-                            });
-                          }}
-                          className="text-green-600 hover:text-green-900"
-                          title="Edit Bundle"
+                          onClick={() => handleEditItem(item.poolId, item)}
+                          className="text-blue-600 hover:text-blue-900"
+                          title="Edit this eSIM"
                         >
                           <Edit size={16} />
                         </button>
                         <button 
-                          onClick={() => deleteBundle(bundle.id)}
+                          onClick={() => handleDeleteItem(item.poolId, item.itemId, item.itemData)}
                           className="text-red-600 hover:text-red-900"
-                          title="Delete Bundle"
+                          title="Delete this eSIM"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -992,16 +1588,15 @@ export default function AdminDashboard() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
-                    <Package size={32} className="text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">No bundles found</p>
-                    <p className="text-sm text-gray-400">Create your first bundle to start offering services to retailers</p>
+                  <td colSpan={8} className="px-6 py-12 text-center">
+                    <Globe2 size={32} className="text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No eSIM data found</p>
+                    <p className="text-sm text-gray-400">Upload eSIM CSV files in Stock Management to create eSIM inventory</p>
                     <button 
-                      onClick={() => setShowCreateBundle(true)}
-                      className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 mx-auto"
+                      onClick={() => setActiveTab('stock')}
+                      className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                     >
-                      <Plus size={16} />
-                      Create Bundle
+                      Go to Stock Management
                     </button>
                   </td>
                 </tr>
@@ -1501,371 +2096,561 @@ export default function AdminDashboard() {
     );
   }
 
+  const SidebarNavItem = ({ id, label, icon: Icon, active, onClick, badge }) => (
+    <button
+      onClick={() => onClick(id)}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${
+        active 
+          ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-200 scale-105' 
+          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:scale-102'
+      }`}
+    >
+      {/* Animated background for active state */}
+      {active && (
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 animate-gradient"></div>
+      )}
+      
+      {/* Icon with bounce animation */}
+      <Icon size={20} className={`flex-shrink-0 relative z-10 transition-transform duration-300 ${
+        active ? 'text-white scale-110' : 'text-gray-500 group-hover:text-indigo-600 group-hover:scale-110 group-hover:rotate-3'
+      }`} />
+      
+      {/* Label */}
+      <span className={`font-medium text-sm flex-1 text-left relative z-10 transition-all duration-300 ${
+        active ? 'translate-x-0' : 'group-hover:translate-x-1'
+      }`}>
+        {label}
+      </span>
+      
+      {/* Badge with pulse animation */}
+      {badge > 0 && (
+        <span className={`relative z-10 px-2 py-0.5 text-xs rounded-full min-w-[20px] text-center transition-all duration-300 ${
+          active 
+            ? 'bg-white/20 text-white animate-pulse' 
+            : 'bg-red-500 text-white group-hover:bg-red-600 group-hover:scale-110'
+        }`}>
+          {badge}
+        </span>
+      )}
+      
+      {/* Hover effect line */}
+      {!active && (
+        <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-indigo-600 to-purple-600 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300 rounded-r-full"></div>
+      )}
+    </button>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50 p-4">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white flex items-center justify-center">
-              <Shield />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-gray-900">Admin Dashboard</div>
-              <div className="text-sm text-gray-600">Complete control and management system</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Connection Status */}
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
-              connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
-              connectionStatus === 'offline' ? 'bg-red-100 text-red-700' :
-              'bg-yellow-100 text-yellow-700'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${
-                connectionStatus === 'connected' ? 'bg-green-500' :
-                connectionStatus === 'offline' ? 'bg-red-500' :
-                'bg-yellow-500'
-              }`}></div>
-              {connectionStatus === 'connected' ? 'Backend Connected' :
-               connectionStatus === 'offline' ? 'Backend Offline' :
-               'Connecting...'}
-            </div>
-            
-            <button 
-              onClick={() => fetchAllData()}
-              className="px-3 py-2 rounded-xl border border-gray-200 hover:border-gray-300 text-gray-700 text-sm flex items-center gap-2"
-            >
-              <RefreshCw size={16}/>
-              Refresh
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50 overflow-hidden">
+      {/* Sidebar */}
+      <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-gray-200 transition-all duration-300 ease-in-out flex flex-col shadow-xl`}>
+        {/* Logo & Brand */}
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          {sidebarOpen ? (
+            <>
+              <div className="flex items-center gap-2 animate-fade-in">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white flex items-center justify-center shadow-lg animate-pulse-slow">
+                  <Shield size={20} />
+                </div>
+                <div>
+                  <h1 className="font-bold text-gray-900">Admin Panel</h1>
+                  <p className="text-[10px] text-gray-500">EasyTopup.no</p>
+                </div>
+              </div>
+              <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X size={18} className="text-gray-500" />
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setSidebarOpen(true)} className="p-2 hover:bg-gray-100 rounded-lg mx-auto">
+              <Menu size={20} className="text-gray-600" />
             </button>
-            
-            <button className="px-3 py-2 rounded-xl border border-gray-200 hover:border-gray-300 text-gray-700 text-sm flex items-center gap-2">
-              <Download size={16}/>
-              Export Data
-            </button>
-            <button className="relative p-2 rounded-xl border border-gray-200 hover:border-gray-300 text-gray-700">
-              <Bell size={16}/>
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
-            </button>
-            
-            <button 
+          )}
+        </div>
+
+        {/* Navigation Items */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {sidebarOpen ? (
+            <>
+              <SidebarNavItem
+                id="overview"
+                label="Dashboard"
+                icon={BarChart3}
+                active={activeTab === 'overview'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="users"
+                label="Users"
+                icon={Users}
+                active={activeTab === 'users'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="bundles"
+                label="Bundles"
+                icon={Package}
+                active={activeTab === 'bundles'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="esim"
+                label="eSIM"
+                icon={Globe2}
+                active={activeTab === 'esim'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="stock"
+                label="Stock"
+                icon={Box}
+                active={activeTab === 'stock'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="retailer-credit"
+                label="Retailer Credit"
+                icon={CreditCard}
+                active={activeTab === 'retailer-credit'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="business-approvals"
+                label="Business Approvals"
+                icon={Building}
+                active={activeTab === 'business-approvals'}
+                onClick={setActiveTab}
+                badge={analytics.pendingApprovals || (businessUsers && businessUsers.filter(b => b.businessDetails?.verificationStatus === 'PENDING' || b.user?.accountStatus === 'PENDING_BUSINESS_APPROVAL').length) || 0}
+              />
+              <SidebarNavItem
+                id="enquiries"
+                label="Enquiries"
+                icon={MessageCircle}
+                active={activeTab === 'enquiries'}
+                onClick={setActiveTab}
+                badge={enquiries && enquiries.filter(e => e.status === 'Open').length || 0}
+              />
+              <SidebarNavItem
+                id="promotions"
+                label="Promotions"
+                icon={Target}
+                active={activeTab === 'promotions'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="analytics"
+                label="Analytics"
+                icon={PieChart}
+                active={activeTab === 'analytics'}
+                onClick={setActiveTab}
+              />
+            </>
+          ) : (
+            <>
+              {/* Collapsed sidebar icons */}
+              <button onClick={() => { setActiveTab('overview'); }} className={`w-full p-3 rounded-xl ${activeTab === 'overview' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
+                <BarChart3 size={20} className="mx-auto" />
+              </button>
+              <button onClick={() => { setActiveTab('users'); }} className={`w-full p-3 rounded-xl ${activeTab === 'users' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
+                <Users size={20} className="mx-auto" />
+              </button>
+              <button onClick={() => { setActiveTab('bundles'); }} className={`w-full p-3 rounded-xl ${activeTab === 'bundles' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
+                <Package size={20} className="mx-auto" />
+              </button>
+              <button onClick={() => { setActiveTab('esim'); }} className={`w-full p-3 rounded-xl ${activeTab === 'esim' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
+                <Globe2 size={20} className="mx-auto" />
+              </button>
+              <button onClick={() => { setActiveTab('stock'); }} className={`w-full p-3 rounded-xl ${activeTab === 'stock' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
+                <Box size={20} className="mx-auto" />
+              </button>
+              <button onClick={() => { setActiveTab('retailer-credit'); }} className={`w-full p-3 rounded-xl ${activeTab === 'retailer-credit' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
+                <CreditCard size={20} className="mx-auto" />
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Logout Button */}
+        {sidebarOpen && (
+          <div className="p-4 border-t border-gray-200">
+            <button
               onClick={handleLogout}
-              className="px-3 py-2 rounded-xl bg-red-100 hover:bg-red-200 border border-red-300 hover:border-red-400 text-red-700 hover:text-red-800 text-sm flex items-center gap-2 transition-all font-medium"
-              title="Sign out"
+              className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-all"
             >
-              <LogOut size={16}/>
-              Logout
+              <LogOut size={20} />
+              <span className="font-medium text-sm">Logout</span>
             </button>
           </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-          <div className="flex flex-wrap gap-2">
-            <TabButton
-              id="overview"
-              label="Overview"
-              icon={BarChart3}
-              active={activeTab === 'overview'}
-              onClick={setActiveTab}
-            />
-            <TabButton
-              id="users"
-              label="User Management"
-              icon={Users}
-              active={activeTab === 'users'}
-              onClick={setActiveTab}
-            />
-            <TabButton
-              id="bundles"
-              label="Bundle Management"
-              icon={Package}
-              active={activeTab === 'bundles'}
-              onClick={setActiveTab}
-            />
-            <TabButton
-              id="business-approvals"
-              label="Business Approvals"
-              icon={Building}
-              active={activeTab === 'business-approvals'}
-              onClick={setActiveTab}
-              badge={analytics.pendingApprovals || (businessUsers && businessUsers.filter(b => b.businessDetails?.verificationStatus === 'PENDING' || b.user?.accountStatus === 'PENDING_BUSINESS_APPROVAL').length) || 0}
-            />
-            <TabButton
-              id="enquiries"
-              label="Customer Support"
-              icon={MessageCircle}
-              active={activeTab === 'enquiries'}
-              onClick={setActiveTab}
-              badge={enquiries && enquiries.filter(e => e.status === 'Open').length || 0}
-            />
-            <TabButton
-              id="analytics"
-              label="Analytics & Reports"
-              icon={PieChart}
-              active={activeTab === 'analytics'}
-              onClick={setActiveTab}
-            />
-          </div>
-        </div>
-
-        {/* Content */}
-        {activeTab === 'overview' && renderOverview()}
-        {activeTab === 'users' && renderUserManagement()}
-        {activeTab === 'bundles' && renderBundles()}
-        {activeTab === 'business-approvals' && renderBusinessApprovals()}
-        {activeTab === 'enquiries' && renderEnquiries()}
-        {activeTab === 'analytics' && renderAnalytics()}
+        )}
       </div>
 
-      {/* Bundle Manager Modal */}
-      {showBulkImport && (
-        <BundleBulkImport
-          onClose={() => setShowBulkImport(false)}
-          onImport={handleBulkImport}
-        />
-      )}
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top Header Bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                {activeTab === 'overview' ? 'Dashboard' :
+                 activeTab === 'users' ? 'User Management' :
+                 activeTab === 'bundles' ? 'Bundle Management' :
+                 activeTab === 'esim' ? 'eSIM Management' :
+                 activeTab === 'stock' ? 'Stock Management' :
+                 activeTab === 'retailer-credit' ? 'Retailer Credit Management' :
+                 activeTab === 'business-approvals' ? 'Business Approvals' :
+                 activeTab === 'enquiries' ? 'Customer Support' :
+                 activeTab === 'promotions' ? 'Promotions & Campaigns' :
+                 'Analytics & Reports'}
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">Welcome back, Admin</p>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              {/* Connection Status */}
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
+                connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
+                connectionStatus === 'offline' ? 'bg-red-100 text-red-700' :
+                'bg-yellow-100 text-yellow-700'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  connectionStatus === 'connected' ? 'bg-green-500' :
+                  connectionStatus === 'offline' ? 'bg-red-500' :
+                  'bg-yellow-500'
+                }`}></div>
+                {connectionStatus === 'connected' ? 'Connected' :
+                 connectionStatus === 'offline' ? 'Offline' :
+                 'Connecting'}
+              </div>
+              
+              <button 
+                onClick={() => fetchAllData()}
+                className="p-2 hover:bg-gray-100 rounded-lg text-gray-600"
+                title="Refresh"
+              >
+                <RefreshCw size={20} />
+              </button>
+              
+              <button className="p-2 hover:bg-gray-100 rounded-lg text-gray-600" title="Notifications">
+                <Bell size={20} />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              </button>
+              
+              <button className="p-2 hover:bg-gray-100 rounded-lg text-gray-600" title="Settings">
+                <Settings size={20} />
+              </button>
+            </div>
+          </div>
+        </div>
 
-      {/* Create/Edit Bundle Modal */}
-      {(showCreateBundle || editingBundle) && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[9999] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[95vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xl font-semibold text-gray-900">
-                  {editingBundle ? 'Edit Bundle' : 'Create New Bundle'}
-                </h3>
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-7xl mx-auto space-y-6">
+            {/* Content */}
+            {activeTab === 'overview' && renderOverview()}
+            {activeTab === 'users' && renderUserManagement()}
+            {activeTab === 'bundles' && renderBundles()}
+            {activeTab === 'esim' && renderEsimManagement()}
+            {activeTab === 'stock' && <StockManagement />}
+            {activeTab === 'retailer-credit' && <RetailerCreditManagement />}
+            {activeTab === 'business-approvals' && renderBusinessApprovals()}
+            {activeTab === 'enquiries' && renderEnquiries()}
+            {activeTab === 'promotions' && <PromotionCampaignManager />}
+            {activeTab === 'analytics' && renderAnalytics()}
+          </div>
+        </div>
+      </div>
+
+      {/* PIN View Modal */}
+      {showPinModal && selectedBundle && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold flex items-center gap-2">
+                    <Shield size={24} />
+                    {selectedBundle.bundleName} - PIN Details
+                  </h3>
+                  <p className="text-indigo-100 mt-1">
+                    {selectedBundle.stockType} • {selectedBundle.totalCount} PINs
+                  </p>
+                </div>
                 <button
                   onClick={() => {
-                    setShowCreateBundle(false);
-                    setEditingBundle(null);
-                    setBundleForm({
-                      name: '',
-                      description: '',
-                      productType: 'BUNDLE',
-                      category: 'NORWAY',
-                      basePrice: '',
-                      retailerCommissionPercentage: 30,
-                      stockQuantity: '',
-                      status: 'ACTIVE'
-                    });
+                    setShowPinModal(false);
+                    setSelectedBundle(null);
                   }}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2"
                 >
                   <XCircle size={24} />
                 </button>
               </div>
             </div>
-            
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              try {
-                if (!bundleForm.name || !bundleForm.basePrice || !bundleForm.stockQuantity) {
-                  alert('Please fill in all required fields: Bundle Name, Base Price, and Stock Quantity');
-                  return;
-                }
-                
-                const bundleData = {
-                  ...bundleForm,
-                  basePrice: parseFloat(bundleForm.basePrice),
-                  stockQuantity: parseInt(bundleForm.stockQuantity),
-                  retailerCommissionPercentage: parseFloat(bundleForm.retailerCommissionPercentage)
-                };
-                
-                if (editingBundle) {
-                  await updateBundle(editingBundle.id, bundleData);
-                } else {
-                  await createBundle(bundleData);
-                }
-              } catch (error) {
-                console.error('Bundle save error:', error);
-                alert('Failed to save bundle: ' + (error.message || 'Please try again'));
-              }
-            }} className="p-8 space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <h4 className="text-blue-800 font-medium mb-2">💡 Quick Start Tips</h4>
-                <p className="text-blue-700 text-sm">
-                  Fill in the bundle name, price, and stock quantity to get started. Use the pricing preview below to see retailer margins.
+
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                <div className="flex">
+                  <AlertCircle className="text-yellow-400 mr-3" size={20} />
+                  <div>
+                    <p className="text-sm text-yellow-700">
+                      <strong>Security Notice:</strong> These PINs are decrypted for administrative viewing only. 
+                      Handle with care and do not share.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Table View for CSV Data */}
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PIN Number</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial Number</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pool Name</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {selectedBundle.items && selectedBundle.items.length > 0 ? (
+                      selectedBundle.items.map((item, index) => (
+                        <tr key={item.itemId} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
+                          <td className="px-4 py-3">
+                            <div className="bg-indigo-50 rounded border border-indigo-200 p-2">
+                              <p className="font-mono text-sm font-bold text-indigo-600 break-all">
+                                {item.itemData || item.pinNumber || 'N/A'}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-mono text-sm text-gray-700">
+                              {item.serialNumber || 'N/A'}
+                            </p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-mono text-xs text-gray-600">
+                              {item.productId || selectedBundle.productId || 'N/A'}
+                            </p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="text-sm text-gray-700 max-w-xs truncate" title={item.notes || selectedBundle.notes}>
+                              {item.notes || selectedBundle.notes || '-'}
+                            </p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="text-sm font-medium text-gray-900">
+                              {selectedBundle.bundleName || 'N/A'}
+                            </p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              selectedBundle.stockType === 'EPIN'
+                                ? 'bg-blue-100 text-blue-800'
+                                : selectedBundle.stockType === 'ESIM'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-purple-100 text-purple-800'
+                            }`}>
+                              {selectedBundle.stockType || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="text-sm font-medium text-gray-900">
+                              NOK {item.price || selectedBundle.price || 0}
+                            </p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              item.status === 'AVAILABLE'
+                                ? 'bg-green-100 text-green-800'
+                                : item.status === 'USED'
+                                ? 'bg-gray-100 text-gray-800'
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {item.status || 'AVAILABLE'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-8 text-center">
+                          <Package size={32} className="text-gray-400 mx-auto mb-2" />
+                          <p className="text-gray-500">No PINs found in this bundle</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  // Copy all PINs to clipboard
+                  const pins = selectedBundle.items.map(item => item.itemData).join('\n');
+                  navigator.clipboard.writeText(pins);
+                  alert('All PINs copied to clipboard!');
+                }}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+              >
+                <Download size={16} />
+                Copy All PINs
+              </button>
+              <button
+                onClick={() => {
+                  setShowPinModal(false);
+                  setSelectedBundle(null);
+                }}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal for eSIM */}
+      {showQrModal && selectedEsim && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold flex items-center gap-2">
+                    <QrCode size={24} />
+                    eSIM QR Code & Details
+                  </h3>
+                  <p className="text-green-100 mt-1">
+                    Share this QR code with your customer
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowQrModal(false);
+                    setSelectedEsim(null);
+                  }}
+                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+              {/* eSIM Information */}
+              <div className="bg-gray-50 rounded-xl p-4 mb-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">eSIM Code</p>
+                    <p className="font-mono font-semibold text-gray-900">{selectedEsim.itemData}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Serial Number</p>
+                    <p className="font-mono font-semibold text-gray-900">{selectedEsim.serialNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Pool Name</p>
+                    <p className="font-semibold text-gray-900">{selectedEsim.poolName || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Price</p>
+                    <p className="font-semibold text-green-600">{selectedEsim.price ? `${selectedEsim.price} NOK` : '-'}</p>
+                  </div>
+                  {selectedEsim.notes && (
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500 mb-1">Notes</p>
+                      <p className="text-sm text-gray-700">{selectedEsim.notes}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* QR Code Display */}
+              <div className="flex flex-col items-center justify-center mb-6">
+                <div ref={qrCodeRef} className="bg-white p-6 rounded-xl shadow-lg border-4 border-green-200">
+                  <QRCodeSVG
+                    value={generateEsimQrData(selectedEsim)}
+                    size={256}
+                    level="H"
+                    includeMargin={true}
+                    bgColor="#ffffff"
+                    fgColor="#000000"
+                  />
+                </div>
+                <p className="text-sm text-gray-600 mt-4 text-center">
+                  Scan this QR code to activate the eSIM
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Bundle Name <span className="text-red-500">*</span>
-                  </label>
+              {/* Activation URL */}
+              <div className="bg-blue-50 rounded-xl p-4">
+                <p className="text-xs text-blue-600 font-semibold mb-2">ACTIVATION URL</p>
+                <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    required
-                    value={bundleForm.name}
-                    onChange={(e) => setBundleForm({...bundleForm, name: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg"
-                    placeholder="e.g., Nordic Travel eSIM 5GB"
+                    value={generateEsimQrData(selectedEsim)}
+                    readOnly
+                    className="flex-1 px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm font-mono"
                   />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Product Type</label>
-                  <select
-                    value={bundleForm.productType}
-                    onChange={(e) => setBundleForm({...bundleForm, productType: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg bg-white"
+                  <button
+                    onClick={handleCopyQrUrl}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    title="Copy URL"
                   >
-                    <option value="BUNDLE">📱 Data Bundle</option>
-                    <option value="EPIN">🔢 ePIN</option>
-                    <option value="ESIM">📶 eSIM</option>
-                    <option value="TOPUP">💳 Top-up</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-                  <select
-                    value={bundleForm.category}
-                    onChange={(e) => setBundleForm({...bundleForm, category: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg bg-white"
-                  >
-                    <option value="NORWAY">🇳🇴 Norway</option>
-                    <option value="NORDIC">🏔️ Nordic</option>
-                    <option value="EUROPE">🇪🇺 Europe</option>
-                    <option value="GLOBAL">🌍 Global</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Base Price (NOK) <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="0.01"
-                      required
-                      value={bundleForm.basePrice}
-                      onChange={(e) => setBundleForm({...bundleForm, basePrice: e.target.value})}
-                      className="w-full px-4 py-3 pl-12 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg"
-                      placeholder="149.00"
-                    />
-                    <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">NOK</span>
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Stock Quantity <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={bundleForm.stockQuantity}
-                    onChange={(e) => setBundleForm({...bundleForm, stockQuantity: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg"
-                    placeholder="100"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Retailer Commission (%)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    required
-                    value={bundleForm.retailerCommissionPercentage}
-                    onChange={(e) => setBundleForm({...bundleForm, retailerCommissionPercentage: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="30"
-                  />
+                    <Copy size={16} />
+                  </button>
                 </div>
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea
-                  rows={3}
-                  value={bundleForm.description}
-                  onChange={(e) => setBundleForm({...bundleForm, description: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base"
-                  placeholder="Describe what's included in this bundle (e.g., data allowance, calling features, validity period)..."
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <select
-                  value={bundleForm.status}
-                  onChange={(e) => setBundleForm({...bundleForm, status: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="ACTIVE">Active</option>
-                  <option value="DRAFT">Draft</option>
-                  <option value="INACTIVE">Inactive</option>
-                </select>
-              </div>
-              
-              {bundleForm.basePrice && (
-                <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 rounded-xl p-6">
-                  <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    💰 Pricing Breakdown
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-                      <div className="text-sm text-gray-600 mb-1">Customer Pays</div>
-                      <div className="text-2xl font-bold text-blue-600">
-                        NOK {parseFloat(bundleForm.basePrice || 0).toFixed(2)}
-                      </div>
-                      <div className="text-xs text-gray-500">Retail Price</div>
-                    </div>
-                    <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-                      <div className="text-sm text-gray-600 mb-1">Retailer Pays</div>
-                      <div className="text-2xl font-bold text-green-600">
-                        NOK {(parseFloat(bundleForm.basePrice || 0) * (1 - parseFloat(bundleForm.retailerCommissionPercentage || 30) / 100)).toFixed(2)}
-                      </div>
-                      <div className="text-xs text-gray-500">Wholesale Price</div>
-                    </div>
-                    <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-                      <div className="text-sm text-gray-600 mb-1">Retailer Profit</div>
-                      <div className="text-2xl font-bold text-purple-600">
-                        NOK {(parseFloat(bundleForm.basePrice || 0) * parseFloat(bundleForm.retailerCommissionPercentage || 30) / 100).toFixed(2)}
-                      </div>
-                      <div className="text-xs text-gray-500">{bundleForm.retailerCommissionPercentage || 30}% Margin</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div className="flex justify-end gap-4 pt-6 border-t-2 border-gray-200 mt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateBundle(false);
-                    setEditingBundle(null);
-                    setBundleForm({
-                      name: '',
-                      description: '',
-                      productType: 'BUNDLE',
-                      category: 'NORWAY',
-                      basePrice: '',
-                      retailerCommissionPercentage: 30,
-                      stockQuantity: '',
-                      status: 'ACTIVE'
-                    });
-                  }}
-                  className="px-6 py-3 text-gray-600 border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 flex items-center gap-2 font-semibold text-lg shadow-lg transform hover:scale-105 transition-all duration-200"
-                >
-                  <Package size={20} />
-                  {editingBundle ? '✏️ Update Bundle' : '🚀 Create Bundle'}
-                </button>
-              </div>
-            </form>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="bg-gray-50 px-6 py-4 flex flex-wrap gap-3 justify-end">
+              <button
+                onClick={handleDownloadQrCode}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+              >
+                <Download size={16} />
+                Download QR
+              </button>
+              <button
+                onClick={handleCopyQrUrl}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              >
+                <Copy size={16} />
+                Copy URL
+              </button>
+              <button
+                onClick={handleShareEsim}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+              >
+                <Share2 size={16} />
+                Share
+              </button>
+              <button
+                onClick={handleSendEsimEmail}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+              >
+                <Send size={16} />
+                Send Email
+              </button>
+              <button
+                onClick={() => {
+                  setShowQrModal(false);
+                  setSelectedEsim(null);
+                }}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

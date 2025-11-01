@@ -27,7 +27,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         // Disable all security for development
-        http.cors(cors -> {})
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
             .exceptionHandling(exception -> exception
                 .authenticationEntryPoint(authenticationEntryPoint)
@@ -48,8 +48,15 @@ public class SecurityConfig {
             "https://topup-website-beta.vercel.app",  // Production frontend
             "https://topup-website-*.vercel.app"  // Vercel preview deployments
         ));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"));
+        // Allow all headers including Authorization
         configuration.setAllowedHeaders(List.of("*"));
+        configuration.setExposedHeaders(Arrays.asList(
+            "Authorization",
+            "Content-Type",
+            "Access-Control-Allow-Origin",
+            "Access-Control-Allow-Credentials"
+        ));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
         

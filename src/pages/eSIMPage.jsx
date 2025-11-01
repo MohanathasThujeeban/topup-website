@@ -223,13 +223,6 @@ const ESIMPage = () => {
                 Manage My eSIM
                 <ArrowRight className="group-hover:translate-x-1 transition-transform" size={20} />
               </Link>
-              <Link 
-                to="/sim/register" 
-                className="px-8 py-4 bg-white hover:bg-gray-50 text-gray-700 rounded-2xl font-bold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 font-heading border-2 border-gray-200 flex items-center gap-2 text-lg"
-              >
-                <Smartphone size={24} />
-                Register New SIM
-              </Link>
             </div>
 
             {/* Payment Methods */}

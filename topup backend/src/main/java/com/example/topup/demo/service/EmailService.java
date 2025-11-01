@@ -686,4 +686,32 @@ public class EmailService {
             appName, firstName, appName, isBusinessAccount ? "business" : "personal", appUrl, supportEmail, supportEmail
         );
     }
+
+    /**
+     * Generic method to send a simple email
+     * @param toEmail Recipient email address
+     * @param subject Email subject
+     * @param message Email body (can be plain text or HTML)
+     */
+    public void sendEmail(String toEmail, String subject, String message) {
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+
+            helper.setFrom(supportEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            
+            // Check if message contains HTML tags
+            boolean isHtml = message.contains("<html") || message.contains("<div") || message.contains("<p");
+            helper.setText(message, isHtml);
+
+            mailSender.send(mimeMessage);
+            log.info("Email sent successfully to: {}", toEmail);
+            
+        } catch (MessagingException e) {
+            log.error("Failed to send email to {}: {}", toEmail, e.getMessage());
+            throw new RuntimeException("Failed to send email", e);
+        }
+    }
 }

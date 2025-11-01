@@ -4,10 +4,14 @@ import com.example.topup.demo.entity.User;
 import com.example.topup.demo.entity.BusinessDetails;
 import com.example.topup.demo.entity.Order;
 import com.example.topup.demo.entity.RetailerOrder;
+import com.example.topup.demo.entity.RetailerLimit;
+import com.example.topup.demo.dto.RetailerCreditLimitDTO;
+import com.example.topup.demo.dto.UpdateCreditLimitRequest;
 import com.example.topup.demo.repository.UserRepository;
 import com.example.topup.demo.repository.BusinessDetailsRepository;
 import com.example.topup.demo.repository.OrderRepository;
 import com.example.topup.demo.repository.RetailerOrderRepository;
+import com.example.topup.demo.repository.RetailerLimitRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -34,6 +38,9 @@ public class AdminService {
 
     @Autowired
     private RetailerOrderRepository retailerOrderRepository;
+
+    @Autowired
+    private RetailerLimitRepository retailerLimitRepository;
 
     @Autowired
     private EmailService emailService;
@@ -600,6 +607,179 @@ public class AdminService {
         } catch (Exception e) {
             System.err.println("Error calculating B2B revenue: " + e.getMessage());
             return 0.0;
+        }
+    }
+    
+    /**
+     * Get all retailers with their credit limit information
+     */
+    public List<RetailerCreditLimitDTO> getAllRetailersWithCreditLimits() {
+        try {
+            // Get all BUSINESS users
+            List<User> retailers = userRepository.findByAccountType(User.AccountType.BUSINESS);
+            
+            return retailers.stream()
+                .map(this::convertToRetailerCreditLimitDTO)
+                .sorted((a, b) -> {
+                    // Sort by credit usage percentage descending
+                    double usageA = a.getCreditUsagePercentage() != null ? a.getCreditUsagePercentage() : 0.0;
+                    double usageB = b.getCreditUsagePercentage() != null ? b.getCreditUsagePercentage() : 0.0;
+                    return Double.compare(usageB, usageA);
+                })
+                .collect(Collectors.toList());
+        } catch (Exception e) {
+            System.err.println("Error fetching retailers with credit limits: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * Get specific retailer's credit limit information
+     */
+    public RetailerCreditLimitDTO getRetailerCreditLimit(String retailerId) {
+        try {
+            User retailer = userRepository.findById(retailerId)
+                .orElseThrow(() -> new RuntimeException("Retailer not found"));
+                
+            if (retailer.getAccountType() != User.AccountType.BUSINESS) {
+                throw new RuntimeException("User is not a business/retailer account");
+            }
+            
+            return convertToRetailerCreditLimitDTO(retailer);
+        } catch (Exception e) {
+            System.err.println("Error fetching retailer credit limit: " + e.getMessage());
+            throw new RuntimeException("Failed to fetch retailer credit limit: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Update retailer credit limit
+     */
+    public RetailerCreditLimitDTO updateRetailerCreditLimit(UpdateCreditLimitRequest request) {
+        try {
+            User retailer = userRepository.findById(request.getRetailerId())
+                .orElseThrow(() -> new RuntimeException("Retailer not found"));
+                
+            if (retailer.getAccountType() != User.AccountType.BUSINESS) {
+                throw new RuntimeException("User is not a business/retailer account");
+            }
+            
+            // Get or create retailer limit
+            RetailerLimit limit = retailerLimitRepository.findByRetailer(retailer)
+                .orElse(new RetailerLimit());
+            
+            // If new limit, set retailer and initial values
+            if (limit.getId() == null) {
+                limit.setRetailer(retailer);
+                limit.setUsedCredit(BigDecimal.ZERO);
+                limit.setOutstandingAmount(BigDecimal.ZERO);
+                limit.setStatus(RetailerLimit.LimitStatus.ACTIVE);
+            }
+            
+            // Update credit limit
+            BigDecimal oldLimit = limit.getCreditLimit();
+            BigDecimal newLimit = request.getCreditLimit();
+            limit.setCreditLimit(newLimit);
+            
+            // Recalculate available credit
+            BigDecimal usedCredit = limit.getUsedCredit() != null ? limit.getUsedCredit() : BigDecimal.ZERO;
+            limit.setAvailableCredit(newLimit.subtract(usedCredit));
+            
+            // Update payment terms if provided
+            if (request.getPaymentTermsDays() != null) {
+                limit.setPaymentTermsDays(request.getPaymentTermsDays());
+            }
+            
+            // Save the updated limit
+            retailerLimitRepository.save(limit);
+            
+            System.out.println("✅ Updated credit limit for retailer " + retailer.getEmail() + 
+                             " from " + oldLimit + " to " + newLimit);
+            
+            return convertToRetailerCreditLimitDTO(retailer);
+        } catch (Exception e) {
+            System.err.println("Error updating retailer credit limit: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to update credit limit: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Convert User entity to RetailerCreditLimitDTO
+     */
+    private RetailerCreditLimitDTO convertToRetailerCreditLimitDTO(User retailer) {
+        RetailerCreditLimitDTO dto = new RetailerCreditLimitDTO();
+        
+        dto.setRetailerId(retailer.getId());
+        dto.setRetailerName(retailer.getFullName());
+        dto.setRetailerEmail(retailer.getEmail());
+        
+        // Get retailer limit if exists
+        Optional<RetailerLimit> limitOpt = retailerLimitRepository.findByRetailer(retailer);
+        
+        if (limitOpt.isPresent()) {
+            RetailerLimit limit = limitOpt.get();
+            dto.setId(limit.getId());
+            dto.setCreditLimit(limit.getCreditLimit());
+            dto.setAvailableCredit(limit.getAvailableCredit());
+            dto.setUsedCredit(limit.getUsedCredit());
+            dto.setOutstandingAmount(limit.getOutstandingAmount());
+            dto.setPaymentTermsDays(limit.getPaymentTermsDays());
+            dto.setLastPaymentDate(limit.getLastPaymentDate());
+            dto.setNextDueDate(limit.getNextDueDate());
+            dto.setStatus(limit.getStatus().toString());
+            
+            // Calculate credit usage percentage
+            if (limit.getCreditLimit() != null && limit.getCreditLimit().compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal usedCredit = limit.getUsedCredit() != null ? limit.getUsedCredit() : BigDecimal.ZERO;
+                double percentage = usedCredit.divide(limit.getCreditLimit(), 4, java.math.RoundingMode.HALF_UP)
+                                             .multiply(BigDecimal.valueOf(100))
+                                             .doubleValue();
+                dto.setCreditUsagePercentage(percentage);
+            } else {
+                dto.setCreditUsagePercentage(0.0);
+            }
+            
+            // Determine level based on credit limit
+            dto.setLevel(determineCreditLevel(limit.getCreditLimit()));
+        } else {
+            // No limit set yet
+            dto.setCreditLimit(BigDecimal.ZERO);
+            dto.setAvailableCredit(BigDecimal.ZERO);
+            dto.setUsedCredit(BigDecimal.ZERO);
+            dto.setOutstandingAmount(BigDecimal.ZERO);
+            dto.setPaymentTermsDays(30);
+            dto.setStatus("NOT_SET");
+            dto.setCreditUsagePercentage(0.0);
+            dto.setLevel("NOT_SET");
+        }
+        
+        return dto;
+    }
+    
+    /**
+     * Determine credit level based on credit limit
+     */
+    private String determineCreditLevel(BigDecimal creditLimit) {
+        if (creditLimit == null || creditLimit.compareTo(BigDecimal.ZERO) == 0) {
+            return "NOT_SET";
+        }
+        
+        double limit = creditLimit.doubleValue();
+        
+        if (limit >= 20000) {
+            return "DIAMOND";
+        } else if (limit >= 15000) {
+            return "PLATINUM";
+        } else if (limit >= 10000) {
+            return "GOLD";
+        } else if (limit >= 7500) {
+            return "SILVER";
+        } else if (limit >= 5000) {
+            return "BRONZE";
+        } else {
+            return "STARTER";
         }
     }
 }

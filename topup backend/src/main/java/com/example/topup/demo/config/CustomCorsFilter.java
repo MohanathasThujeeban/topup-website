@@ -35,7 +35,16 @@ public class CustomCorsFilter implements Filter {
         response.setHeader("Access-Control-Allow-Credentials", "true");
         response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
         response.setHeader("Access-Control-Max-Age", "3600");
-        response.setHeader("Access-Control-Allow-Headers", "*");
+        
+        // Explicitly allow ALL headers including Authorization
+        String requestHeaders = request.getHeader("Access-Control-Request-Headers");
+        if (requestHeaders != null) {
+            response.setHeader("Access-Control-Allow-Headers", requestHeaders);
+        } else {
+            response.setHeader("Access-Control-Allow-Headers", 
+                "Authorization, Content-Type, Accept, Origin, X-Requested-With, Access-Control-Request-Method, Access-Control-Request-Headers");
+        }
+        
         response.setHeader("Access-Control-Expose-Headers", "Authorization, Content-Type, X-Requested-With");
 
         // Handle preflight requests

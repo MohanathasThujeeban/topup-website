@@ -6,6 +6,8 @@ import org.springframework.data.mongodb.core.mapping.DBRef;
 
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
+import java.util.Map;
+import java.util.HashMap;
 
 @Document(collection = "orders")
 public class Order {
@@ -43,6 +45,7 @@ public class Order {
     private LocalDateTime lastModifiedDate;
     
     private String notes;
+    private Map<String, String> metadata; // Store additional data like allocated pins/esims
     
     // Constructors
     public Order() {
@@ -234,6 +237,14 @@ public class Order {
     
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+    
+    public Map<String, String> getMetadata() {
+        return metadata;
+    }
+    
+    public void setMetadata(Map<String, String> metadata) {
+        this.metadata = metadata;
     }
     
     // Helper methods
