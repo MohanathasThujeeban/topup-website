@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { CheckCircle, Mail, Hash, Smartphone, Download, MessageCircle, Phone, Star } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { CheckCircle, Mail, Hash, Smartphone, Download, MessageCircle, Phone, Star, Clock, AlertCircle } from 'lucide-react';
 
 const ConfirmationPage = () => {
+  const location = useLocation();
+  const { status, orderData } = location.state || {};
+  const isPendingApproval = status === 'pending_approval';
   const [showActivationGuide, setShowActivationGuide] = useState(false);
 
-  const orderDetails = {
+  const orderDetails = orderData || {
     orderNumber: 'ET-12345',
     date: '08 Oct 2025, 14:32',
     product: 'Lycamobile 5GB ePIN',
@@ -21,14 +24,28 @@ const ConfirmationPage = () => {
   return (
     <div className="min-h-screen bg-bgLight animate-fadeIn">
       {/* Hero Section */}
-      <section className="bg-gradient-to-r from-primary to-secondary text-white section-padding">
+      <section className={`bg-gradient-to-r ${isPendingApproval ? 'from-yellow-500 to-orange-500' : 'from-primary to-secondary'} text-white section-padding`}>
         <div className="container-custom px-4 text-center">
           <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle size={64} className="text-success" />
+            {isPendingApproval ? (
+              <Clock size={64} className="text-yellow-500" />
+            ) : (
+              <CheckCircle size={64} className="text-success" />
+            )}
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">Payment Successful!</h1>
-          <p className="text-xl mb-2">Your Lycamobile PIN has been sent to your email</p>
-          <p className="text-lg opacity-90">Sent to: {orderDetails.email}</p>
+          <h1 className="text-4xl md:text-5xl font-bold mb-4">
+            {isPendingApproval ? 'Order Received!' : 'Payment Successful!'}
+          </h1>
+          <p className="text-xl mb-2">
+            {isPendingApproval 
+              ? 'Your eSIM request is under review' 
+              : 'Your Lycamobile PIN has been sent to your email'}
+          </p>
+          <p className="text-lg opacity-90">
+            {isPendingApproval 
+              ? 'Our admin team will verify your documents and approve shortly' 
+              : `Sent to: ${orderDetails.email}`}
+          </p>
         </div>
       </section>
 
@@ -68,70 +85,125 @@ const ConfirmationPage = () => {
           {/* Next Steps Section */}
           <div className="card mb-8">
             <h2 className="text-2xl font-bold mb-6">What's Next?</h2>
-            <div className="space-y-6">
-              {/* Step 1 */}
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-16 h-16 bg-primary rounded-full flex items-center justify-center">
-                  <Mail size={32} className="text-white" />
+            
+            {isPendingApproval ? (
+              /* Pending Approval Steps */
+              <div className="space-y-6">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-16 h-16 bg-yellow-500 rounded-full flex items-center justify-center">
+                    <Clock size={32} className="text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold mb-2">Your eSIM Request is Under Review</h3>
+                    <p className="text-gray-600 mb-3">
+                      Our admin team is verifying your ID documents. This usually takes 1-2 hours during business hours.
+                    </p>
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-sm font-semibold text-yellow-800 mb-2">⏰ Estimated approval time: 1-2 hours</p>
+                      <p className="text-sm text-yellow-700">We'll send you an email once your eSIM is approved and ready!</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold mb-2">Check Your Email</h3>
-                  <p className="text-gray-600 mb-3">
-                    Look for email from support@easytopup.no
-                  </p>
-                  <div className="flex gap-2">
-                    <a
-                      href="https://gmail.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-secondary text-sm py-2 px-4"
-                    >
-                      Open Gmail
-                    </a>
-                    <a
-                      href="https://outlook.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-secondary text-sm py-2 px-4"
-                    >
-                      Open Outlook
-                    </a>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center">
+                    <Mail size={32} className="text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold mb-2">Watch Your Email</h3>
+                    <p className="text-gray-600 mb-3">
+                      Once approved, you'll receive an email with your eSIM QR code and activation instructions at: <strong>{orderDetails.email}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-16 h-16 bg-purple-500 rounded-full flex items-center justify-center">
+                    <AlertCircle size={32} className="text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold mb-2">Need Help?</h3>
+                    <p className="text-gray-600 mb-3">
+                      If you have any questions about your order, contact our support team.
+                    </p>
+                    <div className="flex gap-2">
+                      <a
+                        href="mailto:support@easytopup.no"
+                        className="btn-secondary text-sm py-2 px-4"
+                      >
+                        Email Support
+                      </a>
+                    </div>
                   </div>
                 </div>
               </div>
-
-              {/* Step 2 */}
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-16 h-16 bg-secondary rounded-full flex items-center justify-center">
-                  <Hash size={32} className="text-white" />
+            ) : (
+              /* Original Steps for immediate delivery */
+              <div className="space-y-6">
+                {/* Step 1 */}
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-16 h-16 bg-primary rounded-full flex items-center justify-center">
+                    <Mail size={32} className="text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold mb-2">Check Your Email</h3>
+                    <p className="text-gray-600 mb-3">
+                      Look for email from support@easytopup.no
+                    </p>
+                    <div className="flex gap-2">
+                      <a
+                        href="https://gmail.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-secondary text-sm py-2 px-4"
+                      >
+                        Open Gmail
+                      </a>
+                      <a
+                        href="https://outlook.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-secondary text-sm py-2 px-4"
+                      >
+                        Open Outlook
+                      </a>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold mb-2">Find Your PIN Code</h3>
-                  <p className="text-gray-600">
-                    Your 16-digit PIN will look like: <span className="font-mono font-bold">1234-5678-9101-1121</span>
-                  </p>
+
+                {/* Step 2 */}
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-16 h-16 bg-secondary rounded-full flex items-center justify-center">
+                    <Hash size={32} className="text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold mb-2">Find Your PIN Code</h3>
+                    <p className="text-gray-600">
+                      Your 16-digit PIN will look like: <span className="font-mono font-bold">1234-5678-9101-1121</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 3 */}
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-16 h-16 bg-accent rounded-full flex items-center justify-center">
+                    <Smartphone size={32} className="text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold mb-2">Activate Your PIN</h3>
+                    <p className="text-gray-600 mb-3">
+                      Dial <span className="font-mono font-bold">*123*PIN#</span> on your Lycamobile SIM
+                    </p>
+                    <button
+                      onClick={() => setShowActivationGuide(!showActivationGuide)}
+                      className="btn-primary"
+                    >
+                      How to Activate My PIN
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              {/* Step 3 */}
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-16 h-16 bg-accent rounded-full flex items-center justify-center">
-                  <Smartphone size={32} className="text-white" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold mb-2">Activate Your PIN</h3>
-                  <p className="text-gray-600 mb-3">
-                    Dial <span className="font-mono font-bold">*123*PIN#</span> on your Lycamobile SIM
-                  </p>
-                  <button
-                    onClick={() => setShowActivationGuide(!showActivationGuide)}
-                    className="btn-primary"
-                  >
-                    How to Activate My PIN
-                  </button>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Activation Guide (Collapsible) */}

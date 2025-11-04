@@ -1,14 +1,69 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ChevronRight, Star, Check, MessageCircle, Phone, ShoppingCart, CreditCard, Database, Calendar, PhoneCall } from 'lucide-react';
+import { API_CONFIG } from '../config/api';
 
 const ProductPage = () => {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState('activate');
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Mock product data (in real app, fetch by ID from params)
-  const product = {
+  // Fetch product data from backend
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await fetch(`${API_CONFIG.BASE_URL}/public/bundles/${id}`);
+        const data = await response.json();
+        
+        if (data.success && data.bundle) {
+          // Transform backend data
+          const bundle = data.bundle;
+          setProduct({
+            id: bundle.id,
+            name: bundle.name,
+            type: bundle.productType.toLowerCase(),
+            badge: bundle.productType === 'ESIM' ? 'eSIM AVAILABLE' : 'INSTANT DELIVERY',
+            rating: 4.8,
+            reviews: 234,
+            price: parseFloat(bundle.basePrice),
+            originalPrice: bundle.discountPercentage && bundle.discountPercentage > 0 ? 
+                          parseFloat(bundle.basePrice) * (1 + bundle.discountPercentage / 100) : null,
+            data: bundle.dataAmount || 'N/A',
+            validity: bundle.validity || '30 days',
+            calls: 'Unlimited Norway',
+            description: bundle.description || `Works for all Lycamobile Norway SIMs. ${bundle.productType === 'ESIM' ? 'QR Code' : 'PIN'} delivered to your Email & WhatsApp instantly after payment.`,
+            features: bundle.metadata ? 
+                     Object.values(bundle.metadata).filter(val => val && val.trim() !== '') : 
+                     ['Unlimited national minutes', 'International calling', 'EU Roaming Data'],
+            delivery: bundle.productType === 'ESIM' ? 'Instant QR Code' : 'Instant Email Delivery',
+            stockQuantity: bundle.stockQuantity,
+            imageUrl: bundle.imageUrl
+          });
+        } else {
+          setError('Product not found');
+        }
+      } catch (err) {
+        console.error('Error fetching product:', err);
+        setError('Failed to load product details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchProduct();
+    }
+  }, [id]);
+
+  // Mock product data fallback
+  const mockProduct = {
     id: 1,
     name: 'Lycamobile 5GB ePIN',
     type: 'epin',
@@ -29,12 +84,48 @@ const ProductPage = () => {
   ];
 
   const handleBuyNow = () => {
-    navigate('/checkout');
+    // Pass product data to checkout page including type
+    navigate('/checkout', {
+      state: {
+        product: {
+          name: product.name,
+          price: product.price,
+          quantity: quantity,
+          discount: 0,
+          type: product.type, // 'esim' or 'epin'
+          validity: product.validity,
+          data: product.data
+        }
+      }
+    });
   };
 
   const handleAddToCart = () => {
     alert('Added to cart!');
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="animate-fadeIn min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-teal-600"></div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error || !product) {
+    return (
+      <div className="animate-fadeIn min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">{error || 'Product not found'}</h2>
+          <Link to="/bundles" className="btn-primary">
+            Back to Bundles
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fadeIn">
@@ -125,42 +216,78 @@ const ProductPage = () => {
               {/* Features List */}
               <div className="card bg-bgLight mb-6">
                 <ul className="space-y-3">
-                  <li className="flex items-start gap-3">
-                    <Check size={20} className="text-success mt-1 flex-shrink-0" />
-                    <span>Instant email delivery</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <Check size={20} className="text-success mt-1 flex-shrink-0" />
-                    <span>Valid for {product.validity}</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <Check size={20} className="text-success mt-1 flex-shrink-0" />
-                    <span>{product.calls}</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <Check size={20} className="text-success mt-1 flex-shrink-0" />
-                    <span>No expiry date on PIN code</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <Check size={20} className="text-success mt-1 flex-shrink-0" />
-                    <span>Easy activation: Dial *123*PIN#</span>
-                  </li>
+                  {product.features && product.features.length > 0 ? (
+                    product.features.map((feature, index) => (
+                      <li key={index} className="flex items-start gap-3">
+                        <Check size={20} className="text-success mt-1 flex-shrink-0" />
+                        <span>{feature}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <>
+                      <li className="flex items-start gap-3">
+                        <Check size={20} className="text-success mt-1 flex-shrink-0" />
+                        <span>Instant {product.type === 'esim' ? 'QR Code' : 'email'} delivery</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <Check size={20} className="text-success mt-1 flex-shrink-0" />
+                        <span>Valid for {product.validity}</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <Check size={20} className="text-success mt-1 flex-shrink-0" />
+                        <span>{product.calls}</span>
+                      </li>
+                      {product.type !== 'esim' && (
+                        <>
+                          <li className="flex items-start gap-3">
+                            <Check size={20} className="text-success mt-1 flex-shrink-0" />
+                            <span>No expiry date on PIN code</span>
+                          </li>
+                          <li className="flex items-start gap-3">
+                            <Check size={20} className="text-success mt-1 flex-shrink-0" />
+                            <span>Easy activation: Dial *123*PIN#</span>
+                          </li>
+                        </>
+                      )}
+                      {product.type === 'esim' && (
+                        <li className="flex items-start gap-3">
+                          <Check size={20} className="text-success mt-1 flex-shrink-0" />
+                          <span>Scan QR code to activate</span>
+                        </li>
+                      )}
+                    </>
+                  )}
                 </ul>
               </div>
 
-              {/* Quantity Selector */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold mb-2">Quantity</label>
-                <select 
-                  value={quantity}
-                  onChange={(e) => setQuantity(Number(e.target.value))}
-                  className="input-field max-w-xs"
-                >
-                  {[...Array(10)].map((_, i) => (
-                    <option key={i + 1} value={i + 1}>{i + 1}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Quantity Selector - Only for non-eSIM products */}
+              {product.type !== 'esim' && (
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold mb-2">Quantity</label>
+                  <select 
+                    value={quantity}
+                    onChange={(e) => setQuantity(Number(e.target.value))}
+                    className="input-field max-w-xs"
+                  >
+                    {[...Array(10)].map((_, i) => (
+                      <option key={i + 1} value={i + 1}>{i + 1}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* eSIM Notice */}
+              {product.type === 'esim' && (
+                <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                  <div className="flex items-start gap-3">
+                    <Check size={20} className="text-blue-600 mt-1 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold text-blue-900">One eSIM per order</p>
+                      <p className="text-sm text-blue-700">Each eSIM can only be activated once. Purchase additional eSIMs separately if needed.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* CTA Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 mb-8">

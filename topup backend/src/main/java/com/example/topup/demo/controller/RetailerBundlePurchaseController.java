@@ -119,9 +119,36 @@ public class RetailerBundlePurchaseController {
             response.put("data", inventory);
             
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
+            // Log the full error for debugging
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("success", false, "message", "Failed to fetch inventory: " + e.getMessage()));
+        } catch (Exception e) {
+            // Log the full error for debugging
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to fetch inventory: " + e.getMessage()));
+        }
+    }
+
+    // Clear retailer inventory (delete completed orders)
+    @DeleteMapping("/inventory/clear")
+    public ResponseEntity<?> clearInventory(Authentication authentication) {
+        try {
+            User retailer = getRetailerForDevelopment(authentication);
+            int deletedCount = retailerPurchaseService.clearRetailerInventory(retailer.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Inventory cleared successfully");
+            response.put("deletedOrders", deletedCount);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to clear inventory: " + e.getMessage()));
         }
     }
     

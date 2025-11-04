@@ -255,10 +255,19 @@ public class StockController {
     public ResponseEntity<Map<String, Object>> getStockUsageReport() {
         try {
             // Call the actual method that exists (no parameters)
-            Map<String, Object> report = stockService.getStockUsageStatistics();
-            return ResponseEntity.ok(report);
+            Map<String, Object> stats = stockService.getStockUsageStatistics();
+            
+            // Wrap response in 'statistics' property to match frontend expectations
+            Map<String, Object> response = new HashMap<>();
+            response.put("statistics", stats);
+            response.put("success", true);
+            
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 

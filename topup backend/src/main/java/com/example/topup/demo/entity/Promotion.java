@@ -6,6 +6,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.index.Indexed;
 import jakarta.validation.constraints.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -76,6 +77,10 @@ public class Promotion {
     // Featured and Display
     private boolean isFeatured = false;
     private String bannerImageUrl;
+    
+    @JsonProperty("bannerImage")
+    private String bannerImage; // Base64 encoded image data
+    
     private String termsAndConditions;
 
     @CreatedDate
@@ -421,6 +426,14 @@ public class Promotion {
 
     public void setBannerImageUrl(String bannerImageUrl) {
         this.bannerImageUrl = bannerImageUrl;
+    }
+
+    public String getBannerImage() {
+        return bannerImage;
+    }
+
+    public void setBannerImage(String bannerImage) {
+        this.bannerImage = bannerImage;
     }
 
     public String getTermsAndConditions() {

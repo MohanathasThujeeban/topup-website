@@ -34,6 +34,7 @@ public class RetailerPurchaseService {
 
     // Credit level definitions (NOK)
     private static final List<BigDecimal> CREDIT_LEVELS = Arrays.asList(
+        new BigDecimal("2000"),
         new BigDecimal("2500"),
         new BigDecimal("5000"),
         new BigDecimal("7500"),
@@ -108,6 +109,7 @@ public class RetailerPurchaseService {
 
     private String getLevelDescription(BigDecimal level) {
         int levelInt = level.intValue();
+        if (levelInt <= 2000) return "Entry Level - New retailer";
         if (levelInt <= 2500) return "Starter Level - Perfect for small retailers";
         if (levelInt <= 5000) return "Bronze Level - Growing business";
         if (levelInt <= 7500) return "Silver Level - Established retailer";
@@ -157,25 +159,48 @@ public class RetailerPurchaseService {
     private Map<String, Object> getLevelInfo(BigDecimal limit) {
         Map<String, Object> levelInfo = new HashMap<>();
         
-        // Find the matching level
+        // Find exact or closest matching level
+        BigDecimal matchedLevel = null;
+        
+        // First try exact match
         for (BigDecimal level : CREDIT_LEVELS) {
             if (limit.compareTo(level) == 0) {
-                levelInfo.put("amount", level);
-                levelInfo.put("name", "NOK " + String.format("%,d", level.intValue()));
-                levelInfo.put("description", getLevelDescription(level));
-                
-                // Find next level
-                int index = CREDIT_LEVELS.indexOf(level);
-                if (index < CREDIT_LEVELS.size() - 1) {
-                    BigDecimal nextLevel = CREDIT_LEVELS.get(index + 1);
-                    levelInfo.put("nextLevel", nextLevel);
-                    levelInfo.put("nextLevelName", "NOK " + String.format("%,d", nextLevel.intValue()));
-                } else {
-                    levelInfo.put("nextLevel", null);
-                    levelInfo.put("isMaxLevel", true);
-                }
-                
+                matchedLevel = level;
                 break;
+            }
+        }
+        
+        // If no exact match, find the closest level at or below the limit
+        if (matchedLevel == null) {
+            for (int i = CREDIT_LEVELS.size() - 1; i >= 0; i--) {
+                BigDecimal level = CREDIT_LEVELS.get(i);
+                if (limit.compareTo(level) >= 0) {
+                    matchedLevel = level;
+                    break;
+                }
+            }
+            
+            // If still no match (limit is below all levels), use the first level
+            if (matchedLevel == null && !CREDIT_LEVELS.isEmpty()) {
+                matchedLevel = CREDIT_LEVELS.get(0);
+            }
+        }
+        
+        // Build level info if we found a match
+        if (matchedLevel != null) {
+            levelInfo.put("amount", matchedLevel);
+            levelInfo.put("name", "NOK " + String.format("%,d", matchedLevel.intValue()));
+            levelInfo.put("description", getLevelDescription(matchedLevel));
+            
+            // Find next level
+            int index = CREDIT_LEVELS.indexOf(matchedLevel);
+            if (index < CREDIT_LEVELS.size() - 1) {
+                BigDecimal nextLevel = CREDIT_LEVELS.get(index + 1);
+                levelInfo.put("nextLevel", nextLevel);
+                levelInfo.put("nextLevelName", "NOK " + String.format("%,d", nextLevel.intValue()));
+            } else {
+                levelInfo.put("nextLevel", null);
+                levelInfo.put("isMaxLevel", true);
             }
         }
         
@@ -187,56 +212,79 @@ public class RetailerPurchaseService {
             return BigDecimal.ZERO;
         }
         
+        // Calculate usage based on usedCredit only (consistent with admin dashboard)
         return limit.getUsedCredit()
-                   .add(limit.getOutstandingAmount())
                    .multiply(new BigDecimal("100"))
                    .divide(limit.getCreditLimit(), 2, RoundingMode.HALF_UP);
     }
 
-    // Purchase bundles
+    // Direct purchase - no payment required, instant allocation
     @Transactional
     public Map<String, Object> purchaseBundles(String retailerId, RetailerPurchaseRequest request) {
-        // Get retailer limit
-        RetailerLimit limit = retailerLimitRepository.findByRetailer_Id(retailerId)
-                .orElseThrow(() -> new IllegalStateException("Retailer credit limit not configured. Please contact admin."));
+        // Get retailer limit (for tracking only, no credit check)
+        Optional<RetailerLimit> limitOpt = retailerLimitRepository.findByRetailer_Id(retailerId);
+        
+        if (limitOpt.isEmpty()) {
+            throw new IllegalStateException("Retailer not found. Please contact admin.");
+        }
+        
+        RetailerLimit limit = limitOpt.get();
 
-        // Check if retailer is active
-        if (limit.getStatus() != RetailerLimit.LimitStatus.ACTIVE) {
-            throw new IllegalStateException("Your account is not active. Status: " + limit.getStatus());
+        // Try to get product from Product table first
+        Optional<Product> productOpt = productRepository.findById(request.getProductId());
+        Product product;
+        StockPool stockPool = null;
+        boolean isFromStockPool = false;
+        
+        if (productOpt.isPresent()) {
+            // Product exists in Product table
+            product = productOpt.get();
+            
+            // Check if product is available
+            if (product.getStatus() != Product.ProductStatus.ACTIVE) {
+                throw new IllegalStateException("Product is not available for purchase");
+            }
+            
+            // Check stock in admin inventory
+            if (product.getStockQuantity() < request.getQuantity()) {
+                throw new IllegalStateException("Insufficient stock. Available: " + product.getStockQuantity());
+            }
+        } else {
+            // Product doesn't exist, try to find StockPool
+            stockPool = stockPoolRepository.findById(request.getProductId())
+                    .orElseThrow(() -> new NoSuchElementException("Product or Stock Pool not found with ID: " + request.getProductId()));
+            
+            // Check if stock pool is active
+            if (stockPool.getStatus() != StockPool.StockStatus.ACTIVE) {
+                throw new IllegalStateException("Stock pool is not available for purchase");
+            }
+            
+            // Check stock availability
+            if (stockPool.getAvailableQuantity() < request.getQuantity()) {
+                throw new IllegalStateException("Insufficient stock. Available: " + stockPool.getAvailableQuantity());
+            }
+            
+            // Convert StockPool to Product for processing
+            product = convertStockPoolToProduct(stockPool);
+            isFromStockPool = true;
         }
 
-        // Get product/bundle
-        Product product = productRepository.findById(request.getProductId())
-                .orElseThrow(() -> new NoSuchElementException("Product not found"));
-
-        // Check if product is available
-        if (product.getStatus() != Product.ProductStatus.ACTIVE) {
-            throw new IllegalStateException("Product is not available for purchase");
-        }
-
-        // Check stock
-        if (product.getStockQuantity() < request.getQuantity()) {
-            throw new IllegalStateException("Insufficient stock. Available: " + product.getStockQuantity());
-        }
-
-        // Calculate total amount
+        // Calculate total amount (for tracking purposes)
         BigDecimal unitPrice = product.getBasePrice();
         BigDecimal totalAmount = unitPrice.multiply(new BigDecimal(request.getQuantity()));
 
-        // Check credit availability
-        if (!limit.hasAvailableCredit(totalAmount)) {
-            throw new IllegalStateException(
-                String.format("Insufficient credit. Required: NOK %.2f, Available: NOK %.2f",
-                    totalAmount, limit.getAvailableCredit())
-            );
-        }
-
-        // Allocate PINs or eSIMs
+        // Allocate PINs or eSIMs from admin stock
         List<String> allocatedItems = new ArrayList<>();
-        if (product.getProductType() == Product.ProductType.EPIN) {
-            allocatedItems = allocatePins(product, request.getQuantity(), retailerId);
-        } else if (product.getProductType() == Product.ProductType.ESIM) {
-            allocatedItems = allocateEsims(product, request.getQuantity(), retailerId);
+        if (isFromStockPool) {
+            // Allocate from StockPool
+            allocatedItems = allocateFromStockPool(stockPool, request.getQuantity(), retailerId);
+        } else {
+            // Allocate from Product
+            if (product.getProductType() == Product.ProductType.EPIN) {
+                allocatedItems = allocatePins(product, request.getQuantity(), retailerId);
+            } else if (product.getProductType() == Product.ProductType.ESIM) {
+                allocatedItems = allocateEsims(product, request.getQuantity(), retailerId);
+            }
         }
 
         // Create order
@@ -244,9 +292,9 @@ public class RetailerPurchaseService {
         order.setRetailer(limit.getRetailer());
         order.setProduct(product);
         order.setQuantity(request.getQuantity());
-        order.setAmount(totalAmount); // Use setAmount instead of setTotalAmount
+        order.setAmount(totalAmount);
         order.setStatus(Order.OrderStatus.COMPLETED);
-        order.setPaymentMethod("INVOICE");
+        order.setPaymentMethod("DIRECT"); // No payment required
         order.setCreatedDate(LocalDateTime.now());
         
         // Store allocated items in order metadata
@@ -255,24 +303,36 @@ public class RetailerPurchaseService {
         }
         order.getMetadata().put("allocatedItems", String.join(",", allocatedItems));
         order.getMetadata().put("itemCount", String.valueOf(allocatedItems.size()));
+        order.getMetadata().put("purchaseType", "DIRECT_BUY");
+        order.getMetadata().put("sourceType", isFromStockPool ? "STOCK_POOL" : "PRODUCT");
+        if (isFromStockPool) {
+            order.getMetadata().put("stockPoolId", stockPool.getId());
+        }
         
         Order savedOrder = orderRepository.save(order);
 
-        // Use credit
+        // Update credit usage (for level tracking)
         limit.useCredit(totalAmount, savedOrder.getId(), 
-            String.format("Purchase: %s (x%d)", product.getName(), request.getQuantity()));
+            String.format("Direct Purchase: %s (x%d)", product.getName(), request.getQuantity()));
         
-        // Update stock
-        product.setStockQuantity(product.getStockQuantity() - request.getQuantity());
-        product.setSoldQuantity((product.getSoldQuantity() != null ? product.getSoldQuantity() : 0) + request.getQuantity());
-        productRepository.save(product);
+        // Reduce stock from admin inventory
+        if (isFromStockPool) {
+            // Update StockPool quantities
+            stockPool.setAvailableQuantity(stockPool.getAvailableQuantity() - request.getQuantity());
+            stockPool.setUsedQuantity((stockPool.getUsedQuantity() != null ? stockPool.getUsedQuantity() : 0) + request.getQuantity());
+            stockPoolRepository.save(stockPool);
+        } else {
+            // Update Product quantities
+            product.setStockQuantity(product.getStockQuantity() - request.getQuantity());
+            product.setSoldQuantity((product.getSoldQuantity() != null ? product.getSoldQuantity() : 0) + request.getQuantity());
+            productRepository.save(product);
+        }
 
-        // Save updated limit
+        // Save updated limit (for level calculation)
         RetailerLimit savedLimit = retailerLimitRepository.save(limit);
 
-        // Check for credit warnings
+        // Calculate usage percentage for level display
         BigDecimal usagePercent = calculateUsagePercentage(savedLimit);
-        checkAndSendCreditWarnings(savedLimit, usagePercent);
 
         // Prepare response
         Map<String, Object> response = new HashMap<>();
@@ -283,7 +343,8 @@ public class RetailerPurchaseService {
         response.put("allocatedItems", allocatedItems);
         response.put("remainingCredit", savedLimit.getAvailableCredit());
         response.put("usagePercentage", usagePercent);
-        response.put("message", "Purchase completed successfully");
+        response.put("currentLevel", getLevelInfo(savedLimit.getCreditLimit()));
+        response.put("message", "Purchase completed successfully! Items added to your inventory.");
 
         return response;
     }
@@ -308,6 +369,43 @@ public class RetailerPurchaseService {
         }
 
         productRepository.save(product);
+        return allocated;
+    }
+    
+    private List<String> allocateFromStockPool(StockPool stockPool, int quantity, String retailerId) {
+        List<String> allocated = new ArrayList<>();
+        List<StockPool.StockItem> items = stockPool.getItems();
+        
+        if (items == null || items.isEmpty()) {
+            throw new IllegalStateException("No items available in stock pool");
+        }
+        
+        // Filter available items
+        List<StockPool.StockItem> availableItems = items.stream()
+            .filter(item -> item.getStatus() == StockPool.StockItem.ItemStatus.AVAILABLE)
+            .limit(quantity)
+            .collect(java.util.stream.Collectors.toList());
+        
+        if (availableItems.size() < quantity) {
+            throw new IllegalStateException("Not enough items available in stock pool. Requested: " + quantity + ", Available: " + availableItems.size());
+        }
+        
+        // Allocate items
+        for (StockPool.StockItem item : availableItems) {
+            item.setStatus(StockPool.StockItem.ItemStatus.ASSIGNED);
+            item.setAssignedDate(LocalDateTime.now());
+            item.setAssignedToUserId(retailerId);
+            
+            // Add encrypted data to allocated list
+            if (stockPool.getStockType() == StockPool.StockType.EPIN) {
+                allocated.add(encryptPin(item.getItemData()));
+            } else if (stockPool.getStockType() == StockPool.StockType.ESIM) {
+                String qrCode = item.getQrCodeUrl() != null ? item.getQrCodeUrl() : item.getItemData();
+                allocated.add(encryptQrCode(qrCode));
+            }
+        }
+        
+        stockPoolRepository.save(stockPool);
         return allocated;
     }
 
@@ -410,8 +508,14 @@ public class RetailerPurchaseService {
         for (Order order : orders) {
             Map<String, Object> item = new HashMap<>();
             item.put("orderId", order.getId());
-            item.put("productName", order.getProduct().getName());
-            item.put("productType", order.getProduct().getProductType());
+            
+            // Use stored product information instead of accessing Product entity
+            // to avoid null pointer or lazy loading issues
+            item.put("productName", order.getProductName() != null ? order.getProductName() : 
+                (order.getProduct() != null ? order.getProduct().getName() : "Unknown Product"));
+            item.put("productType", order.getProductType() != null ? order.getProductType() : 
+                (order.getProduct() != null ? order.getProduct().getProductType().toString() : "UNKNOWN"));
+            
             item.put("quantity", order.getQuantity());
             item.put("totalAmount", order.getAmount()); // Use getAmount()
             item.put("purchaseDate", order.getCreatedDate());
@@ -430,5 +534,21 @@ public class RetailerPurchaseService {
         response.put("totalOrders", orders.size());
         
         return response;
+    }
+
+    // Clear retailer's completed inventory orders
+    @Transactional
+    public int clearRetailerInventory(String retailerId) {
+        // Find completed orders for this retailer
+        List<Order> ordersToDelete = orderRepository.findByRetailer_Id(retailerId).stream()
+            .filter(order -> order.getStatus() == Order.OrderStatus.COMPLETED)
+            .collect(Collectors.toList());
+
+        int count = ordersToDelete.size();
+        
+        // Delete the orders
+        orderRepository.deleteAll(ordersToDelete);
+        
+        return count;
     }
 }

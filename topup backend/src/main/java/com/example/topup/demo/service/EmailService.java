@@ -25,6 +25,12 @@ public class EmailService {
     @Autowired
     private JavaMailSender mailSender;
 
+    @Autowired
+    private JavaMailSender javaMailSender;
+
+    @Value("${spring.mail.username}")
+    private String fromEmail;
+
     @Value("${app.name:TopUp Pro}")
     private String appName;
 
@@ -236,6 +242,55 @@ public class EmailService {
         } catch (Exception e) {
             log.error("Failed to send business pending email", e);
             throw new RuntimeException("Failed to send business pending email", e);
+        }
+    }
+
+    /**
+     * Send eSIM approval email with QR code
+     */
+    public void sendEsimApprovalEmail(String toEmail, String customerName, String orderNumber, 
+                                      String esimSerial, String qrCodeBase64, String activationUrl) {
+        try {
+            String htmlContent = generateEsimApprovalHtml(
+                customerName, 
+                orderNumber, 
+                esimSerial, 
+                qrCodeBase64, 
+                activationUrl
+            );
+            
+            sendHtmlEmail(
+                toEmail,
+                "Your eSIM is Ready! - Order #" + orderNumber + " - " + appName,
+                htmlContent
+            );
+            log.info("eSIM approval email sent successfully to: {}", toEmail);
+        } catch (Exception e) {
+            log.error("Failed to send eSIM approval email to: {}", toEmail, e);
+            throw new RuntimeException("Failed to send eSIM approval email", e);
+        }
+    }
+
+    /**
+     * Send eSIM rejection email
+     */
+    public void sendEsimRejectionEmail(String toEmail, String customerName, String orderNumber, String reason) {
+        try {
+            String htmlContent = generateEsimRejectionHtml(
+                customerName, 
+                orderNumber, 
+                reason
+            );
+            
+            sendHtmlEmail(
+                toEmail,
+                "eSIM Order Update - Order #" + orderNumber + " - " + appName,
+                htmlContent
+            );
+            log.info("eSIM rejection email sent successfully to: {}", toEmail);
+        } catch (Exception e) {
+            log.error("Failed to send eSIM rejection email to: {}", toEmail, e);
+            throw new RuntimeException("Failed to send eSIM rejection email", e);
         }
     }
 
@@ -713,5 +768,320 @@ public class EmailService {
             log.error("Failed to send email to {}: {}", toEmail, e.getMessage());
             throw new RuntimeException("Failed to send email", e);
         }
+    }
+
+    /**
+     * Generate HTML for eSIM approval email with QR code
+     */
+    private String generateEsimApprovalHtml(String customerName, String orderNumber, 
+                                           String esimSerial, String qrCodeBase64, String activationUrl) {
+        return String.format("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Your eSIM is Ready!</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+                <div style="background: linear-gradient(135deg, #10b981 0%%, #059669 100%%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0; font-size: 28px;">✅ Your eSIM is Ready!</h1>
+                </div>
+                
+                <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                    <h2 style="color: #333; margin-bottom: 20px;">Hi %s!</h2>
+                    
+                    <div style="background: #d1fae5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <p style="margin: 0; color: #065f46; font-weight: bold;">
+                            🎉 Great news! Your eSIM order has been approved and is ready to activate!
+                        </p>
+                    </div>
+                    
+                    <div style="background: #f9fafb; border: 2px solid #e5e7eb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <h3 style="margin-top: 0; color: #1f2937; text-align: center;">📱 Order Details</h3>
+                        <p style="margin: 5px 0;"><strong>Order Number:</strong> #%s</p>
+                        <p style="margin: 5px 0;"><strong>eSIM Serial:</strong> <span style="font-family: monospace; background: #fee2e2; padding: 5px 10px; border-radius: 4px; color: #991b1b;">%s</span></p>
+                    </div>
+                    
+                    <div style="background: #eff6ff; border: 2px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                        <h3 style="margin-top: 0; color: #1e40af;">📲 Scan to Activate</h3>
+                        <p style="color: #1e3a8a; margin-bottom: 15px;">Scan this QR code with your device camera to activate your eSIM</p>
+                        <div style="background: white; padding: 20px; display: inline-block; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <img src="data:image/png;base64,%s" alt="eSIM QR Code" style="width: 250px; height: 250px; display: block;" />
+                        </div>
+                    </div>
+                    
+                    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <h3 style="margin-top: 0; color: #92400e;">📋 Activation Instructions</h3>
+                        <ol style="color: #78350f; margin: 10px 0; padding-left: 20px;">
+                            <li style="margin: 10px 0;"><strong>iPhone:</strong> Go to Settings → Cellular → Add eSIM → Use QR Code</li>
+                            <li style="margin: 10px 0;"><strong>Android:</strong> Go to Settings → Network & Internet → SIMs → Add eSIM → Scan QR Code</li>
+                            <li style="margin: 10px 0;">Point your camera at the QR code above</li>
+                            <li style="margin: 10px 0;">Follow the on-screen instructions to complete activation</li>
+                        </ol>
+                    </div>
+                    
+                    %s
+                    
+                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <p style="margin: 0; color: #166534; font-size: 14px;">
+                            ℹ️ <strong>Important:</strong> Save this email or take a screenshot of the QR code. You'll need it to activate your eSIM.
+                        </p>
+                    </div>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="%s/support" style="background: linear-gradient(135deg, #3b82f6 0%%, #2563eb 100%%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; box-shadow: 0 2px 8px rgba(59,130,246,0.3);">Need Help? Contact Support</a>
+                    </div>
+                    
+                    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+                    
+                    <p style="color: #6b7280; font-size: 14px; text-align: center; margin: 0;">
+                        Thank you for choosing %s!<br>
+                        Questions? Email us at <a href="mailto:%s" style="color: #3b82f6; text-decoration: none;">%s</a>
+                    </p>
+                </div>
+            </body>
+            </html>
+            """, 
+            customerName, 
+            orderNumber, 
+            esimSerial, 
+            qrCodeBase64,
+            activationUrl != null && !activationUrl.isEmpty() ? 
+                String.format("""
+                    <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <p style="margin: 5px 0; color: #991b1b;"><strong>Alternative Activation:</strong></p>
+                        <p style="margin: 5px 0; color: #7f1d1d; word-break: break-all;">
+                            <a href="%s" style="color: #dc2626; text-decoration: underline;">%s</a>
+                        </p>
+                    </div>
+                    """, activationUrl, activationUrl) : "",
+            appUrl,
+            appName,
+            supportEmail, 
+            supportEmail
+        );
+    }
+
+    /**
+     * Generate HTML for eSIM rejection email
+     */
+    private String generateEsimRejectionHtml(String customerName, String orderNumber, String reason) {
+        return String.format("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>eSIM Order Update</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+                <div style="background: linear-gradient(135deg, #ef4444 0%%, #dc2626 100%%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0; font-size: 28px;">⚠️ eSIM Order Update</h1>
+                </div>
+                
+                <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                    <h2 style="color: #333; margin-bottom: 20px;">Hi %s,</h2>
+                    
+                    <p style="margin-bottom: 20px;">
+                        We regret to inform you that your eSIM order has not been approved at this time.
+                    </p>
+                    
+                    <div style="background: #f9fafb; border: 2px solid #e5e7eb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <h3 style="margin-top: 0; color: #1f2937;">📋 Order Details</h3>
+                        <p style="margin: 5px 0;"><strong>Order Number:</strong> #%s</p>
+                        <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: #dc2626; font-weight: bold;">Not Approved</span></p>
+                    </div>
+                    
+                    <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <h3 style="margin-top: 0; color: #991b1b;">Reason for Rejection:</h3>
+                        <p style="color: #7f1d1d; margin: 10px 0;">%s</p>
+                    </div>
+                    
+                    <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <h3 style="margin-top: 0; color: #1e40af;">💡 What You Can Do</h3>
+                        <ul style="color: #1e3a8a; margin: 10px 0; padding-left: 20px;">
+                            <li style="margin: 8px 0;">Review the rejection reason above</li>
+                            <li style="margin: 8px 0;">Contact our support team for clarification</li>
+                            <li style="margin: 8px 0;">Once the issue is resolved, you can place a new order</li>
+                        </ul>
+                    </div>
+                    
+                    <p style="margin: 20px 0;">
+                        If you have any questions or need assistance, our support team is here to help.
+                    </p>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="%s/support" style="background: linear-gradient(135deg, #3b82f6 0%%, #2563eb 100%%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; box-shadow: 0 2px 8px rgba(59,130,246,0.3);">Contact Support</a>
+                    </div>
+                    
+                    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+                    
+                    <p style="color: #6b7280; font-size: 14px; text-align: center; margin: 0;">
+                        We apologize for any inconvenience.<br>
+                        Questions? Email us at <a href="mailto:%s" style="color: #3b82f6; text-decoration: none;">%s</a>
+                    </p>
+                </div>
+            </body>
+            </html>
+            """, 
+            customerName, 
+            orderNumber, 
+            reason,
+            appUrl,
+            supportEmail, 
+            supportEmail
+        );
+    }
+
+    // Send ePIN delivery email
+    public void sendEpinDeliveryEmail(String toEmail, String customerName, String orderNumber, 
+                                      String pinCode, String productName, String validity) {
+        try {
+            String htmlContent = generateEpinDeliveryHtml(
+                customerName, 
+                orderNumber, 
+                pinCode, 
+                productName, 
+                validity
+            );
+            
+            MimeMessage message = javaMailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("🎉 Your Lycamobile ePIN - Ready to Use!");
+            helper.setText(htmlContent, true);
+            
+            javaMailSender.send(message);
+            System.out.println("✅ ePIN delivery email sent successfully to: " + toEmail);
+        } catch (Exception e) {
+            System.err.println("❌ Failed to send ePIN delivery email: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private String generateEpinDeliveryHtml(String customerName, String orderNumber, 
+                                            String pinCode, String productName, String validity) {
+        String appUrl = "http://localhost:3000";
+        String supportEmail = "support@topuppro.com";
+        
+        return String.format("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+                    .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                    .header { background: linear-gradient(135deg, #10b981 0%%, #059669 100%%); padding: 40px 20px; text-align: center; }
+                    .header-icon { font-size: 60px; margin-bottom: 10px; }
+                    .header h1 { color: white; margin: 0; font-size: 28px; font-weight: 600; }
+                    .content { padding: 40px 30px; }
+                    .greeting { font-size: 18px; color: #333; margin-bottom: 20px; }
+                    .success-message { background: #d1fae5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 8px; }
+                    .success-message p { color: #065f46; margin: 0; font-weight: 500; }
+                    .pin-box { background: linear-gradient(135deg, #f0fdf4 0%%, #dcfce7 100%%); border: 2px dashed #10b981; border-radius: 12px; padding: 25px; margin: 25px 0; text-align: center; }
+                    .pin-label { color: #059669; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+                    .pin-code { font-size: 32px; font-weight: bold; color: #047857; font-family: 'Courier New', monospace; letter-spacing: 3px; margin: 15px 0; padding: 15px; background: white; border-radius: 8px; }
+                    .order-details { background: #f9fafb; border-radius: 12px; padding: 20px; margin: 25px 0; }
+                    .detail-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
+                    .detail-row:last-child { border-bottom: none; }
+                    .detail-label { color: #6b7280; font-weight: 500; }
+                    .detail-value { color: #1f2937; font-weight: 600; }
+                    .instructions { background: #eff6ff; border-radius: 12px; padding: 20px; margin: 25px 0; }
+                    .instructions h3 { color: #1e40af; margin-top: 0; font-size: 18px; }
+                    .instruction-step { color: #1e40af; margin: 12px 0; padding-left: 25px; position: relative; }
+                    .instruction-step:before { content: "→"; position: absolute; left: 0; font-weight: bold; }
+                    .warning-box { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0; }
+                    .warning-box p { color: #92400e; margin: 5px 0; font-size: 14px; }
+                    .cta-button { display: inline-block; background: linear-gradient(135deg, #10b981 0%%, #059669 100%%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; margin: 20px 0; transition: transform 0.2s; }
+                    .cta-button:hover { transform: translateY(-2px); }
+                    .footer { background: #f9fafb; padding: 30px; text-align: center; color: #6b7280; font-size: 14px; }
+                    .footer a { color: #059669; text-decoration: none; font-weight: 600; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <div class="header-icon">🎉</div>
+                        <h1>Your ePIN is Ready!</h1>
+                    </div>
+                    
+                    <div class="content">
+                        <div class="greeting">Hi %s,</div>
+                        
+                        <div class="success-message">
+                            <p>✅ Your payment was successful! Your Lycamobile ePIN has been delivered instantly.</p>
+                        </div>
+                        
+                        <div class="pin-box">
+                            <div class="pin-label">Your ePIN Code</div>
+                            <div class="pin-code">%s</div>
+                            <p style="color: #059669; margin: 10px 0; font-size: 14px;">
+                                Keep this PIN safe and secure
+                            </p>
+                        </div>
+                        
+                        <div class="order-details">
+                            <h3 style="margin-top: 0; color: #1f2937;">Order Details</h3>
+                            <div class="detail-row">
+                                <span class="detail-label">Order Number:</span>
+                                <span class="detail-value">%s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Product:</span>
+                                <span class="detail-value">%s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Validity:</span>
+                                <span class="detail-value">%s</span>
+                            </div>
+                        </div>
+                        
+                        <div class="instructions">
+                            <h3>📱 How to Use Your ePIN</h3>
+                            <div class="instruction-step">Dial <strong>*131*</strong> + <strong>your PIN code</strong> + <strong>#</strong></div>
+                            <div class="instruction-step">Press the call button</div>
+                            <div class="instruction-step">Wait for confirmation SMS</div>
+                            <div class="instruction-step">Your bundle is activated!</div>
+                            <p style="color: #1e40af; margin-top: 15px; font-size: 14px;">
+                                <strong>Example:</strong> *131*%s#
+                            </p>
+                        </div>
+                        
+                        <div class="warning-box">
+                            <p><strong>⚠️ Important:</strong></p>
+                            <p>• Use this PIN only once to activate your bundle</p>
+                            <p>• Do not share your PIN with anyone</p>
+                            <p>• Valid for %s from purchase date</p>
+                        </div>
+                        
+                        <div style="text-align: center;">
+                            <a href="%s" class="cta-button">View My Orders</a>
+                        </div>
+                    </div>
+                    
+                    <div class="footer">
+                        <p>Need help? Contact us at <a href="mailto:%s">%s</a></p>
+                        <p style="margin-top: 10px;">Thank you for choosing TopUp Pro! 💚</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """, 
+            customerName, 
+            pinCode,
+            orderNumber,
+            productName,
+            validity,
+            pinCode,
+            validity,
+            appUrl,
+            supportEmail,
+            supportEmail
+        );
     }
 }

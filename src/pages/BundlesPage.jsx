@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Database, Calendar, Phone, Zap, Smartphone, Filter, Search, CheckCircle } from 'lucide-react';
+import { API_CONFIG } from '../config/api';
 
-const bundles = [
+const staticBundles = [
   {
     id: 1,
     name: 'Lyca Smart S',
@@ -152,6 +153,77 @@ const bundles = [
 const BundlesPage = () => {
   const [searchParams] = useSearchParams();
   const [activeFilter, setActiveFilter] = useState('all');
+  const [bundles, setBundles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch bundles from backend
+  useEffect(() => {
+    const fetchBundles = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        console.log('Fetching bundles from:', `${API_CONFIG.BASE_URL}/public/bundles`);
+        const response = await fetch(`${API_CONFIG.BASE_URL}/public/bundles`);
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('Fetched data:', data);
+        
+        if (data.success && data.bundles && data.bundles.length > 0) {
+          // Transform backend data to match frontend structure
+          const transformedBundles = data.bundles.map(bundle => ({
+            id: bundle.id,
+            name: bundle.name,
+            type: bundle.productType.toLowerCase(),
+            badge: bundle.productType === 'ESIM' ? 'eSIM available' : 
+                   (bundle.discountPercentage && bundle.discountPercentage > 0 ? `kr${bundle.discountPercentage} Discount` : null),
+            data: bundle.dataAmount || 'N/A',
+            validity: bundle.validity || '30 days',
+            price: parseFloat(bundle.basePrice),
+            originalPrice: bundle.discountPercentage && bundle.discountPercentage > 0 ? 
+                          parseFloat(bundle.basePrice) * (1 + bundle.discountPercentage / 100) : null,
+            discount: bundle.discountPercentage && bundle.discountPercentage > 0 ? 
+                     `${bundle.discountPercentage}% Discount` : null,
+            features: bundle.metadata ? 
+                     Object.values(bundle.metadata).filter(val => val && val.trim() !== '') : 
+                     ['Unlimited national minutes', 'International calling', 'EU Roaming Data'],
+            delivery: bundle.productType === 'ESIM' ? 'Instant QR Code' : 'Instant Email Delivery',
+            note: bundle.productType === 'ESIM' ? 'Scan QR code to activate' : null,
+            description: bundle.description,
+            imageUrl: bundle.imageUrl,
+            stockQuantity: bundle.actualStockAvailable || bundle.stockQuantity || 0,
+            hasStock: bundle.hasStock !== undefined ? bundle.hasStock : (bundle.stockQuantity > 0),
+            isFeatured: bundle.featured,
+            stockPoolId: bundle.stockPoolId,
+            stockPoolName: bundle.stockPoolName
+          }));
+          
+          console.log('Transformed bundles:', transformedBundles);
+          setBundles(transformedBundles);
+        } else {
+          // No bundles from backend - show empty state
+          console.log('No bundles returned from API - database may be empty');
+          setBundles([]);
+          setError('No products found in database. Please add products via Admin Dashboard.');
+        }
+      } catch (err) {
+        console.error('Error fetching bundles:', err);
+        setError('Failed to connect to server: ' + err.message);
+        // Don't fallback to static bundles - show error instead
+        setBundles([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBundles();
+  }, []);
 
   // Read filter from URL on component mount
   useEffect(() => {
@@ -167,6 +239,11 @@ const BundlesPage = () => {
     if (activeFilter === 'esim') return bundle.type === 'esim';
     return true;
   });
+
+  console.log('Active Filter:', activeFilter);
+  console.log('Total Bundles:', bundles.length);
+  console.log('Filtered Bundles:', filteredBundles.length);
+  console.log('Bundles:', bundles);
 
   return (
     <div className="animate-fadeIn">
@@ -256,8 +333,35 @@ const BundlesPage = () => {
           </div>
 
           {/* Bundle Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredBundles.map((bundle) => (
+          {loading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-teal-600"></div>
+            </div>
+          ) : error ? (
+            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-6 text-center">
+              <p className="text-yellow-800 mb-2">{error}</p>
+            </div>
+          ) : filteredBundles.length === 0 ? (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-8 text-center">
+              <Smartphone size={48} className="mx-auto mb-4 text-blue-400" />
+              <h3 className="text-xl font-bold text-gray-800 mb-2">
+                No {activeFilter === 'esim' ? 'eSIM' : activeFilter === 'epin' ? 'E-PIN' : ''} bundles found
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {activeFilter === 'esim' 
+                  ? 'No eSIM bundles are currently available. Please check back later or contact support.'
+                  : 'No bundles match your current filter. Try selecting a different filter.'}
+              </p>
+              <button 
+                onClick={() => setActiveFilter('all')}
+                className="btn-primary"
+              >
+                View All Bundles
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {filteredBundles.map((bundle) => (
               <div key={bundle.id} className="relative bg-white rounded-3xl border-2 border-gray-200 hover:border-blue-300 hover:shadow-xl transition-all duration-300 overflow-hidden group">
                 {/* Discount Badge */}
                 {bundle.badge && (
@@ -269,6 +373,22 @@ const BundlesPage = () => {
                       'bg-gradient-to-r from-gray-500 to-gray-600'
                     }`}>
                       {bundle.badge}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Stock Indicator */}
+                {!bundle.hasStock && (
+                  <div className="absolute top-4 right-4 z-10">
+                    <div className="px-3 py-1 rounded-full text-xs font-bold text-white bg-red-500">
+                      Out of Stock
+                    </div>
+                  </div>
+                )}
+                {bundle.hasStock && bundle.type !== 'esim' && bundle.stockQuantity <= 5 && (
+                  <div className="absolute top-4 right-4 z-10">
+                    <div className="px-3 py-1 rounded-full text-xs font-bold text-white bg-orange-500">
+                      Only {bundle.stockQuantity} left
                     </div>
                   </div>
                 )}
@@ -303,6 +423,23 @@ const BundlesPage = () => {
                     ))}
                   </div>
 
+                  {/* Stock Availability for eSIM */}
+                  {bundle.type === 'esim' && (
+                    <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Database size={16} className="text-blue-600" />
+                          <span className="text-sm font-semibold text-blue-900">
+                            {bundle.stockQuantity > 0 
+                              ? '1 eSIM available' 
+                              : 'Out of stock'}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-blue-700 mt-1">One eSIM per purchase</p>
+                    </div>
+                  )}
+
                   {/* View More Link */}
                   <div className="text-center mb-4">
                     <Link 
@@ -316,20 +453,35 @@ const BundlesPage = () => {
                   {/* Action Buttons */}
                   <div className="flex gap-2">
                     <button 
-                      className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-2xl font-medium text-sm hover:bg-gray-50 transition-colors"
+                      className={`flex-1 py-2 border rounded-2xl font-medium text-sm transition-colors ${
+                        bundle.hasStock 
+                          ? 'border-gray-300 text-gray-700 hover:bg-gray-50' 
+                          : 'border-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
                       onClick={() => {
-                        // Add to basket functionality
-                        alert(`Added ${bundle.name} to basket!`);
+                        if (bundle.hasStock) {
+                          alert(`Added ${bundle.name} to basket!`);
+                        }
                       }}
+                      disabled={!bundle.hasStock}
                     >
                       Add to basket
                     </button>
-                    <Link
-                      to={`/product/${bundle.id}`}
-                      className="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-2xl font-medium text-sm text-center transition-colors"
-                    >
-                      Buy now
-                    </Link>
+                    {bundle.hasStock ? (
+                      <Link
+                        to={`/product/${bundle.id}`}
+                        className="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-2xl font-medium text-sm text-center transition-colors"
+                      >
+                        Buy now
+                      </Link>
+                    ) : (
+                      <button
+                        className="flex-1 py-2 bg-gray-300 text-gray-500 rounded-2xl font-medium text-sm cursor-not-allowed"
+                        disabled
+                      >
+                        Out of Stock
+                      </button>
+                    )}
                   </div>
 
                   {/* Delivery Info */}
@@ -341,7 +493,8 @@ const BundlesPage = () => {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </div>
       </section>
 

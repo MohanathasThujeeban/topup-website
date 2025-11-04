@@ -1,7 +1,9 @@
 package com.example.topup.demo.service;
 
 import com.example.topup.demo.entity.Product;
+import com.example.topup.demo.entity.User;
 import com.example.topup.demo.repository.ProductRepository;
+import com.example.topup.demo.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,6 +19,9 @@ public class BundleService {
 
     @Autowired
     private ProductRepository productRepository;
+    
+    @Autowired
+    private UserRepository userRepository;
 
     // Get all bundles/products
     public List<Product> getAllBundles() {
@@ -156,7 +161,23 @@ public class BundleService {
     public Map<String, Object> getBundleStatistics() {
         List<Product> allBundles = productRepository.findAll();
         
+        // Count total users (all account types)
+        long totalUsers = userRepository.count();
+        
+        // Count active users (users with ACTIVE status)
+        long activeUsers = userRepository.countByAccountStatus(User.AccountStatus.ACTIVE);
+        
+        // Count pending business approvals
+        long pendingApprovals = userRepository.countByAccountStatus(User.AccountStatus.PENDING_BUSINESS_APPROVAL);
+        
         Map<String, Object> stats = new HashMap<>();
+        
+        // User statistics
+        stats.put("totalUsers", totalUsers);
+        stats.put("activeUsers", activeUsers);
+        stats.put("pendingApprovals", pendingApprovals);
+        
+        // Bundle statistics
         stats.put("totalBundles", allBundles.size());
         stats.put("activeBundles", allBundles.stream().filter(p -> p.getStatus() == Product.ProductStatus.ACTIVE).count());
         stats.put("totalRevenue", allBundles.stream()
@@ -169,7 +190,12 @@ public class BundleService {
                 .filter(p -> p.getStockQuantity() != null && p.getStockQuantity() < 10)
                 .count());
         
-        return stats;
+        // Wrap in success response format
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("data", stats);
+        
+        return response;
     }
 
     // Get top selling bundles

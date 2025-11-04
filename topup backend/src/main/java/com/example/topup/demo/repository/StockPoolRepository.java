@@ -17,6 +17,8 @@ public interface StockPoolRepository extends MongoRepository<StockPool, String> 
     
     List<StockPool> findByStatus(StockPool.StockStatus status);
     
+    List<StockPool> findByStockTypeAndStatus(StockPool.StockType stockType, StockPool.StockStatus status);
+    
     Optional<StockPool> findByProductIdAndStockType(String productId, StockPool.StockType stockType);
     
     @Query("{ 'availableQuantity' : { $gt: 0 } }")

@@ -14,6 +14,7 @@ import AdminLoadingScreen from '../components/AdminLoadingScreen';
 import StockManagement from '../components/StockManagement';
 import PromotionCampaignManager from '../components/PromotionCampaignManager';
 import RetailerCreditManagement from '../components/RetailerCreditManagement';
+import EsimApprovals from '../components/EsimApprovals';
 import { QRCodeSVG } from 'qrcode.react';
 
 // API Base URL - should match AuthContext
@@ -34,8 +35,6 @@ export default function AdminDashboard() {
   const [bundles, setBundles] = useState([]);
   const [stockBundles, setStockBundles] = useState([]); // CSV uploaded bundles (EPIN only)
   const [esimBundles, setEsimBundles] = useState([]); // CSV uploaded eSIM bundles
-  const [selectedBundle, setSelectedBundle] = useState(null); // For viewing PINs
-  const [showPinModal, setShowPinModal] = useState(false);
   const [selectedEsim, setSelectedEsim] = useState(null); // For QR code modal
   const [showQrModal, setShowQrModal] = useState(false);
   const qrCodeRef = useRef(null);
@@ -43,6 +42,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting', 'connected', 'offline'
   const [sidebarOpen, setSidebarOpen] = useState(true); // Sidebar state
+  const [selectedPriceFilter, setSelectedPriceFilter] = useState(null); // For price filtering
 
   // Fetch data from backend
   useEffect(() => {
@@ -631,30 +631,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // View encrypted PINs for a bundle
-  const viewBundlePins = async (bundleId) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/admin/stock/pools/${bundleId}/items/decrypted`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSelectedBundle(data);
-        setShowPinModal(true);
-      } else {
-        alert('Failed to load PINs');
-      }
-    } catch (error) {
-      console.error('Error fetching bundle PINs:', error);
-      alert('Error loading PINs');
-    }
-  };
-
   // Delete individual PIN item from Bundle Management
   const handleDeleteItem = async (poolId, itemId, itemData) => {
     if (!confirm(`Are you sure you want to delete PIN ${itemData}?`)) {
@@ -682,42 +658,6 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error deleting PIN:', error);
       alert('Failed to delete PIN');
-    }
-  };
-
-  // Edit individual PIN item from Bundle Management
-  const handleEditItem = async (poolId, item) => {
-    const newPrice = prompt('Enter new price:', item.price || '');
-    if (newPrice === null) return; // User cancelled
-
-    const newNotes = prompt('Enter new notes:', item.notes || '');
-    if (newNotes === null) return; // User cancelled
-
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/admin/stock/pools/${poolId}/items/${item.itemId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          price: newPrice,
-          notes: newNotes
-        })
-      });
-
-      if (response.ok) {
-        alert('PIN updated successfully!');
-        // Refresh the bundle data
-        fetchStockBundles();
-      } else {
-        const error = await response.json();
-        alert(`Failed to update PIN: ${error.message || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Error updating PIN:', error);
-      alert('Failed to update PIN');
     }
   };
 
@@ -1171,7 +1111,35 @@ export default function AdminDashboard() {
     </div>
   );
 
-  const renderBundles = () => (
+  // Helper function to get unique prices from stock bundles
+  const getUniquePrices = () => {
+    const prices = new Set();
+    stockBundles.forEach(bundle => {
+      if (bundle.price) {
+        prices.add(bundle.price);
+      }
+    });
+    return Array.from(prices).sort((a, b) => a - b);
+  };
+
+  // Helper function to get bundles by price
+  const getBundlesByPrice = (price) => {
+    if (!price) return stockBundles;
+    return stockBundles.filter(bundle => bundle.price === price);
+  };
+
+  // Helper function to get bundle count by price
+  const getBundleCountByPrice = (price) => {
+    return stockBundles.filter(bundle => bundle.price === price).length;
+  };
+
+  const renderBundles = () => {
+    const uniquePrices = getUniquePrices();
+    const filteredBundles = selectedPriceFilter 
+      ? getBundlesByPrice(selectedPriceFilter) 
+      : stockBundles;
+
+    return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
@@ -1257,6 +1225,56 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Price Category Filter Cards */}
+      {uniquePrices.length > 0 && (
+        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-6 border border-indigo-100">
+          <h4 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <Filter size={16} className="text-indigo-600" />
+            Filter by Price Category
+          </h4>
+          <div className="flex flex-wrap gap-3">
+            {/* All Bundles Card */}
+            <button
+              onClick={() => setSelectedPriceFilter(null)}
+              className={`px-6 py-4 rounded-xl transition-all duration-200 transform hover:scale-105 ${
+                selectedPriceFilter === null
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+              }`}
+            >
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-lg font-bold">All Bundles</span>
+                <span className="text-xs opacity-80">{stockBundles.length} items</span>
+              </div>
+            </button>
+
+            {/* Price Category Cards */}
+            {uniquePrices.map((price) => (
+              <button
+                key={price}
+                onClick={() => setSelectedPriceFilter(price)}
+                className={`px-6 py-4 rounded-xl transition-all duration-200 transform hover:scale-105 ${
+                  selectedPriceFilter === price
+                    ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                }`}
+              >
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-lg font-bold">{price} NOK</span>
+                  <span className="text-xs opacity-80">{getBundleCountByPrice(price)} bundles</span>
+                </div>
+              </button>
+            ))}
+          </div>
+          {selectedPriceFilter && (
+            <div className="mt-4 flex items-center gap-2 text-sm text-indigo-700">
+              <CheckCircle size={14} />
+              <span>Showing {filteredBundles.length} bundles at {selectedPriceFilter} NOK</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* CSV Stock Bundles Section */}
       {/* CSV Uploaded Data Table - Individual PIN Items (EPIN Only) */}
       <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
@@ -1265,7 +1283,7 @@ export default function AdminDashboard() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 <Database className="text-purple-600" size={20} />
-                CSV Uploaded PIN Bundles ({stockBundles?.length || 0})
+                CSV Uploaded PIN Bundles ({filteredBundles?.length || 0})
               </h3>
               <p className="text-sm text-gray-500 mt-1">Individual PIN items from your CSV uploads (eSIM items excluded, see eSIM Management tab)</p>
             </div>
@@ -1293,8 +1311,8 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {stockBundles && stockBundles.length > 0 ? (
-                stockBundles.map((item, index) => (
+              {filteredBundles && filteredBundles.length > 0 ? (
+                filteredBundles.map((item, index) => (
                   <tr key={item.itemId || index} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -1349,20 +1367,6 @@ export default function AdminDashboard() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button 
-                        onClick={() => viewBundlePins(item.poolId)}
-                        className="text-indigo-600 hover:text-indigo-900 mr-3"
-                        title="View all PINs in this pool"
-                      >
-                        <Eye size={16} />
-                      </button>
-                      <button 
-                        onClick={() => handleEditItem(item.poolId, item)}
-                        className="text-blue-600 hover:text-blue-900 mr-3"
-                        title="Edit this PIN"
-                      >
-                        <Edit size={16} />
-                      </button>
-                      <button 
                         onClick={() => handleDeleteItem(item.poolId, item.itemId, item.itemData)}
                         className="text-red-600 hover:text-red-900"
                         title="Delete this PIN"
@@ -1392,7 +1396,8 @@ export default function AdminDashboard() {
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderEsimManagement = () => (
     <div className="space-y-6">
@@ -1513,17 +1518,8 @@ export default function AdminDashboard() {
                       <div className="text-sm font-mono text-gray-900">{item.serialNumber || 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleViewQrCode(item)}
-                          className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                          title="View QR Code"
-                        >
-                          <QrCode size={20} />
-                        </button>
-                        <div className="text-xs text-gray-500">
-                          Click to view
-                        </div>
+                      <div className="text-sm text-gray-500">
+                        Available
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -1553,36 +1549,13 @@ export default function AdminDashboard() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center gap-2">
-                        <button 
-                          onClick={() => handleViewQrCode(item)}
-                          className="text-green-600 hover:text-green-900"
-                          title="View QR Code & Share"
-                        >
-                          <QrCode size={16} />
-                        </button>
-                        <button 
-                          onClick={() => viewBundlePins(item.poolId)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                          title="View all eSIMs in this pool"
-                        >
-                          <Eye size={16} />
-                        </button>
-                        <button 
-                          onClick={() => handleEditItem(item.poolId, item)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="Edit this eSIM"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteItem(item.poolId, item.itemId, item.itemData)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete this eSIM"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                      <button 
+                        onClick={() => handleDeleteItem(item.poolId, item.itemId, item.itemData)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Delete this eSIM"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -1608,27 +1581,20 @@ export default function AdminDashboard() {
     </div>
   );
 
-  const renderUserManagement = () => (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
-        <div className="flex gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-            <input
-              type="text"
-              placeholder="Search users..."
-              className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-          <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2">
-            <RefreshCw size={16} />
-            Refresh
-          </button>
-        </div>
-      </div>
+  const renderUserManagement = () => {
+    // Categorize users
+    const activePersonalUsers = users.filter(u => u.accountType === 'PERSONAL' && u.accountStatus === 'ACTIVE');
+    const activeBusinessUsers = users.filter(u => u.accountType === 'BUSINESS' && u.accountStatus === 'ACTIVE');
+    const pendingVerificationUsers = users.filter(u => u.accountStatus === 'PENDING_VERIFICATION');
+    const pendingBusinessApprovalUsers = users.filter(u => u.accountStatus === 'PENDING_BUSINESS_APPROVAL');
+    const suspendedUsers = users.filter(u => u.accountStatus === 'SUSPENDED' || u.accountStatus === 'DEACTIVATED');
 
+    const renderUserTable = (userList, title, description, emptyMessage) => (
       <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <h4 className="text-md font-semibold text-gray-900">{title}</h4>
+          {description && <p className="text-sm text-gray-500 mt-1">{description}</p>}
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead className="bg-gray-50">
@@ -1642,71 +1608,78 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {users && users.length > 0 ? (
-                users.map((user) => (
+              {userList && userList.length > 0 ? (
+                userList.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                          <User size={20} className="text-indigo-600" />
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          user.accountType === 'BUSINESS' ? 'bg-purple-100' : 'bg-indigo-100'
+                        }`}>
+                          {user.accountType === 'BUSINESS' ? 
+                            <Building size={20} className="text-purple-600" /> : 
+                            <User size={20} className="text-indigo-600" />
+                          }
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">{user.firstName} {user.lastName}</div>
                           <div className="text-sm text-gray-500">{user.email}</div>
                         </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      user.accountType === 'BUSINESS' 
-                        ? 'bg-purple-100 text-purple-800'
-                        : 'bg-blue-100 text-blue-800'
-                    }`}>
-                      {user.accountType === 'BUSINESS' ? <Building size={12} className="mr-1" /> : <User size={12} className="mr-1" />}
-                      {user.accountType}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      user.accountStatus === 'ACTIVE' 
-                        ? 'bg-green-100 text-green-800'
-                        : user.accountStatus === 'PENDING_BUSINESS_APPROVAL'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {user.accountStatus === 'ACTIVE' && <CheckCircle size={12} className="mr-1" />}
-                      {user.accountStatus === 'PENDING_BUSINESS_APPROVAL' && <Clock size={12} className="mr-1" />}
-                      {user.accountStatus === 'SUSPENDED' && <XCircle size={12} className="mr-1" />}
-                      {user.accountStatus.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(user.createdDate).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.lastLoginDate ? new Date(user.lastLoginDate).toLocaleDateString() : 'Never'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex items-center gap-2">
-                      <button className="text-indigo-600 hover:text-indigo-900">
-                        <Eye size={16} />
-                      </button>
-                      <button className="text-green-600 hover:text-green-900">
-                        <Edit size={16} />
-                      </button>
-                      <button className="text-red-600 hover:text-red-900">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        user.accountType === 'BUSINESS' 
+                          ? 'bg-purple-100 text-purple-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {user.accountType === 'BUSINESS' ? <Building size={12} className="mr-1" /> : <User size={12} className="mr-1" />}
+                        {user.accountType}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        user.accountStatus === 'ACTIVE' 
+                          ? 'bg-green-100 text-green-800'
+                          : user.accountStatus === 'PENDING_BUSINESS_APPROVAL'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : user.accountStatus === 'PENDING_VERIFICATION'
+                          ? 'bg-orange-100 text-orange-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {user.accountStatus === 'ACTIVE' && <CheckCircle size={12} className="mr-1" />}
+                        {user.accountStatus === 'PENDING_BUSINESS_APPROVAL' && <Clock size={12} className="mr-1" />}
+                        {user.accountStatus === 'PENDING_VERIFICATION' && <AlertCircle size={12} className="mr-1" />}
+                        {(user.accountStatus === 'SUSPENDED' || user.accountStatus === 'DEACTIVATED') && <XCircle size={12} className="mr-1" />}
+                        {user.accountStatus.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(user.createdDate).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {user.lastLoginDate ? new Date(user.lastLoginDate).toLocaleDateString() : 'Never'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex items-center gap-2">
+                        <button className="text-indigo-600 hover:text-indigo-900" title="View Details">
+                          <Eye size={16} />
+                        </button>
+                        <button className="text-green-600 hover:text-green-900" title="Edit User">
+                          <Edit size={16} />
+                        </button>
+                        <button className="text-red-600 hover:text-red-900" title="Delete User">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
+                  <td colSpan={6} className="px-6 py-8 text-center">
                     <User size={32} className="text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">No users found</p>
-                    <p className="text-sm text-gray-400">User data will appear here once backend is connected</p>
+                    <p className="text-gray-500">{emptyMessage}</p>
                   </td>
                 </tr>
               )}
@@ -1714,8 +1687,135 @@ export default function AdminDashboard() {
           </table>
         </div>
       </div>
-    </div>
-  );
+    );
+
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
+            <p className="text-sm text-gray-500 mt-1">Manage all user accounts categorized by type and status</p>
+          </div>
+          <div className="flex gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="Search users..."
+                className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <button 
+              onClick={() => fetchAllData()}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+            >
+              <RefreshCw size={16} />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm opacity-90">Personal Users</p>
+                <p className="text-2xl font-bold mt-1">{activePersonalUsers.length}</p>
+              </div>
+              <User size={32} className="opacity-80" />
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm opacity-90">Business Users</p>
+                <p className="text-2xl font-bold mt-1">{activeBusinessUsers.length}</p>
+              </div>
+              <Building size={32} className="opacity-80" />
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-4 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm opacity-90">Pending Verification</p>
+                <p className="text-2xl font-bold mt-1">{pendingVerificationUsers.length}</p>
+              </div>
+              <AlertCircle size={32} className="opacity-80" />
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl p-4 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm opacity-90">Pending Approval</p>
+                <p className="text-2xl font-bold mt-1">{pendingBusinessApprovalUsers.length}</p>
+              </div>
+              <Clock size={32} className="opacity-80" />
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-4 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm opacity-90">Suspended</p>
+                <p className="text-2xl font-bold mt-1">{suspendedUsers.length}</p>
+              </div>
+              <XCircle size={32} className="opacity-80" />
+            </div>
+          </div>
+        </div>
+
+        {/* Categorized User Tables */}
+        {pendingBusinessApprovalUsers.length > 0 && (
+          renderUserTable(
+            pendingBusinessApprovalUsers, 
+            '⏳ Pending Business Approvals', 
+            'Business users waiting for admin approval',
+            'No pending business approvals'
+          )
+        )}
+
+        {pendingVerificationUsers.length > 0 && (
+          renderUserTable(
+            pendingVerificationUsers, 
+            '📧 Pending Email Verification', 
+            'Users who haven\'t verified their email address yet',
+            'No users pending verification'
+          )
+        )}
+
+        {renderUserTable(
+          activeBusinessUsers, 
+          '🏢 Active Business Users', 
+          'Approved business accounts with active status',
+          'No active business users found'
+        )}
+
+        {renderUserTable(
+          activePersonalUsers, 
+          '👤 Active Personal Users', 
+          'Individual accounts with active status',
+          'No active personal users found'
+        )}
+
+        {suspendedUsers.length > 0 && (
+          renderUserTable(
+            suspendedUsers, 
+            '🚫 Suspended/Deactivated Users', 
+            'Users with restricted or deactivated accounts',
+            'No suspended users'
+          )
+        )}
+
+        {users.length === 0 && (
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-12 text-center">
+            <Users size={48} className="text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500 text-lg font-medium">No users found</p>
+            <p className="text-sm text-gray-400 mt-2">User data will appear here once the backend is connected</p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderBusinessApprovals = () => (
     <div className="space-y-6">
@@ -2201,6 +2301,13 @@ export default function AdminDashboard() {
                 onClick={setActiveTab}
               />
               <SidebarNavItem
+                id="esim-approvals"
+                label="eSIM Approvals"
+                icon={CheckCircle}
+                active={activeTab === 'esim-approvals'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
                 id="stock"
                 label="Stock"
                 icon={Box}
@@ -2260,6 +2367,9 @@ export default function AdminDashboard() {
               <button onClick={() => { setActiveTab('esim'); }} className={`w-full p-3 rounded-xl ${activeTab === 'esim' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
                 <Globe2 size={20} className="mx-auto" />
               </button>
+              <button onClick={() => { setActiveTab('esim-approvals'); }} className={`w-full p-3 rounded-xl ${activeTab === 'esim-approvals' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
+                <CheckCircle size={20} className="mx-auto" />
+              </button>
               <button onClick={() => { setActiveTab('stock'); }} className={`w-full p-3 rounded-xl ${activeTab === 'stock' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
                 <Box size={20} className="mx-auto" />
               </button>
@@ -2295,6 +2405,7 @@ export default function AdminDashboard() {
                  activeTab === 'users' ? 'User Management' :
                  activeTab === 'bundles' ? 'Bundle Management' :
                  activeTab === 'esim' ? 'eSIM Management' :
+                 activeTab === 'esim-approvals' ? 'eSIM Approvals' :
                  activeTab === 'stock' ? 'Stock Management' :
                  activeTab === 'retailer-credit' ? 'Retailer Credit Management' :
                  activeTab === 'business-approvals' ? 'Business Approvals' :
@@ -2350,6 +2461,7 @@ export default function AdminDashboard() {
             {activeTab === 'users' && renderUserManagement()}
             {activeTab === 'bundles' && renderBundles()}
             {activeTab === 'esim' && renderEsimManagement()}
+            {activeTab === 'esim-approvals' && <EsimApprovals />}
             {activeTab === 'stock' && <StockManagement />}
             {activeTab === 'retailer-credit' && <RetailerCreditManagement />}
             {activeTab === 'business-approvals' && renderBusinessApprovals()}
@@ -2359,163 +2471,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
-
-      {/* PIN View Modal */}
-      {showPinModal && selectedBundle && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-2xl font-bold flex items-center gap-2">
-                    <Shield size={24} />
-                    {selectedBundle.bundleName} - PIN Details
-                  </h3>
-                  <p className="text-indigo-100 mt-1">
-                    {selectedBundle.stockType} • {selectedBundle.totalCount} PINs
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowPinModal(false);
-                    setSelectedBundle(null);
-                  }}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2"
-                >
-                  <XCircle size={24} />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-                <div className="flex">
-                  <AlertCircle className="text-yellow-400 mr-3" size={20} />
-                  <div>
-                    <p className="text-sm text-yellow-700">
-                      <strong>Security Notice:</strong> These PINs are decrypted for administrative viewing only. 
-                      Handle with care and do not share.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Table View for CSV Data */}
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PIN Number</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial Number</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product ID</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pool Name</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {selectedBundle.items && selectedBundle.items.length > 0 ? (
-                      selectedBundle.items.map((item, index) => (
-                        <tr key={item.itemId} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
-                          <td className="px-4 py-3">
-                            <div className="bg-indigo-50 rounded border border-indigo-200 p-2">
-                              <p className="font-mono text-sm font-bold text-indigo-600 break-all">
-                                {item.itemData || item.pinNumber || 'N/A'}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="font-mono text-sm text-gray-700">
-                              {item.serialNumber || 'N/A'}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="font-mono text-xs text-gray-600">
-                              {item.productId || selectedBundle.productId || 'N/A'}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="text-sm text-gray-700 max-w-xs truncate" title={item.notes || selectedBundle.notes}>
-                              {item.notes || selectedBundle.notes || '-'}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="text-sm font-medium text-gray-900">
-                              {selectedBundle.bundleName || 'N/A'}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              selectedBundle.stockType === 'EPIN'
-                                ? 'bg-blue-100 text-blue-800'
-                                : selectedBundle.stockType === 'ESIM'
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-purple-100 text-purple-800'
-                            }`}>
-                              {selectedBundle.stockType || 'N/A'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="text-sm font-medium text-gray-900">
-                              NOK {item.price || selectedBundle.price || 0}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              item.status === 'AVAILABLE'
-                                ? 'bg-green-100 text-green-800'
-                                : item.status === 'USED'
-                                ? 'bg-gray-100 text-gray-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {item.status || 'AVAILABLE'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={9} className="px-4 py-8 text-center">
-                          <Package size={32} className="text-gray-400 mx-auto mb-2" />
-                          <p className="text-gray-500">No PINs found in this bundle</p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  // Copy all PINs to clipboard
-                  const pins = selectedBundle.items.map(item => item.itemData).join('\n');
-                  navigator.clipboard.writeText(pins);
-                  alert('All PINs copied to clipboard!');
-                }}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-              >
-                <Download size={16} />
-                Copy All PINs
-              </button>
-              <button
-                onClick={() => {
-                  setShowPinModal(false);
-                  setSelectedBundle(null);
-                }}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* QR Code Modal for eSIM */}
       {showQrModal && selectedEsim && (

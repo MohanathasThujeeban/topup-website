@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Check, Lock, Shield, CreditCard } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Check, Lock, Shield, CreditCard, CheckCircle } from 'lucide-react';
+import API_CONFIG from '../config/api';
 
 const CheckoutPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [acceptOffers, setAcceptOffers] = useState(false);
@@ -13,24 +15,144 @@ const CheckoutPage = () => {
   const [cardCvv, setCardCvv] = useState('');
   const [cardHolder, setCardHolder] = useState('');
   const [billingCountry, setBillingCountry] = useState('Norway');
+  const [fullName, setFullName] = useState('');
+  const [idType, setIdType] = useState('passport');
+  const [idNumber, setIdNumber] = useState('');
+  const [idDocument, setIdDocument] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const product = {
+  // Get product from navigation state or use default
+  const product = location.state?.product || {
     name: 'Lycamobile 5GB ePIN',
     quantity: 1,
     price: 99,
     discount: 0,
+    type: 'epin', // default to epin
   };
 
   const total = product.price * product.quantity - product.discount;
+  
+  // Determine if product is eSIM (requires approval)
+  const isEsimProduct = product.type === 'esim' || product.name.toLowerCase().includes('esim');
 
-  const handleCompleteOrder = (e) => {
+  const handleCompleteOrder = async (e) => {
     e.preventDefault();
     if (!paymentMethod) {
       alert('Please select a payment method');
       return;
     }
-    // Process payment
-    navigate('/confirmation');
+    
+    // Only validate ID verification for eSIM products
+    if (isEsimProduct && (!fullName || !idNumber || !idDocument)) {
+      alert('Please complete ID verification for eSIM purchase');
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      if (isEsimProduct) {
+        // eSIM: Submit order request for admin approval
+        const orderData = {
+          email,
+          phone,
+          fullName,
+          idType,
+          idNumber,
+          idDocument: idDocument?.name,
+          product: product.name,
+          amount: total,
+          paymentMethod,
+        };
+        
+        const response = await fetch(`${API_CONFIG.BASE_URL}/public/esim-orders`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(orderData),
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          // Navigate to confirmation with pending approval status
+          navigate('/confirmation', { 
+            state: { 
+              status: 'pending_approval', 
+              orderData: {
+                orderNumber: result.orderNumber,
+                date: new Date().toLocaleString('en-GB', { 
+                  day: '2-digit', 
+                  month: 'short', 
+                  year: 'numeric', 
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                }),
+                product: product.name,
+                amount: total,
+                paymentMethod,
+                email
+              }
+            } 
+          });
+        } else {
+          alert('Error submitting order: ' + result.message);
+          setLoading(false);
+        }
+      } else {
+        // ePIN: Process instant payment and delivery
+        const orderData = {
+          email,
+          phone,
+          product: product.name,
+          amount: total,
+          paymentMethod,
+        };
+        
+        // TODO: Replace with actual ePIN order endpoint
+        const response = await fetch(`${API_CONFIG.BASE_URL}/public/epin-orders`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(orderData),
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          // Navigate to confirmation with instant delivery
+          navigate('/confirmation', { 
+            state: { 
+              status: 'completed', 
+              orderData: {
+                orderNumber: result.orderNumber || 'ORD-' + Date.now(),
+                date: new Date().toLocaleString('en-GB', { 
+                  day: '2-digit', 
+                  month: 'short', 
+                  year: 'numeric', 
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                }),
+                product: product.name,
+                amount: total,
+                paymentMethod,
+                email,
+                pin: result.pin // ePIN code
+              }
+            } 
+          });
+        } else {
+          alert('Error processing payment: ' + result.message);
+          setLoading(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error submitting order:', error);
+      alert('Error submitting order. Please try again.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -87,6 +209,19 @@ const CheckoutPage = () => {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-semibold mb-2">
+                      Full Name <span className="text-error">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Enter your full name"
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2">
                       Email Address <span className="text-error">*</span>
                     </label>
                     <input
@@ -98,7 +233,7 @@ const CheckoutPage = () => {
                       className="input-field"
                     />
                     <p className="text-xs text-gray-600 mt-1">
-                      Your ePIN will be sent to this email. Check your inbox and spam folder.
+                      Your eSIM will be sent to this email after approval.
                     </p>
                   </div>
                   <div>
@@ -120,9 +255,99 @@ const CheckoutPage = () => {
                       />
                     </div>
                     <p className="text-xs text-gray-600 mt-1">
-                      We'll send your PIN here too for backup delivery
+                      We'll send your eSIM details here too
                     </p>
                   </div>
+                  
+                  {/* ID Verification Section - Only for eSIM products */}
+                  {isEsimProduct && (
+                    <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                        <Shield className="text-blue-600" size={20} />
+                        ID Verification Required for eSIM
+                      </h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-semibold mb-2">
+                            Full Name <span className="text-error">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required={isEsimProduct}
+                            value={fullName}
+                            onChange={(e) => setFullName(e.target.value)}
+                            placeholder="Enter your full name as per ID"
+                            className="input-field"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-2">
+                            ID Type <span className="text-error">*</span>
+                          </label>
+                          <select 
+                            value={idType}
+                            onChange={(e) => setIdType(e.target.value)}
+                            className="input-field"
+                            required={isEsimProduct}
+                          >
+                            <option value="passport">Passport</option>
+                            <option value="national_id">National ID Card</option>
+                            <option value="driving_license">Driving License</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-2">
+                            ID Number <span className="text-error">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required={isEsimProduct}
+                            value={idNumber}
+                            onChange={(e) => setIdNumber(e.target.value)}
+                            placeholder="Enter ID number"
+                            className="input-field"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-2">
+                            Upload ID Document <span className="text-error">*</span>
+                          </label>
+                          <input
+                            type="file"
+                            required={isEsimProduct}
+                            accept="image/*,.pdf"
+                            onChange={(e) => setIdDocument(e.target.files[0])}
+                            className="input-field"
+                          />
+                          <p className="text-xs text-gray-600 mt-1">
+                            Upload a clear photo or scan of your ID (JPG, PNG, or PDF)
+                          </p>
+                          {idDocument && (
+                            <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                              <CheckCircle size={14} /> {idDocument.name} uploaded
+                            </p>
+                          )}
+                        </div>
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-3">
+                          <p className="text-xs text-yellow-800">
+                            <strong>Note:</strong> Your eSIM will be delivered after admin approval (typically within 1-2 hours). 
+                            You'll receive an email with the QR code once approved.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Info for ePIN products */}
+                  {!isEsimProduct && (
+                    <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                      <p className="text-sm text-green-800 flex items-center gap-2">
+                        <CheckCircle className="text-green-600" size={18} />
+                        <strong>Instant Delivery:</strong> Your ePIN will be sent to your email immediately after payment!
+                      </p>
+                    </div>
+                  )}
+                  
                   <div className="flex items-start gap-2">
                     <input
                       type="checkbox"
@@ -329,10 +554,10 @@ const CheckoutPage = () => {
                 {/* Complete Order Button */}
                 <button
                   type="submit"
-                  disabled={!email || !paymentMethod}
+                  disabled={!email || !paymentMethod || loading}
                   className="btn-primary w-full mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Complete Order
+                  {loading ? 'Processing...' : 'Complete Order'}
                 </button>
 
                 {/* Terms */}

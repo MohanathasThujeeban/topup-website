@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShoppingCart, Package, CreditCard, TrendingUp, AlertCircle,
   CheckCircle, DollarSign, Award, Bell, RefreshCw, Eye, Lock,
-  Download, ChevronRight, Info, Activity
+  Download, ChevronRight, Info, Activity, Filter
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -19,13 +19,14 @@ export default function RetailerBundlePurchaseDashboard() {
   const [creditStatus, setCreditStatus] = useState(null);
   const [creditLevels, setCreditLevels] = useState([]);
   const [inventory, setInventory] = useState([]);
-  const [selectedBundle, setSelectedBundle] = useState(null);
-  const [purchaseQuantity, setPurchaseQuantity] = useState(1);
-  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
-  const [showInventoryModal, setShowInventoryModal] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [purchasing, setPurchasing] = useState(false);
+  const [selectedPriceFilter, setSelectedPriceFilter] = useState(null);
+  const [purchasingBundleId, setPurchasingBundleId] = useState(null);
+  const [selectedBundle, setSelectedBundle] = useState(null);
+  const [purchaseQuantity, setPurchaseQuantity] = useState(1);
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -75,41 +76,92 @@ export default function RetailerBundlePurchaseDashboard() {
     }
   };
 
-  const handlePurchase = async () => {
-    if (!selectedBundle) return;
+  const handleDirectPurchase = async (bundle, quantity) => {
+    if (!bundle || !quantity) return;
 
     try {
+      setPurchasingBundleId(bundle.id);
       setPurchasing(true);
       setError('');
       setSuccess('');
 
       const token = localStorage.getItem('token');
+      
+      const requestBody = {
+        productId: bundle.id,
+        quantity: quantity
+      };
+      
+      console.log('🛒 Direct purchase:', requestBody);
+      console.log('📦 Bundle:', bundle);
+      
       const response = await fetch(`${API_BASE_URL}/retailer/purchase`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          productId: selectedBundle.id,
-          quantity: purchaseQuantity
-        })
+        body: JSON.stringify(requestBody)
       });
 
-      const data = await response.json();
+      console.log('📡 Response status:', response.status);
+      
+      let data;
+      try {
+        data = await response.json();
+        console.log('📥 Response data:', data);
+      } catch (parseError) {
+        console.error('❌ Failed to parse response:', parseError);
+        const textResponse = await response.text();
+        console.error('📄 Raw response:', textResponse);
+        throw new Error('Server returned invalid response');
+      }
 
       if (response.ok && data.success) {
-        setSuccess(`Purchase successful! ${data.itemsAllocated} items allocated.`);
+        setSuccess(`✅ Purchase successful! ${data.itemsAllocated || quantity} items added to your inventory.`);
+        
+        // Close modal and refresh data
         setShowPurchaseModal(false);
-        fetchDashboardData(); // Refresh data
+        await fetchDashboardData();
+        
+        // Auto-hide success message after 5 seconds
+        setTimeout(() => setSuccess(''), 5000);
       } else {
-        setError(data.message || 'Purchase failed');
+        const errorMessage = data.message || data.error || `Purchase failed with status ${response.status}`;
+        console.error('❌ Purchase failed:', errorMessage);
+        setError(errorMessage);
       }
     } catch (error) {
+      console.error('💥 Purchase error:', error);
       setError('Purchase failed: ' + error.message);
     } finally {
       setPurchasing(false);
+      setPurchasingBundleId(null);
     }
+  };
+
+  // Helper function to get unique prices from bundles
+  const getUniquePrices = () => {
+    const prices = new Set();
+    // Filter out ESIM bundles, only show EPIN bundles
+    bundles.filter(bundle => bundle.productType !== 'ESIM').forEach(bundle => {
+      if (bundle.basePrice) {
+        prices.add(bundle.basePrice);
+      }
+    });
+    return Array.from(prices).sort((a, b) => a - b);
+  };
+
+  // Helper function to get bundles by price (exclude eSIM)
+  const getBundlesByPrice = (price) => {
+    const epinBundles = bundles.filter(bundle => bundle.productType !== 'ESIM');
+    if (!price) return epinBundles;
+    return epinBundles.filter(bundle => bundle.basePrice === price);
+  };
+
+  // Helper function to get bundle count by price (exclude eSIM)
+  const getBundleCountByPrice = (price) => {
+    return bundles.filter(bundle => bundle.productType !== 'ESIM' && bundle.basePrice === price).length;
   };
 
   const getCreditLevelColor = (usagePercent) => {
@@ -606,7 +658,7 @@ export default function RetailerBundlePurchaseDashboard() {
         {/* Available Bundles */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-900">Available Bundles for Purchase</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Available EPIN Bundles for Purchase</h2>
             <button
               onClick={fetchDashboardData}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
@@ -616,15 +668,65 @@ export default function RetailerBundlePurchaseDashboard() {
             </button>
           </div>
 
-          {bundles.length === 0 ? (
+          {/* Price Category Filter Cards */}
+          {bundles.filter(b => b.productType !== 'ESIM').length > 0 && getUniquePrices().length > 0 && (
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-6 border border-indigo-100 mb-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                <Filter size={16} className="text-indigo-600" />
+                Filter by Price Category
+              </h4>
+              <div className="flex flex-wrap gap-3">
+                {/* All Bundles Card */}
+                <button
+                  onClick={() => setSelectedPriceFilter(null)}
+                  className={`px-6 py-4 rounded-xl transition-all duration-200 transform hover:scale-105 ${
+                    selectedPriceFilter === null
+                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                >
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-lg font-bold">All Bundles</span>
+                    <span className="text-xs opacity-80">{bundles.filter(b => b.productType !== 'ESIM').length} items</span>
+                  </div>
+                </button>
+
+                {/* Price Category Cards */}
+                {getUniquePrices().map((price) => (
+                  <button
+                    key={price}
+                    onClick={() => setSelectedPriceFilter(price)}
+                    className={`px-6 py-4 rounded-xl transition-all duration-200 transform hover:scale-105 ${
+                      selectedPriceFilter === price
+                        ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-lg font-bold">{price} NOK</span>
+                      <span className="text-xs opacity-80">{getBundleCountByPrice(price)} bundles</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              {selectedPriceFilter && (
+                <div className="mt-4 flex items-center gap-2 text-sm text-indigo-700">
+                  <CheckCircle size={14} />
+                  <span>Showing {getBundlesByPrice(selectedPriceFilter).length} bundles at {selectedPriceFilter} NOK</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {bundles.filter(b => b.productType !== 'ESIM').length === 0 ? (
             <div className="bg-white rounded-xl shadow p-12 text-center">
               <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 text-lg mb-2">No bundles available for purchase</p>
-              <p className="text-gray-500 text-sm">Bundles will appear here once admin adds them to the catalog</p>
+              <p className="text-gray-600 text-lg mb-2">No EPIN bundles available for purchase</p>
+              <p className="text-gray-500 text-sm">EPIN bundles will appear here once admin adds them to the catalog</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {bundles.map((bundle) => (
+              {getBundlesByPrice(selectedPriceFilter).map((bundle) => (
                 <div key={bundle.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition">
                   <div className="bg-gradient-to-r from-purple-500 to-blue-500 p-4 text-white">
                     <div className="flex items-center justify-between mb-2">
@@ -664,16 +766,24 @@ export default function RetailerBundlePurchaseDashboard() {
                         setPurchaseQuantity(1);
                         setShowPurchaseModal(true);
                       }}
-                      disabled={creditStatus?.isBlocked || bundle.stockQuantity === 0}
+                      disabled={bundle.stockQuantity === 0}
                       className={`w-full py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
-                        creditStatus?.isBlocked || bundle.stockQuantity === 0
+                        bundle.stockQuantity === 0
                           ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-gradient-to-r from-green-600 to-blue-600 text-white hover:from-green-700 hover:to-blue-700 shadow-lg hover:shadow-xl'
                       }`}
                     >
-                      <ShoppingCart className="w-4 h-4" />
-                      {creditStatus?.isBlocked ? 'Credit Limit Exceeded' : 
-                       bundle.stockQuantity === 0 ? 'Out of Stock' : 'Buy Now'}
+                      {bundle.stockQuantity === 0 ? (
+                        <>
+                          <AlertCircle className="w-4 h-4" />
+                          Out of Stock
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="w-4 h-4" />
+                          Buy Now
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -682,54 +792,74 @@ export default function RetailerBundlePurchaseDashboard() {
           )}
         </div>
 
-        {/* Inventory Button */}
-        <div className="text-center">
-          <button
-            onClick={() => setShowInventoryModal(true)}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-semibold"
-          >
-            <Package className="w-5 h-5" />
-            View My Inventory ({inventory.length} orders)
-          </button>
-        </div>
+        {/* Inventory Button - Removed, using new RetailerInventoryDisplay component instead */}
 
-        {/* Purchase Modal */}
+        {/* Purchase Modal with Quantity Selector */}
         {showPurchaseModal && selectedBundle && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
               <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-6 text-white">
-                <h3 className="text-2xl font-bold mb-2">Confirm Purchase</h3>
+                <h3 className="text-2xl font-bold mb-2">Select Quantity</h3>
                 <p className="text-blue-100">{selectedBundle.name}</p>
               </div>
 
               <div className="p-6">
+                {error && (
+                  <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-red-800 text-sm">{error}</p>
+                  </div>
+                )}
+
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Quantity
+                    How many units would you like to purchase?
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max={selectedBundle.stockQuantity}
-                    value={purchaseQuantity}
-                    onChange={(e) => setPurchaseQuantity(parseInt(e.target.value) || 1)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setPurchaseQuantity(Math.max(1, purchaseQuantity - 1))}
+                      disabled={purchaseQuantity <= 1}
+                      className="w-10 h-10 rounded-lg bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-center font-bold text-gray-700"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      max={selectedBundle.stockQuantity}
+                      value={purchaseQuantity}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 1;
+                        setPurchaseQuantity(Math.min(Math.max(1, val), selectedBundle.stockQuantity));
+                      }}
+                      className="flex-1 px-4 py-3 text-center text-lg font-bold border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <button
+                      onClick={() => setPurchaseQuantity(Math.min(selectedBundle.stockQuantity, purchaseQuantity + 1))}
+                      disabled={purchaseQuantity >= selectedBundle.stockQuantity}
+                      className="w-10 h-10 rounded-lg bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-center font-bold text-gray-700"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Available stock: {selectedBundle.stockQuantity} units
+                  </p>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg p-4 mb-6 border border-blue-100">
                   <div className="flex justify-between mb-2">
                     <span className="text-gray-600">Unit Price</span>
                     <span className="font-semibold">NOK {selectedBundle.basePrice}</span>
                   </div>
                   <div className="flex justify-between mb-2">
                     <span className="text-gray-600">Quantity</span>
-                    <span className="font-semibold">{purchaseQuantity}</span>
+                    <span className="font-semibold">{purchaseQuantity} units</span>
                   </div>
-                  <div className="border-t border-gray-200 pt-2 mt-2">
-                    <div className="flex justify-between">
+                  <div className="border-t border-blue-200 pt-2 mt-2">
+                    <div className="flex justify-between items-center">
                       <span className="font-bold text-gray-900">Total Amount</span>
-                      <span className="font-bold text-blue-600 text-xl">
+                      <span className="font-bold text-blue-600 text-2xl">
                         NOK {(selectedBundle.basePrice * purchaseQuantity).toLocaleString()}
                       </span>
                     </div>
@@ -738,16 +868,19 @@ export default function RetailerBundlePurchaseDashboard() {
 
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setShowPurchaseModal(false)}
+                    onClick={() => {
+                      setShowPurchaseModal(false);
+                      setError('');
+                    }}
                     disabled={purchasing}
-                    className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-semibold"
+                    className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-semibold disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={handlePurchase}
+                    onClick={() => handleDirectPurchase(selectedBundle, purchaseQuantity)}
                     disabled={purchasing}
-                    className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold disabled:bg-gray-400 flex items-center justify-center gap-2"
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:from-green-700 hover:to-blue-700 transition font-semibold disabled:bg-gray-400 flex items-center justify-center gap-2 shadow-lg"
                   >
                     {purchasing ? (
                       <>
@@ -767,80 +900,7 @@ export default function RetailerBundlePurchaseDashboard() {
           </div>
         )}
 
-        {/* Inventory Modal */}
-        {showInventoryModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
-              <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-6 text-white">
-                <h3 className="text-2xl font-bold mb-2">My Inventory</h3>
-                <p className="text-blue-100">Purchased bundles with encrypted PINs and QR codes</p>
-              </div>
-
-              <div className="p-6 overflow-y-auto flex-1">
-                {inventory.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">No purchases yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {inventory.map((item, index) => (
-                      <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <h4 className="font-bold text-gray-900">{item.productName}</h4>
-                            <p className="text-sm text-gray-600">Order ID: {item.orderId}</p>
-                          </div>
-                          <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                            {item.productType}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4 mb-3">
-                          <div>
-                            <p className="text-sm text-gray-600">Quantity</p>
-                            <p className="font-semibold text-gray-900">{item.quantity} units</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600">Total Amount</p>
-                            <p className="font-semibold text-gray-900">NOK {item.totalAmount?.toLocaleString()}</p>
-                          </div>
-                        </div>
-
-                        {item.items && item.items.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-gray-200">
-                            <p className="text-sm font-medium text-gray-700 mb-2">Encrypted Items:</p>
-                            <div className="bg-white rounded p-3 font-mono text-xs text-gray-700 max-h-32 overflow-y-auto">
-                              {item.items.map((encItem, idx) => (
-                                <div key={idx} className="flex items-center gap-2 mb-1">
-                                  <Lock className="w-3 h-3 text-gray-400" />
-                                  {encItem}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        <p className="text-xs text-gray-500 mt-2">
-                          Purchased: {new Date(item.purchaseDate).toLocaleString()}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="p-4 border-t border-gray-200">
-                <button
-                  onClick={() => setShowInventoryModal(false)}
-                  className="w-full px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-semibold"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Inventory Modal - Removed, using new RetailerInventoryDisplay component instead */}
       </div>
     </div>
   );

@@ -1,0 +1,56 @@
+{
+  "_id": {
+    "$oid": "69034113f29dda01ad32c8ab"
+  },
+  "name": "Lyca11",
+  "description": "Norway sim bundle pin - Instant eSIM activation",
+  "productType": "ESIM",
+  "category": "NORWAY",
+  "basePrice": {
+    "$numberDecimal": "99.00"
+  },
+  "discountPercentage": {
+    "$numberDecimal": "0.0"
+  },
+  "retailerCommissionPercentage": {
+    "$numberDecimal": "30.0"
+  },
+  "stockQuantity": {
+    "$numberInt": "7"
+  },
+  "soldQuantity": {
+    "$numberInt": "3"
+  },
+  "lowStockThreshold": {
+    "$numberInt": "5"
+  },
+  "dataAmount": "1GB",
+  "validity": "30 days",
+  "supportedCountries": ["Norway", "EU countries"],
+  "supportedNetworks": ["Lycamobile"],
+  "status": "ACTIVE",
+  "isVisible": true,
+  "isFeatured": true,
+  "slug": "lyca11-esim",
+  "imageUrl": null,
+  "tags": ["esim", "norway", "data", "voice", "lycamobile"],
+  "metadata": {
+    "feature_0": "Unlimited national minutes",
+    "feature_1": "100* Minutes to United Kingdom and more",
+    "feature_2": "1GB EU Roaming Data",
+    "feature_3": "eSIM available"
+  },
+  "createdDate": {
+    "$date": {
+      "$numberLong": "1730678400000"
+    }
+  },
+  "lastModifiedDate": {
+    "$date": {
+      "$numberLong": "1730678400000"
+    }
+  },
+  "createdBy": "admin",
+  "lastModifiedBy": "admin",
+  "_class": "com.example.topup.demo.entity.Product"
+}

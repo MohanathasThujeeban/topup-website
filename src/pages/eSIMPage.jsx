@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Smartphone, 
@@ -15,50 +15,95 @@ import {
   Download,
   Settings,
   MessageCircle,
-  ArrowRight
+  ArrowRight,
+  Loader
 } from 'lucide-react';
+import { API_CONFIG } from '../config/api';
 
 const ESIMPage = () => {
   const [selectedPlan, setSelectedPlan] = useState(null);
+  
+  // State for eSIM bundles from API
+  const [esimPlans, setEsimPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const esimPlans = [
-    {
-      id: 1,
-      name: 'eSIM Smart S',
-      data: '1GB',
-      price: 99,
-      originalPrice: null,
-      calls: 'Unlimited',
-      sms: 'Unlimited',
-      validity: '30 days',
-      popular: false,
-      features: ['Instant activation', 'No physical SIM needed', 'Perfect for light users']
-    },
-    {
-      id: 2,
-      name: 'eSIM Smart M',
-      data: '5GB',
-      price: 149,
-      originalPrice: 199,
-      calls: 'Unlimited',
-      sms: 'Unlimited',
-      validity: '30 days',
-      popular: true,
-      features: ['Great for social media', 'Video streaming', 'Travel friendly']
-    },
-    {
-      id: 3,
-      name: 'eSIM Smart XL',
-      data: '30GB',
-      price: 199,
-      originalPrice: 299,
-      calls: 'Unlimited',
-      sms: 'Unlimited',
-      validity: '30 days',
-      popular: false,
-      features: ['Heavy data usage', 'Work from anywhere', 'Best value']
-    }
-  ];
+  // Fetch eSIM bundles from stock pool
+  useEffect(() => {
+    const fetchEsimBundles = async () => {
+      try {
+        setLoading(true);
+        const apiUrl = `${API_CONFIG.BASE_URL}/public/bundles?type=ESIM`;
+        console.log('Fetching eSIM bundles from:', apiUrl);
+        
+        const response = await fetch(apiUrl);
+        
+        // Check if response is ok
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Server returned non-JSON response. Backend may not be running.');
+        }
+        
+        const data = await response.json();
+        console.log('eSIM bundles response:', data);
+
+        if (data.success && data.bundles) {
+          // Transform API response to match card component structure
+          const transformedPlans = data.bundles.map((bundle, index) => {
+            // Extract data/calls/sms from productName or description
+            const productName = bundle.productName || '';
+            const description = bundle.description || '';
+            
+            // Parse data amount (e.g., "5GB", "1GB", "30GB")
+            const dataMatch = productName.match(/(\d+)\s*(GB|MB)/i) || description.match(/(\d+)\s*(GB|MB)/i);
+            const dataAmount = dataMatch ? `${dataMatch[1]}${dataMatch[2].toUpperCase()}` : 'Data included';
+            
+            // Parse calls (e.g., "Unlimited", "100 Minutes")
+            const callsMatch = productName.match(/(unlimited|(\d+)\s*min)/i) || description.match(/(unlimited|(\d+)\s*min)/i);
+            const calls = callsMatch ? (callsMatch[1].toLowerCase() === 'unlimited' ? 'Unlimited' : callsMatch[0]) : 'Unlimited';
+            
+            // Parse validity (e.g., "30 Days", "7 Days")
+            const validityMatch = productName.match(/(\d+)\s*day/i) || description.match(/(\d+)\s*day/i);
+            const validity = validityMatch ? `${validityMatch[1]} days` : '30 days';
+
+            return {
+              id: bundle.id,
+              name: bundle.productName,
+              data: dataAmount,
+              price: bundle.denomination,
+              originalPrice: null, // Can add discount logic later if needed
+              calls: calls,
+              sms: 'Unlimited',
+              validity: validity,
+              popular: index === 1, // Make second plan popular (if exists)
+              features: [
+                'Instant activation', 
+                'No physical SIM needed', 
+                description || 'Great value plan'
+              ],
+              availableQuantity: bundle.availableQuantity
+            };
+          });
+
+          setEsimPlans(transformedPlans);
+        } else {
+          setError('No eSIM bundles available');
+        }
+      } catch (err) {
+        console.error('Error fetching eSIM bundles:', err);
+        setError('Failed to load eSIM plans. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEsimBundles();
+  }, []);
 
   const esimFeatures = [
     {
@@ -254,95 +299,145 @@ const ESIMPage = () => {
             <p className="text-xl text-gray-600 font-body">Instant delivery, no physical SIM required</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {esimPlans.map((plan) => (
-              <div key={plan.id} className={`relative bg-white border-2 rounded-3xl p-8 transition-all duration-300 hover:shadow-2xl hover:scale-105 ${
-                plan.popular 
-                  ? 'border-blue-500 shadow-xl' 
-                  : 'border-gray-200 hover:border-blue-300 shadow-lg'
-              }`}>
-                {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg">
-                      MOST POPULAR
+          {/* Loading State */}
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-16">
+              <Loader className="w-12 h-12 text-teal-500 animate-spin mb-4" />
+              <p className="text-gray-600 text-lg">Loading available eSIM plans...</p>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && !loading && (
+            <div className="max-w-md mx-auto bg-red-50 border-2 border-red-200 rounded-2xl p-8 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full mx-auto flex items-center justify-center mb-4">
+                <Wifi className="text-red-500" size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-red-900 mb-2">Unable to Load Plans</h3>
+              <p className="text-red-700 mb-6">{error}</p>
+              <button 
+                onClick={() => window.location.reload()}
+                className="px-6 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+          )}
+
+          {/* eSIM Plans Grid */}
+          {!loading && !error && esimPlans.length === 0 && (
+            <div className="max-w-md mx-auto bg-gray-50 border-2 border-gray-200 rounded-2xl p-8 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full mx-auto flex items-center justify-center mb-4">
+                <QrCode className="text-gray-400" size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">No Plans Available</h3>
+              <p className="text-gray-600">eSIM plans are currently out of stock. Please check back soon!</p>
+            </div>
+          )}
+
+          {!loading && !error && esimPlans.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+              {esimPlans.map((plan) => (
+                <div key={plan.id} className={`relative bg-white border-2 rounded-3xl p-8 transition-all duration-300 hover:shadow-2xl hover:scale-105 ${
+                  plan.popular 
+                    ? 'border-blue-500 shadow-xl' 
+                    : 'border-gray-200 hover:border-blue-300 shadow-lg'
+                }`}>
+                  {plan.popular && (
+                    <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                      <span className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg">
+                        MOST POPULAR
+                      </span>
+                    </div>
+                  )}
+                  
+                  <div className="text-center mb-8">
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
+                    
+                    <div className="mb-4">
+                      <div className="flex items-baseline justify-center gap-2">
+                        <span className="text-4xl font-bold text-gray-900">kr{plan.price}</span>
+                        {plan.originalPrice && (
+                          <span className="text-lg text-gray-400 line-through">kr{plan.originalPrice}</span>
+                        )}
+                      </div>
+                      {plan.originalPrice && (
+                        <div className="inline-block bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm font-bold mt-2">
+                          Save kr{plan.originalPrice - plan.price}
+                        </div>
+                      )}
+                      <p className="text-gray-600 mt-1">{plan.validity}</p>
+                    </div>
+
+                    <div className="w-16 h-16 bg-gradient-to-br from-teal-500 to-blue-500 rounded-2xl mx-auto flex items-center justify-center mb-6">
+                      <QrCode className="text-white" size={32} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 mb-8">
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                      <span className="text-gray-700">Data</span>
+                      <span className="text-2xl font-bold text-green-600">{plan.data}</span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                      <span className="text-gray-700">Calls</span>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="text-green-600" size={16} />
+                        <span className="font-medium text-green-600">{plan.calls}</span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                      <span className="text-gray-700">SMS</span>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="text-green-600" size={16} />
+                        <span className="font-medium text-green-600">{plan.sms}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Availability Badge */}
+                  <div className="mb-6 text-center">
+                    <span className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-full text-sm font-semibold">
+                      <CheckCircle2 size={16} />
+                      1 eSIM available
                     </span>
                   </div>
-                )}
-                
-                <div className="text-center mb-8">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
-                  
-                  <div className="mb-4">
-                    <div className="flex items-baseline justify-center gap-2">
-                      <span className="text-4xl font-bold text-gray-900">kr{plan.price}</span>
-                      {plan.originalPrice && (
-                        <span className="text-lg text-gray-400 line-through">kr{plan.originalPrice}</span>
-                      )}
-                    </div>
-                    {plan.originalPrice && (
-                      <div className="inline-block bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm font-bold mt-2">
-                        Save kr{plan.originalPrice - plan.price}
-                      </div>
-                    )}
-                    <p className="text-gray-600 mt-1">{plan.validity}</p>
+
+                  <div className="mb-8">
+                    <h4 className="font-bold text-gray-900 mb-3">Features included:</h4>
+                    <ul className="space-y-2">
+                      {plan.features.map((feature, index) => (
+                        <li key={index} className="flex items-center gap-2">
+                          <CheckCircle2 className="text-green-600 flex-shrink-0" size={16} />
+                          <span className="text-sm text-gray-700">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
 
-                  <div className="w-16 h-16 bg-gradient-to-br from-teal-500 to-blue-500 rounded-2xl mx-auto flex items-center justify-center mb-6">
-                    <QrCode className="text-white" size={32} />
+                  <div className="space-y-3">
+                    <Link
+                      to="/bundles?filter=esim"
+                      className={`w-full py-4 px-6 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2 ${
+                        plan.popular
+                          ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
+                      }`}
+                    >
+                      Get eSIM Now
+                      <ArrowRight size={18} />
+                    </Link>
+                    <Link
+                      to="/bundles?filter=esim"
+                      className="w-full py-3 px-6 border-2 border-gray-300 hover:border-gray-400 text-gray-700 font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                    >
+                      Add to Basket
+                    </Link>
                   </div>
                 </div>
-
-                <div className="space-y-4 mb-8">
-                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
-                    <span className="text-gray-700">Data</span>
-                    <span className="text-2xl font-bold text-green-600">{plan.data}</span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
-                    <span className="text-gray-700">Calls</span>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="text-green-600" size={16} />
-                      <span className="font-medium text-green-600">{plan.calls}</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
-                    <span className="text-gray-700">SMS</span>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="text-green-600" size={16} />
-                      <span className="font-medium text-green-600">{plan.sms}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mb-8">
-                  <h4 className="font-bold text-gray-900 mb-3">Features included:</h4>
-                  <ul className="space-y-2">
-                    {plan.features.map((feature, index) => (
-                      <li key={index} className="flex items-center gap-2">
-                        <CheckCircle2 className="text-green-600 flex-shrink-0" size={16} />
-                        <span className="text-sm text-gray-700">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="space-y-3">
-                  <button 
-                    onClick={() => setSelectedPlan(plan)}
-                    className={`w-full py-4 px-6 rounded-xl font-bold transition-all duration-300 ${
-                      plan.popular
-                        ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl'
-                        : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
-                    }`}
-                  >
-                    Get eSIM Now
-                  </button>
-                  <button className="w-full py-3 px-6 border-2 border-gray-300 hover:border-gray-400 text-gray-700 font-medium rounded-xl transition-colors">
-                    Add to Basket
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           <div className="text-center mt-12">
             <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 max-w-4xl mx-auto">

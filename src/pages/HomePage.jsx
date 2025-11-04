@@ -1,12 +1,57 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Smartphone, Zap, Shield, Clock, Globe, Check, Star, QrCode, Phone, MessageCircle, CheckCircle, Settings, BarChart3, User } from 'lucide-react';
 import AnimatedPhone from '../components/AnimatedPhone';
 import { useAuth } from '../contexts/AuthContext';
 
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://topup-backend-production.up.railway.app/api'
+  : 'http://localhost:8080/api';
+
 const HomePage = () => {
   const { isAuthenticated, user, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const [featuredPromotion, setFeaturedPromotion] = useState(null);
+
+  // Fetch featured promotion for the phone display
+  useEffect(() => {
+    fetchFeaturedPromotion();
+  }, []);
+
+  const fetchFeaturedPromotion = async () => {
+    try {
+      console.log('Fetching featured promotion...');
+      const response = await fetch(`${API_BASE_URL}/admin/promotions/featured`);
+      console.log('Featured promotion response:', response.ok);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Featured promotion data:', data);
+        
+        // Try different possible structures
+        let promotionToUse = null;
+        
+        if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+          promotionToUse = data.data[0];
+          console.log('Using promotion from data.data[0]:', promotionToUse);
+        } else if (data.promotions && Array.isArray(data.promotions) && data.promotions.length > 0) {
+          promotionToUse = data.promotions[0];
+          console.log('Using promotion from data.promotions[0]:', promotionToUse);
+        } else if (Array.isArray(data) && data.length > 0) {
+          promotionToUse = data[0];
+          console.log('Using promotion from data[0]:', promotionToUse);
+        }
+        
+        if (promotionToUse) {
+          console.log('Setting featured promotion:', promotionToUse);
+          setFeaturedPromotion(promotionToUse);
+        } else {
+          console.log('No featured promotions found');
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching featured promotion:', error);
+    }
+  };
 
   // Redirect business users to their dashboard
   useEffect(() => {
@@ -97,7 +142,7 @@ const HomePage = () => {
 
             {/* Right Content - Animated Phone with Hand */}
             <div className="relative flex justify-center lg:justify-end scale-110 md:scale-125 lg:scale-150">
-              <AnimatedPhone />
+              <AnimatedPhone promotion={featuredPromotion} />
             </div>
           </div>
         </div>

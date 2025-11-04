@@ -1,0 +1,41 @@
+{
+  "_id": "69034113f29dda01ad32c8ab",
+  "name": "Lyca Smart eSIM S",
+  "description": "1GB eSIM with unlimited national minutes and international calling",
+  "productType": "ESIM",
+  "category": "NORWAY",
+  "basePrice": 119.00,
+  "discountPercentage": 0,
+  "retailerCommissionPercentage": 30.0,
+  "stockQuantity": 7,
+  "soldQuantity": 3,
+  "lowStockThreshold": 5,
+  "dataAmount": "1GB",
+  "validity": "30 days",
+  "supportedCountries": ["Norway", "EU countries"],
+  "supportedNetworks": ["Lycamobile"],
+  "availablePins": [],
+  "availableEsims": [],
+  "status": "ACTIVE",
+  "isVisible": true,
+  "isFeatured": true,
+  "slug": "lyca-smart-esim-s",
+  "imageUrl": null,
+  "tags": ["esim", "norway", "data", "voice"],
+  "metadata": {
+    "feature_0": "Unlimited national minutes",
+    "feature_1": "100* Minutes to United Kingdom and more",
+    "feature_2": "1GB EU Roaming Data",
+    "feature_3": "eSIM available",
+    "feature_4": "Instant activation via QR code"
+  },
+  "createdDate": {
+    "$date": "2025-11-04T00:00:00.000Z"
+  },
+  "lastModifiedDate": {
+    "$date": "2025-11-04T00:00:00.000Z"
+  },
+  "createdBy": "admin",
+  "lastModifiedBy": "admin",
+  "_class": "com.example.topup.demo.entity.Product"
+}

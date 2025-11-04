@@ -3,12 +3,15 @@ import {
   BarChart3, Users, Package, DollarSign, TrendingUp, Clock, 
   AlertCircle, CheckCircle, Eye, Edit, Plus, Search, RefreshCw,
   ShoppingCart, Award, Activity, Bell, Download, LogOut, Tag,
-  Menu, X, Building, Box, MessageCircle, PieChart
+  Menu, X, Building, Box, MessageCircle, PieChart, Globe2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import FeaturedPromotions from '../components/FeaturedPromotions';
 import RetailerBundlePurchaseDashboard from '../components/RetailerBundlePurchaseDashboard';
+import RetailerEsimPurchase from '../components/RetailerEsimPurchase';
+import RetailerInventoryDisplay from '../components/RetailerInventoryDisplay';
+import RetailerPromotionalBanner from '../components/RetailerPromotionalBanner';
 
 // API Base URL - should match AuthContext
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -27,11 +30,31 @@ const RetailerDashboard = () => {
   const [analytics, setAnalytics] = useState({});
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting', 'connected', 'offline'
   const [purchaseLoading, setPurchaseLoading] = useState(false);
+  const [activePromotions, setActivePromotions] = useState([]);
+  const [showPromoBanner, setShowPromoBanner] = useState(true);
 
   useEffect(() => {
     fetchRetailerData();
     fetchAvailableBundles();
+    fetchActivePromotions();
   }, []);
+
+  const fetchActivePromotions = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/promotions/active`);
+      if (response.ok) {
+        const data = await response.json();
+        // Filter for public and active promotions
+        const publicPromotions = (data.data || []).filter(
+          promo => promo.public && promo.status === 'ACTIVE'
+        );
+        setActivePromotions(publicPromotions);
+        console.log('Active promotions:', publicPromotions.length);
+      }
+    } catch (error) {
+      console.error('Error fetching promotions:', error);
+    }
+  };
 
   const fetchRetailerData = async () => {
     try {
@@ -523,6 +546,13 @@ const RetailerDashboard = () => {
                 onClick={setActiveTab}
               />
               <SidebarNavItem
+                id="esim"
+                label="Buy eSIMs"
+                icon={Globe2}
+                active={activeTab === 'esim'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
                 id="inventory"
                 label="Inventory"
                 icon={Box}
@@ -535,6 +565,7 @@ const RetailerDashboard = () => {
                 icon={Tag}
                 active={activeTab === 'offers'}
                 onClick={setActiveTab}
+                badge={activePromotions.length}
               />
               <SidebarNavItem
                 id="analytics"
@@ -558,11 +589,20 @@ const RetailerDashboard = () => {
               <button onClick={() => setActiveTab('bundles')} className={`w-full p-3 rounded-xl ${activeTab === 'bundles' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <Package size={20} />
               </button>
+              <button onClick={() => setActiveTab('esim')} className={`w-full p-3 rounded-xl ${activeTab === 'esim' ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                <Globe2 size={20} />
+              </button>
               <button onClick={() => setActiveTab('inventory')} className={`w-full p-3 rounded-xl ${activeTab === 'inventory' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <Box size={20} />
               </button>
-              <button onClick={() => setActiveTab('offers')} className={`w-full p-3 rounded-xl ${activeTab === 'offers' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+              <button onClick={() => setActiveTab('offers')} className={`w-full p-3 rounded-xl relative ${activeTab === 'offers' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <Tag size={20} />
+                {activePromotions.length > 0 && (
+                  <span className="absolute top-1 right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500"></span>
+                  </span>
+                )}
               </button>
               <button onClick={() => setActiveTab('analytics')} className={`w-full p-3 rounded-xl ${activeTab === 'analytics' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <PieChart size={20} />
@@ -593,6 +633,7 @@ const RetailerDashboard = () => {
                 {activeTab === 'overview' && 'Dashboard'}
                 {activeTab === 'orders' && 'Orders'}
                 {activeTab === 'bundles' && 'Buy Bundles'}
+                {activeTab === 'esim' && 'Buy eSIMs'}
                 {activeTab === 'inventory' && 'Inventory'}
                 {activeTab === 'offers' && 'Offers'}
                 {activeTab === 'analytics' && 'Analytics'}
@@ -638,6 +679,9 @@ const RetailerDashboard = () => {
             {/* Content */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
+            {/* NEW: Beautiful Animated Promotional Banner */}
+            <RetailerPromotionalBanner onClose={() => setShowPromoBanner(false)} />
+
             {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <StatCard
@@ -870,85 +914,12 @@ const RetailerDashboard = () => {
           <RetailerBundlePurchaseDashboard />
         )}
 
-        {activeTab === 'inventory' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900">My Bundle Inventory</h3>
-              <div className="flex gap-3">
-                <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2">
-                  <Plus size={16} />
-                  Sell to Customer
-                </button>
-                <button 
-                  onClick={() => fetchRetailerData()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                >
-                  <RefreshCw size={16} />
-                  Refresh
-                </button>
-              </div>
-            </div>
+        {activeTab === 'esim' && (
+          <RetailerEsimPurchase />
+        )}
 
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-              {products && products.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-                  {products.map((product) => (
-                    <div key={product.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-lg transition-shadow">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-semibold text-gray-900">{product.name}</h4>
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          In Stock
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-3">{product.description}</p>
-                      <div className="space-y-2 mb-4">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Purchase Price:</span>
-                          <span className="font-bold text-red-600">NOK {(product.basePrice * 0.7)?.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Selling Price:</span>
-                          <span className="font-bold text-green-600">NOK {product.basePrice?.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Profit per Sale:</span>
-                          <span className="font-bold text-purple-600">NOK {(product.basePrice * 0.3)?.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Units Available:</span>
-                          <span className="font-bold text-blue-600">{product.stockQuantity || 0}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button className="flex-1 px-3 py-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg text-sm font-medium flex items-center justify-center gap-1">
-                          <ShoppingCart size={14} />
-                          Sell Now
-                        </button>
-                        <button className="px-3 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-sm font-medium">
-                          <Eye size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <Package size={32} className="text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-500">No bundles in inventory</p>
-                  <p className="text-sm text-gray-400">
-                    Purchase bundles from the "Buy Bundles" tab to add them to your inventory
-                  </p>
-                  <button 
-                    onClick={() => setActiveTab('bundles')}
-                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
-                  >
-                    <ShoppingCart size={16} />
-                    Browse Bundles
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+        {activeTab === 'inventory' && (
+          <RetailerInventoryDisplay />
         )}
 
         {activeTab === 'analytics' && (
@@ -1060,6 +1031,9 @@ const RetailerDashboard = () => {
         {/* Special Offers Tab */}
         {activeTab === 'offers' && (
           <div className="space-y-6">
+            {/* Beautiful Animated Promotional Banner */}
+            <RetailerPromotionalBanner />
+            
             <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
               <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <Tag className="text-indigo-600" size={24} />

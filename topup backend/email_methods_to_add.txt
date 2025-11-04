@@ -1,0 +1,165 @@
+// ADD THESE METHODS TO EmailService.java BEFORE THE CLOSING }
+
+    /**
+     * Generate HTML for eSIM approval email with QR code
+     */
+    private String generateEsimApprovalHtml(String customerName, String orderNumber, 
+                                           String esimSerial, String qrCodeBase64, String activationUrl) {
+        return String.format("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Your eSIM is Ready!</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+                <div style="background: linear-gradient(135deg, #10b981 0%%, #059669 100%%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0; font-size: 28px;">✅ Your eSIM is Ready!</h1>
+                </div>
+                
+                <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                    <h2 style="color: #333; margin-bottom: 20px;">Hi %s!</h2>
+                    
+                    <div style="background: #d1fae5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <p style="margin: 0; color: #065f46; font-weight: bold;">
+                            🎉 Great news! Your eSIM order has been approved and is ready to activate!
+                        </p>
+                    </div>
+                    
+                    <div style="background: #f9fafb; border: 2px solid #e5e7eb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <h3 style="margin-top: 0; color: #1f2937; text-align: center;">📱 Order Details</h3>
+                        <p style="margin: 5px 0;"><strong>Order Number:</strong> #%s</p>
+                        <p style="margin: 5px 0;"><strong>eSIM Serial:</strong> <span style="font-family: monospace; background: #fee2e2; padding: 5px 10px; border-radius: 4px; color: #991b1b;">%s</span></p>
+                    </div>
+                    
+                    <div style="background: #eff6ff; border: 2px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                        <h3 style="margin-top: 0; color: #1e40af;">📲 Scan to Activate</h3>
+                        <p style="color: #1e3a8a; margin-bottom: 15px;">Scan this QR code with your device camera to activate your eSIM</p>
+                        <div style="background: white; padding: 20px; display: inline-block; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <img src="data:image/png;base64,%s" alt="eSIM QR Code" style="width: 250px; height: 250px; display: block;" />
+                        </div>
+                    </div>
+                    
+                    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <h3 style="margin-top: 0; color: #92400e;">📋 Activation Instructions</h3>
+                        <ol style="color: #78350f; margin: 10px 0; padding-left: 20px;">
+                            <li style="margin: 10px 0;"><strong>iPhone:</strong> Go to Settings → Cellular → Add eSIM → Use QR Code</li>
+                            <li style="margin: 10px 0;"><strong>Android:</strong> Go to Settings → Network & Internet → SIMs → Add eSIM → Scan QR Code</li>
+                            <li style="margin: 10px 0;">Point your camera at the QR code above</li>
+                            <li style="margin: 10px 0;">Follow the on-screen instructions to complete activation</li>
+                        </ol>
+                    </div>
+                    
+                    %s
+                    
+                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <p style="margin: 0; color: #166534; font-size: 14px;">
+                            ℹ️ <strong>Important:</strong> Save this email or take a screenshot of the QR code. You'll need it to activate your eSIM.
+                        </p>
+                    </div>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="%s/support" style="background: linear-gradient(135deg, #3b82f6 0%%, #2563eb 100%%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; box-shadow: 0 2px 8px rgba(59,130,246,0.3);">Need Help? Contact Support</a>
+                    </div>
+                    
+                    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+                    
+                    <p style="color: #6b7280; font-size: 14px; text-align: center; margin: 0;">
+                        Thank you for choosing %s!<br>
+                        Questions? Email us at <a href="mailto:%s" style="color: #3b82f6; text-decoration: none;">%s</a>
+                    </p>
+                </div>
+            </body>
+            </html>
+            """, 
+            customerName, 
+            orderNumber, 
+            esimSerial, 
+            qrCodeBase64,
+            activationUrl != null && !activationUrl.isEmpty() ? 
+                String.format("""
+                    <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <p style="margin: 5px 0; color: #991b1b;"><strong>Alternative Activation:</strong></p>
+                        <p style="margin: 5px 0; color: #7f1d1d; word-break: break-all;">
+                            <a href="%s" style="color: #dc2626; text-decoration: underline;">%s</a>
+                        </p>
+                    </div>
+                    """, activationUrl, activationUrl) : "",
+            appUrl,
+            appName,
+            supportEmail, 
+            supportEmail
+        );
+    }
+
+    /**
+     * Generate HTML for eSIM rejection email
+     */
+    private String generateEsimRejectionHtml(String customerName, String orderNumber, String reason) {
+        return String.format("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>eSIM Order Update</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+                <div style="background: linear-gradient(135deg, #ef4444 0%%, #dc2626 100%%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0; font-size: 28px;">⚠️ eSIM Order Update</h1>
+                </div>
+                
+                <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                    <h2 style="color: #333; margin-bottom: 20px;">Hi %s,</h2>
+                    
+                    <p style="margin-bottom: 20px;">
+                        We regret to inform you that your eSIM order has not been approved at this time.
+                    </p>
+                    
+                    <div style="background: #f9fafb; border: 2px solid #e5e7eb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <h3 style="margin-top: 0; color: #1f2937;">📋 Order Details</h3>
+                        <p style="margin: 5px 0;"><strong>Order Number:</strong> #%s</p>
+                        <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: #dc2626; font-weight: bold;">Not Approved</span></p>
+                    </div>
+                    
+                    <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <h3 style="margin-top: 0; color: #991b1b;">Reason for Rejection:</h3>
+                        <p style="color: #7f1d1d; margin: 10px 0;">%s</p>
+                    </div>
+                    
+                    <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                        <h3 style="margin-top: 0; color: #1e40af;">💡 What You Can Do</h3>
+                        <ul style="color: #1e3a8a; margin: 10px 0; padding-left: 20px;">
+                            <li style="margin: 8px 0;">Review the rejection reason above</li>
+                            <li style="margin: 8px 0;">Contact our support team for clarification</li>
+                            <li style="margin: 8px 0;">Once the issue is resolved, you can place a new order</li>
+                        </ul>
+                    </div>
+                    
+                    <p style="margin: 20px 0;">
+                        If you have any questions or need assistance, our support team is here to help.
+                    </p>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="%s/support" style="background: linear-gradient(135deg, #3b82f6 0%%, #2563eb 100%%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; box-shadow: 0 2px 8px rgba(59,130,246,0.3);">Contact Support</a>
+                    </div>
+                    
+                    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+                    
+                    <p style="color: #6b7280; font-size: 14px; text-align: center; margin: 0;">
+                        We apologize for any inconvenience.<br>
+                        Questions? Email us at <a href="mailto:%s" style="color: #3b82f6; text-decoration: none;">%s</a>
+                    </p>
+                </div>
+            </body>
+            </html>
+            """, 
+            customerName, 
+            orderNumber, 
+            reason,
+            appUrl,
+            supportEmail, 
+            supportEmail
+        );
+    }
