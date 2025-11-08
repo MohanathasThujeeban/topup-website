@@ -73,6 +73,9 @@ export const AuthProvider = ({ children }) => {
   // Personal Account Registration
   const registerPersonal = async (userData) => {
     try {
+      console.log('Sending registration request to:', `${API_BASE_URL}/auth/register/personal`);
+      console.log('Registration data:', { ...userData, password: '[HIDDEN]' });
+      
       const response = await fetch(`${API_BASE_URL}/auth/register/personal`, {
         method: 'POST',
         headers: {
@@ -82,14 +85,19 @@ export const AuthProvider = ({ children }) => {
       });
 
       const data = await response.json();
+      console.log('Registration response:', { status: response.status, data });
 
       if (response.ok) {
         return { success: true, data: data };
       } else {
-        return { success: false, message: data.message || 'Registration failed' };
+        // Try to get detailed error message
+        const errorMessage = data.message || data.error || 
+          (data.errors ? JSON.stringify(data.errors) : 'Registration failed');
+        return { success: false, message: errorMessage };
       }
     } catch (error) {
-      return { success: false, message: 'Network error. Please try again.' };
+      console.error('Registration error:', error);
+      return { success: false, message: `Network error: ${error.message}` };
     }
   };
 

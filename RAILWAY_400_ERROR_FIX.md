@@ -1,7 +1,7 @@
-# Railway 400 Bad Request Error - Fixed
+# Railway 400 Bad Request Error - Fixed ✅
 
 ## Problem
-When deploying to Railway, users were getting a **400 Bad Request** error when trying to register personal accounts.
+When deploying to Railway, users were getting a **400 Bad Request** error when trying to register personal accounts from the Vercel frontend (https://topup-website-gmoj.vercel.app/).
 
 ## Root Causes Identified
 
@@ -13,7 +13,7 @@ When deploying to Railway, users were getting a **400 Bad Request** error when t
 **Frontend was sending:** Phone numbers potentially with spaces like `123 456 789` or dashes like `123-456-789`
 
 ### 2. CORS Configuration Issue
-**Problem:** The Railway backend URL and Vercel frontend URL were NOT in the allowed CORS origins list.
+**Problem:** The correct Vercel frontend URL (https://topup-website-gmoj.vercel.app) was NOT in the allowed CORS origins list across all controllers.
 
 ## Fixes Applied
 

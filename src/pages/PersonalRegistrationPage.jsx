@@ -164,8 +164,19 @@ const PersonalRegistrationPage = () => {
     setSubmitError('');
 
     try {
-      // Clean mobile number - remove spaces, dashes, parentheses
-      const cleanedMobile = formData.mobileNumber.replace(/[\s\-\(\)]/g, '');
+      // Clean mobile number - remove spaces, dashes, parentheses, keep only digits and leading +
+      let cleanedMobile = formData.mobileNumber.trim();
+      const hasPlus = cleanedMobile.startsWith('+');
+      const digitsOnly = cleanedMobile.replace(/\D/g, ''); // Remove all non-digits
+      cleanedMobile = hasPlus ? `+${digitsOnly}` : digitsOnly;
+      
+      console.log('Registration data:', {
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        mobileNumber: cleanedMobile,
+        accountType: 'personal'
+      });
       
       const result = await registerPersonal({
         firstName: formData.firstName.trim(),
