@@ -43,6 +43,14 @@ export default function AdminDashboard() {
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting', 'connected', 'offline'
   const [sidebarOpen, setSidebarOpen] = useState(true); // Sidebar state
   const [selectedPriceFilter, setSelectedPriceFilter] = useState(null); // For price filtering
+  
+  // User management modals
+  const [showUserDetailsModal, setShowUserDetailsModal] = useState(false);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userDetails, setUserDetails] = useState(null);
+  const [loadingUserDetails, setLoadingUserDetails] = useState(false);
 
   // Fetch data from backend
   useEffect(() => {
@@ -740,6 +748,138 @@ export default function AdminDashboard() {
   const handleLogout = () => {
     logout();
     navigate('/', { replace: true });
+  };
+
+  // User Management Handlers
+  const handleViewUser = async (user) => {
+    setSelectedUser(user);
+    setLoadingUserDetails(true);
+    setShowUserDetailsModal(true);
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/admin/users/${user.id}/details`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setUserDetails(result.data);
+        }
+      } else {
+        console.error('Failed to fetch user details');
+        alert('Failed to load user details');
+      }
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+      alert('Error loading user details');
+    } finally {
+      setLoadingUserDetails(false);
+    }
+  };
+
+  const handleEditUser = (user) => {
+    setSelectedUser(user);
+    setShowEditUserModal(true);
+  };
+
+  const handleDeleteUserClick = (user) => {
+    setSelectedUser(user);
+    setShowDeleteUserModal(true);
+  };
+
+  const handleSuspendUser = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/admin/users/${selectedUser.id}/suspend`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          reason: 'Account suspended by admin'
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          alert('User suspended successfully');
+          setShowEditUserModal(false);
+          fetchAllData(); // Refresh users list
+        }
+      } else {
+        alert('Failed to suspend user');
+      }
+    } catch (error) {
+      console.error('Error suspending user:', error);
+      alert('Error suspending user');
+    }
+  };
+
+  const handleActivateUser = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/admin/users/${selectedUser.id}/activate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          alert('User activated successfully');
+          setShowEditUserModal(false);
+          fetchAllData(); // Refresh users list
+        }
+      } else {
+        alert('Failed to activate user');
+      }
+    } catch (error) {
+      console.error('Error activating user:', error);
+      alert('Error activating user');
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/admin/users/${selectedUser.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          alert('User deleted successfully');
+          setShowDeleteUserModal(false);
+          fetchAllData(); // Refresh users list
+        }
+      } else {
+        alert('Failed to delete user');
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert('Error deleting user');
+    }
   };
 
   // Helper functions to calculate bundle statistics
@@ -1662,13 +1802,25 @@ export default function AdminDashboard() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
-                        <button className="text-indigo-600 hover:text-indigo-900" title="View Details">
+                        <button 
+                          onClick={() => handleViewUser(user)}
+                          className="text-indigo-600 hover:text-indigo-900" 
+                          title="View Details"
+                        >
                           <Eye size={16} />
                         </button>
-                        <button className="text-green-600 hover:text-green-900" title="Edit User">
+                        <button 
+                          onClick={() => handleEditUser(user)}
+                          className="text-green-600 hover:text-green-900" 
+                          title="Edit User"
+                        >
                           <Edit size={16} />
                         </button>
-                        <button className="text-red-600 hover:text-red-900" title="Delete User">
+                        <button 
+                          onClick={() => handleDeleteUserClick(user)}
+                          className="text-red-600 hover:text-red-900" 
+                          title="Delete User"
+                        >
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -2605,6 +2757,350 @@ export default function AdminDashboard() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Details Modal */}
+      {showUserDetailsModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-4 flex justify-between items-center">
+              <h3 className="text-xl font-bold">User Details</h3>
+              <button
+                onClick={() => {
+                  setShowUserDetailsModal(false);
+                  setSelectedUser(null);
+                  setUserDetails(null);
+                }}
+                className="text-white hover:text-gray-200"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              {loadingUserDetails ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+                </div>
+              ) : userDetails ? (
+                <div className="space-y-6">
+                  {/* Basic Info */}
+                  <div className="bg-gray-50 rounded-xl p-6">
+                    <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <User size={20} className="text-indigo-600" />
+                      Basic Information
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500">Name</p>
+                        <p className="font-semibold">{userDetails.basicInfo.firstName} {userDetails.basicInfo.lastName}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Email</p>
+                        <p className="font-semibold">{userDetails.basicInfo.email}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Mobile</p>
+                        <p className="font-semibold">{userDetails.basicInfo.mobileNumber}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Account Type</p>
+                        <p className="font-semibold">{userDetails.basicInfo.accountType}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Status</p>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          userDetails.basicInfo.accountStatus === 'ACTIVE' ? 'bg-green-100 text-green-800' :
+                          userDetails.basicInfo.accountStatus === 'SUSPENDED' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {userDetails.basicInfo.accountStatus}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Email Verified</p>
+                        <p className="font-semibold">{userDetails.basicInfo.emailVerified ? 'Yes' : 'No'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Created Date</p>
+                        <p className="font-semibold">{new Date(userDetails.basicInfo.createdDate).toLocaleDateString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Last Modified</p>
+                        <p className="font-semibold">{new Date(userDetails.basicInfo.lastModifiedDate).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Business Details */}
+                  {userDetails.businessDetails && (
+                    <div className="bg-gray-50 rounded-xl p-6">
+                      <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                        <Building size={20} className="text-indigo-600" />
+                        Business Information
+                      </h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm text-gray-500">Company Name</p>
+                          <p className="font-semibold">{userDetails.businessDetails.companyName}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Organization Number</p>
+                          <p className="font-semibold">{userDetails.businessDetails.organizationNumber}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">VAT Number</p>
+                          <p className="font-semibold">{userDetails.businessDetails.vatNumber || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Company Email</p>
+                          <p className="font-semibold">{userDetails.businessDetails.companyEmail}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Verification Method</p>
+                          <p className="font-semibold">{userDetails.businessDetails.verificationMethod}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Verification Status</p>
+                          <p className="font-semibold">{userDetails.businessDetails.verificationStatus}</p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-sm text-gray-500">Postal Address</p>
+                          <p className="font-semibold">
+                            {typeof userDetails.businessDetails.postalAddress === 'object' 
+                              ? userDetails.businessDetails.postalAddress?.fullAddress || 
+                                `${userDetails.businessDetails.postalAddress?.street || ''}, ${userDetails.businessDetails.postalAddress?.city || ''}, ${userDetails.businessDetails.postalAddress?.postalCode || ''}, ${userDetails.businessDetails.postalAddress?.country || ''}`
+                              : userDetails.businessDetails.postalAddress || 'N/A'
+                            }
+                          </p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-sm text-gray-500">Billing Address</p>
+                          <p className="font-semibold">
+                            {typeof userDetails.businessDetails.billingAddress === 'object'
+                              ? userDetails.businessDetails.billingAddress?.fullAddress ||
+                                `${userDetails.businessDetails.billingAddress?.street || ''}, ${userDetails.businessDetails.billingAddress?.city || ''}, ${userDetails.businessDetails.billingAddress?.postalCode || ''}, ${userDetails.businessDetails.billingAddress?.country || ''}`
+                              : userDetails.businessDetails.billingAddress || 'N/A'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Usage Statistics */}
+                  <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-6">
+                    <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <Activity size={20} className="text-indigo-600" />
+                      Usage Statistics
+                    </h4>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="text-center">
+                        <p className="text-3xl font-bold text-indigo-600">{userDetails.usage.totalOrders}</p>
+                        <p className="text-sm text-gray-600">Total Orders</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-3xl font-bold text-green-600">NOK {userDetails.usage.totalSpent.toFixed(2)}</p>
+                        <p className="text-sm text-gray-600">Total Spent</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-3xl font-bold text-purple-600">NOK {userDetails.usage.averageOrderValue.toFixed(2)}</p>
+                        <p className="text-sm text-gray-600">Avg Order Value</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Purchase History */}
+                  <div className="bg-gray-50 rounded-xl p-6">
+                    <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <ShoppingCart size={20} className="text-indigo-600" />
+                      Purchase History ({userDetails.purchases.length})
+                    </h4>
+                    {userDetails.purchases.length > 0 ? (
+                      <div className="space-y-3 max-h-64 overflow-y-auto">
+                        {userDetails.purchases.map((purchase, index) => (
+                          <div key={index} className="bg-white p-4 rounded-lg border border-gray-200">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="font-semibold text-gray-900">{purchase.productName}</p>
+                                  <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded ${
+                                    purchase.type === 'eSIM' ? 'bg-purple-100 text-purple-700' :
+                                    purchase.type === 'Retailer Order' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {purchase.type}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-500">Order #{purchase.orderNumber}</p>
+                                {purchase.quantity && (
+                                  <p className="text-xs text-gray-400">Quantity: {purchase.quantity}</p>
+                                )}
+                                {purchase.itemCount && (
+                                  <p className="text-xs text-gray-400">Items: {purchase.itemCount}</p>
+                                )}
+                                <p className="text-xs text-gray-400 mt-1">
+                                  {new Date(purchase.orderDate).toLocaleString()}
+                                </p>
+                              </div>
+                              <div className="text-right ml-4">
+                                <p className="font-bold text-gray-900">NOK {Number(purchase.amount).toFixed(2)}</p>
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 ${
+                                  purchase.status === 'APPROVED' || purchase.status === 'COMPLETED' || purchase.status === 'DELIVERED' ? 'bg-green-100 text-green-800' :
+                                  purchase.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-red-100 text-red-800'
+                                }`}>
+                                  {purchase.status}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-center text-gray-500 py-4">No purchases yet</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-12">No data available</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal (Suspend/Activate) */}
+      {showEditUserModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 flex justify-between items-center">
+              <h3 className="text-xl font-bold">Edit User Status</h3>
+              <button
+                onClick={() => {
+                  setShowEditUserModal(false);
+                  setSelectedUser(null);
+                }}
+                className="text-white hover:text-gray-200"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="mb-6">
+                <p className="text-gray-700 mb-2">
+                  <strong>User:</strong> {selectedUser.firstName} {selectedUser.lastName}
+                </p>
+                <p className="text-gray-700 mb-2">
+                  <strong>Email:</strong> {selectedUser.email}
+                </p>
+                <p className="text-gray-700 mb-4">
+                  <strong>Current Status:</strong>{' '}
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    selectedUser.accountStatus === 'ACTIVE' ? 'bg-green-100 text-green-800' :
+                    selectedUser.accountStatus === 'SUSPENDED' ? 'bg-red-100 text-red-800' :
+                    'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {selectedUser.accountStatus}
+                  </span>
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                {selectedUser.accountStatus === 'ACTIVE' ? (
+                  <button
+                    onClick={handleSuspendUser}
+                    className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
+                  >
+                    <XCircle size={20} />
+                    Suspend User
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleActivateUser}
+                    className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle size={20} />
+                    Activate User
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setShowEditUserModal(false);
+                    setSelectedUser(null);
+                  }}
+                  className="px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {showDeleteUserModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-red-600 to-rose-600 text-white px-6 py-4 flex justify-between items-center">
+              <h3 className="text-xl font-bold">Delete User</h3>
+              <button
+                onClick={() => {
+                  setShowDeleteUserModal(false);
+                  setSelectedUser(null);
+                }}
+                className="text-white hover:text-gray-200"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="mb-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="bg-red-100 rounded-full p-3">
+                    <AlertCircle size={32} className="text-red-600" />
+                  </div>
+                </div>
+                <p className="text-gray-700 text-center mb-4">
+                  Are you sure you want to delete this user?
+                </p>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-700 mb-1">
+                    <strong>Name:</strong> {selectedUser.firstName} {selectedUser.lastName}
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    <strong>Email:</strong> {selectedUser.email}
+                  </p>
+                </div>
+                <p className="text-sm text-red-600 mt-4 text-center">
+                  ⚠️ This action cannot be undone!
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleConfirmDelete}
+                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={20} />
+                  Yes, Delete User
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteUserModal(false);
+                    setSelectedUser(null);
+                  }}
+                  className="px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>

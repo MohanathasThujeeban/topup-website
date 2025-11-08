@@ -354,18 +354,41 @@ export default function StockManagement() {
             Low Stock Alerts
           </h3>
           <div className="space-y-3">
-            {statistics.lowStockPools.map((pool, index) => (
-              <div key={index} className="bg-white p-4 rounded-lg flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-gray-900">{pool.name}</p>
-                  <p className="text-sm text-gray-600">Product ID: {pool.productId}</p>
+            {statistics.lowStockPools.map((pool, index) => {
+              // Determine if it's eSIM based on:
+              // 1. stockType field (if available)
+              // 2. Pool name containing 'esim', 'e-sim', 'lyca' (common eSIM provider)
+              const poolName = pool.name?.toLowerCase() || '';
+              const isEsim = pool.stockType === 'ESIM' || 
+                           pool.stockType === 'esim' ||
+                           poolName.includes('esim') ||
+                           poolName.includes('e-sim') ||
+                           poolName.includes('lyca');
+              
+              console.log('Pool:', pool.name, '| Type field:', pool.stockType, '| Detected as:', isEsim ? 'eSIM' : 'ePIN');
+              
+              return (
+                <div key={index} className="bg-white p-4 rounded-lg flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-gray-900">{pool.name}</p>
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        isEsim
+                          ? 'bg-purple-100 text-purple-800' 
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {isEsim ? 'eSIM' : 'ePIN'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600">Product ID: {pool.productId}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-red-600">{pool.availableQuantity || pool.itemsLeft}</p>
+                    <p className="text-sm text-gray-500">items left</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-red-600">{pool.availableQuantity}</p>
-                  <p className="text-sm text-gray-500">items left</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

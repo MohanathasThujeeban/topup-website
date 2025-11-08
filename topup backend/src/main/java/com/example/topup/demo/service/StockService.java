@@ -368,12 +368,24 @@ public class StockService {
         List<StockPool> lowStockPools = stockPoolRepository.findLowStockPools();
         stats.put("lowStockAlerts", lowStockPools.size());
         stats.put("lowStockPools", lowStockPools.stream()
-            .map(pool -> Map.of(
-                "id", pool.getId(),
-                "name", pool.getName(),
-                "availableQuantity", pool.getAvailableQuantity(),
-                "productId", pool.getProductId()
-            ))
+            .map(pool -> {
+                Map<String, Object> poolInfo = new HashMap<>();
+                poolInfo.put("id", pool.getId());
+                poolInfo.put("name", pool.getName());
+                poolInfo.put("availableQuantity", pool.getAvailableQuantity());
+                poolInfo.put("totalQuantity", pool.getTotalQuantity());
+                poolInfo.put("productId", pool.getProductId());
+                
+                // Add stockType with null check and default to EPIN if null
+                String stockType = pool.getStockType() != null ? pool.getStockType().name() : "EPIN";
+                poolInfo.put("stockType", stockType);
+                
+                // Calculate items left for display
+                int itemsLeft = pool.getAvailableQuantity();
+                poolInfo.put("itemsLeft", itemsLeft);
+                
+                return poolInfo;
+            })
             .collect(Collectors.toList()));
         
         return stats;

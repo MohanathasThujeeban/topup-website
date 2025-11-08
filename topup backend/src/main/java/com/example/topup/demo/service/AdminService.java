@@ -5,6 +5,7 @@ import com.example.topup.demo.entity.BusinessDetails;
 import com.example.topup.demo.entity.Order;
 import com.example.topup.demo.entity.RetailerOrder;
 import com.example.topup.demo.entity.RetailerLimit;
+import com.example.topup.demo.entity.EsimOrderRequest;
 import com.example.topup.demo.dto.RetailerCreditLimitDTO;
 import com.example.topup.demo.dto.UpdateCreditLimitRequest;
 import com.example.topup.demo.repository.UserRepository;
@@ -12,6 +13,7 @@ import com.example.topup.demo.repository.BusinessDetailsRepository;
 import com.example.topup.demo.repository.OrderRepository;
 import com.example.topup.demo.repository.RetailerOrderRepository;
 import com.example.topup.demo.repository.RetailerLimitRepository;
+import com.example.topup.demo.repository.EsimOrderRequestRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -41,6 +43,9 @@ public class AdminService {
 
     @Autowired
     private RetailerLimitRepository retailerLimitRepository;
+
+    @Autowired
+    private EsimOrderRequestRepository esimOrderRequestRepository;
 
     @Autowired
     private EmailService emailService;
@@ -74,6 +79,10 @@ public class AdminService {
         analytics.put("monthlyRevenue", monthlyRevenue);
         analytics.put("dailyRevenue", dailyRevenue);
         analytics.put("revenueGrowth", revenueGrowth);
+        
+        // Total orders calculation
+        long totalOrders = calculateTotalOrders();
+        analytics.put("totalOrders", totalOrders);
         
         // User registration trends (last 7 days)
         List<Map<String, Object>> registrationTrends = new ArrayList<>();
@@ -486,7 +495,14 @@ public class AdminService {
                 .mapToDouble(order -> order.getTotalAmount() != null ? order.getTotalAmount().doubleValue() : 0.0)
                 .sum();
             
-            return customerRevenue + retailerRevenue;
+            // Calculate revenue from eSIM orders (EsimOrderRequest entity)
+            List<EsimOrderRequest> allEsimOrders = esimOrderRequestRepository.findAll();
+            double esimRevenue = allEsimOrders.stream()
+                .filter(order -> "APPROVED".equals(order.getStatus()) || "COMPLETED".equals(order.getStatus()))
+                .mapToDouble(order -> order.getAmount() != null ? order.getAmount() : 0.0)
+                .sum();
+            
+            return customerRevenue + retailerRevenue + esimRevenue;
         } catch (Exception e) {
             System.err.println("Error calculating total revenue: " + e.getMessage());
             return 0.0;
@@ -512,7 +528,14 @@ public class AdminService {
                 .mapToDouble(order -> order.getTotalAmount() != null ? order.getTotalAmount().doubleValue() : 0.0)
                 .sum();
             
-            return customerRevenue + retailerRevenue;
+            // eSIM orders for this month
+            List<EsimOrderRequest> monthlyEsimOrders = esimOrderRequestRepository.findByRequestDateBetween(startOfMonth, endOfMonth);
+            double esimRevenue = monthlyEsimOrders.stream()
+                .filter(order -> "APPROVED".equals(order.getStatus()) || "COMPLETED".equals(order.getStatus()))
+                .mapToDouble(order -> order.getAmount() != null ? order.getAmount() : 0.0)
+                .sum();
+            
+            return customerRevenue + retailerRevenue + esimRevenue;
         } catch (Exception e) {
             System.err.println("Error calculating monthly revenue: " + e.getMessage());
             return 0.0;
@@ -538,7 +561,14 @@ public class AdminService {
                 .mapToDouble(order -> order.getTotalAmount() != null ? order.getTotalAmount().doubleValue() : 0.0)
                 .sum();
             
-            return customerRevenue + retailerRevenue;
+            // eSIM orders for today
+            List<EsimOrderRequest> todayEsimOrders = esimOrderRequestRepository.findByRequestDateBetween(startOfDay, endOfDay);
+            double esimRevenue = todayEsimOrders.stream()
+                .filter(order -> "APPROVED".equals(order.getStatus()) || "COMPLETED".equals(order.getStatus()))
+                .mapToDouble(order -> order.getAmount() != null ? order.getAmount() : 0.0)
+                .sum();
+            
+            return customerRevenue + retailerRevenue + esimRevenue;
         } catch (Exception e) {
             System.err.println("Error calculating daily revenue: " + e.getMessage());
             return 0.0;
@@ -568,7 +598,14 @@ public class AdminService {
                 .mapToDouble(order -> order.getTotalAmount() != null ? order.getTotalAmount().doubleValue() : 0.0)
                 .sum();
             
-            double lastMonthRevenue = lastMonthCustomerRevenue + lastMonthRetailerRevenue;
+            // eSIM orders for last month
+            List<EsimOrderRequest> lastMonthEsimOrders = esimOrderRequestRepository.findByRequestDateBetween(startOfLastMonth, endOfLastMonth);
+            double lastMonthEsimRevenue = lastMonthEsimOrders.stream()
+                .filter(order -> "APPROVED".equals(order.getStatus()) || "COMPLETED".equals(order.getStatus()))
+                .mapToDouble(order -> order.getAmount() != null ? order.getAmount() : 0.0)
+                .sum();
+            
+            double lastMonthRevenue = lastMonthCustomerRevenue + lastMonthRetailerRevenue + lastMonthEsimRevenue;
             
             // Calculate growth percentage
             if (lastMonthRevenue == 0) {
@@ -579,6 +616,30 @@ public class AdminService {
         } catch (Exception e) {
             System.err.println("Error calculating revenue growth: " + e.getMessage());
             return 0.0;
+        }
+    }
+    
+    private long calculateTotalOrders() {
+        try {
+            // Count all completed customer orders
+            long customerOrders = orderRepository.findAll().stream()
+                .filter(order -> order.getStatus() == Order.OrderStatus.COMPLETED)
+                .count();
+            
+            // Count all delivered retailer orders
+            long retailerOrders = retailerOrderRepository.findAll().stream()
+                .filter(order -> order.getStatus() == RetailerOrder.OrderStatus.DELIVERED)
+                .count();
+            
+            // Count all approved/completed eSIM orders
+            long esimOrders = esimOrderRequestRepository.findAll().stream()
+                .filter(order -> "APPROVED".equals(order.getStatus()) || "COMPLETED".equals(order.getStatus()))
+                .count();
+            
+            return customerOrders + retailerOrders + esimOrders;
+        } catch (Exception e) {
+            System.err.println("Error calculating total orders: " + e.getMessage());
+            return 0;
         }
     }
     
@@ -781,5 +842,381 @@ public class AdminService {
         } else {
             return "STARTER";
         }
+    }
+
+    /**
+     * Get user details by user ID (includes purchases and usage)
+     */
+    public Map<String, Object> getUserDetails(String userId) {
+        Optional<User> optionalUser = userRepository.findById(userId);
+        
+        if (!optionalUser.isPresent()) {
+            throw new RuntimeException("User not found with ID: " + userId);
+        }
+        
+        User user = optionalUser.get();
+        Map<String, Object> userDetails = new HashMap<>();
+        
+        // Basic user info
+        Map<String, Object> basicInfo = new HashMap<>();
+        basicInfo.put("id", user.getId());
+        basicInfo.put("firstName", user.getFirstName());
+        basicInfo.put("lastName", user.getLastName());
+        basicInfo.put("email", user.getEmail());
+        basicInfo.put("mobileNumber", user.getMobileNumber());
+        basicInfo.put("accountType", user.getAccountType().name());
+        basicInfo.put("accountStatus", user.getAccountStatus().name());
+        basicInfo.put("createdDate", user.getCreatedDate());
+        basicInfo.put("lastModifiedDate", user.getLastModifiedDate());
+        basicInfo.put("emailVerified", user.isEmailVerified());
+        userDetails.put("basicInfo", basicInfo);
+        
+        // Business details if applicable
+        if (user.getBusinessDetails() != null) {
+            BusinessDetails business = user.getBusinessDetails();
+            Map<String, Object> businessInfo = new HashMap<>();
+            businessInfo.put("companyName", business.getCompanyName());
+            businessInfo.put("organizationNumber", business.getOrganizationNumber());
+            businessInfo.put("vatNumber", business.getVatNumber());
+            businessInfo.put("companyEmail", business.getCompanyEmail());
+            businessInfo.put("verificationMethod", business.getVerificationMethod().name());
+            businessInfo.put("verificationStatus", business.getVerificationStatus().name());
+            businessInfo.put("postalAddress", business.getPostalAddress());
+            businessInfo.put("billingAddress", business.getBillingAddress());
+            businessInfo.put("adminNotes", business.getAdminNotes());
+            userDetails.put("businessDetails", businessInfo);
+        }
+        
+        // Get purchases from all sources
+        List<Map<String, Object>> purchases = new ArrayList<>();
+        double totalSpent = 0.0;
+        
+        // 1. Get eSIM orders
+        List<EsimOrderRequest> esimOrders = esimOrderRequestRepository.findByCustomerEmail(user.getEmail());
+        for (EsimOrderRequest order : esimOrders) {
+            Map<String, Object> purchase = new HashMap<>();
+            purchase.put("orderId", order.getId());
+            purchase.put("orderNumber", order.getOrderNumber());
+            purchase.put("productName", order.getProductName());
+            purchase.put("amount", order.getAmount());
+            purchase.put("status", order.getStatus());
+            purchase.put("orderDate", order.getRequestDate());
+            purchase.put("type", "eSIM");
+            purchases.add(purchase);
+            
+            // Sum up approved/completed orders
+            String status = order.getStatus();
+            if ("APPROVED".equals(status) || "COMPLETED".equals(status)) {
+                totalSpent += order.getAmount();
+            }
+        }
+        
+        // 2. Get regular customer orders (bundles/ePIN) by customer email
+        List<Order> customerOrders = orderRepository.findByCustomerEmailOrderByCreatedDateDesc(user.getEmail());
+        for (Order order : customerOrders) {
+            Map<String, Object> purchase = new HashMap<>();
+            purchase.put("orderId", order.getId());
+            purchase.put("orderNumber", order.getOrderNumber());
+            purchase.put("productName", order.getProductName());
+            purchase.put("amount", order.getAmount().doubleValue());
+            purchase.put("status", order.getStatus().name());
+            purchase.put("orderDate", order.getCreatedDate());
+            purchase.put("type", order.getProductType() != null ? order.getProductType() : "Bundle");
+            purchase.put("quantity", order.getQuantity());
+            purchases.add(purchase);
+            
+            // Sum up completed orders
+            Order.OrderStatus status = order.getStatus();
+            if (status == Order.OrderStatus.COMPLETED) {
+                totalSpent += order.getAmount().doubleValue();
+            }
+        }
+        
+        // 2b. Get orders where user is the retailer (for direct purchases by retailers)
+        List<Order> retailerDirectOrders = orderRepository.findByRetailer_Id(user.getId());
+        for (Order order : retailerDirectOrders) {
+            // Skip if already added (avoid duplicates)
+            boolean alreadyAdded = purchases.stream()
+                .anyMatch(p -> p.get("orderId").equals(order.getId()));
+            if (alreadyAdded) continue;
+            
+            Map<String, Object> purchase = new HashMap<>();
+            purchase.put("orderId", order.getId());
+            purchase.put("orderNumber", order.getOrderNumber());
+            purchase.put("productName", order.getProductName());
+            purchase.put("amount", order.getAmount().doubleValue());
+            purchase.put("status", order.getStatus().name());
+            purchase.put("orderDate", order.getCreatedDate());
+            purchase.put("type", order.getProductType() != null ? order.getProductType() : "Bundle");
+            purchase.put("quantity", order.getQuantity());
+            purchases.add(purchase);
+            
+            // Sum up completed orders
+            Order.OrderStatus status = order.getStatus();
+            if (status == Order.OrderStatus.COMPLETED) {
+                totalSpent += order.getAmount().doubleValue();
+            }
+        }
+        
+        // 3. If user is a retailer, get their retailer orders too
+        if (user.getAccountType() == User.AccountType.BUSINESS) {
+            List<RetailerOrder> retailerOrders = retailerOrderRepository.findByRetailerId(user.getId());
+            for (RetailerOrder order : retailerOrders) {
+                Map<String, Object> purchase = new HashMap<>();
+                purchase.put("orderId", order.getId());
+                purchase.put("orderNumber", order.getOrderNumber());
+                purchase.put("productName", order.getItems().size() + " items");
+                purchase.put("amount", order.getTotalAmount().doubleValue());
+                purchase.put("status", order.getStatus().name());
+                purchase.put("orderDate", order.getCreatedDate());
+                purchase.put("type", "Retailer Order");
+                purchase.put("itemCount", order.getItems().size());
+                purchases.add(purchase);
+                
+                // Sum up delivered retailer orders
+                RetailerOrder.OrderStatus status = order.getStatus();
+                if (status == RetailerOrder.OrderStatus.DELIVERED) {
+                    totalSpent += order.getTotalAmount().doubleValue();
+                }
+            }
+        }
+        
+        // Sort purchases by date (most recent first)
+        purchases.sort((p1, p2) -> {
+            LocalDateTime d1 = (LocalDateTime) p1.get("orderDate");
+            LocalDateTime d2 = (LocalDateTime) p2.get("orderDate");
+            return d2.compareTo(d1);
+        });
+        
+        userDetails.put("purchases", purchases);
+        
+        // Usage statistics
+        Map<String, Object> usage = new HashMap<>();
+        usage.put("totalOrders", purchases.size());
+        usage.put("totalSpent", totalSpent);
+        usage.put("averageOrderValue", purchases.size() > 0 ? totalSpent / purchases.size() : 0.0);
+        usage.put("lastPurchaseDate", purchases.isEmpty() ? null : 
+            purchases.stream()
+                .map(p -> (LocalDateTime) p.get("orderDate"))
+                .max(Comparator.naturalOrder())
+                .orElse(null));
+        userDetails.put("usage", usage);
+        
+        return userDetails;
+    }
+
+    /**
+     * Suspend user account
+     */
+    public boolean suspendUser(String userId, String reason) {
+        Optional<User> optionalUser = userRepository.findById(userId);
+        
+        if (!optionalUser.isPresent()) {
+            throw new RuntimeException("User not found with ID: " + userId);
+        }
+        
+        User user = optionalUser.get();
+        user.setAccountStatus(User.AccountStatus.SUSPENDED);
+        
+        // Store suspension reason in business details admin notes if available
+        if (user.getBusinessDetails() != null) {
+            String currentNotes = user.getBusinessDetails().getAdminNotes();
+            String newNotes = (currentNotes != null ? currentNotes + "\n" : "") + 
+                            "SUSPENDED: " + LocalDateTime.now() + " - " + reason;
+            user.getBusinessDetails().setAdminNotes(newNotes);
+        }
+        
+        userRepository.save(user);
+        
+        // Send suspension email
+        try {
+            emailService.sendSuspensionEmail(user.getEmail(), user.getFirstName(), reason);
+        } catch (Exception e) {
+            // Log email error but don't fail the suspension
+            System.err.println("Failed to send suspension email: " + e.getMessage());
+        }
+        
+        return true;
+    }
+
+    /**
+     * Activate user account
+     */
+    public boolean activateUser(String userId) {
+        Optional<User> optionalUser = userRepository.findById(userId);
+        
+        if (!optionalUser.isPresent()) {
+            throw new RuntimeException("User not found with ID: " + userId);
+        }
+        
+        User user = optionalUser.get();
+        user.setAccountStatus(User.AccountStatus.ACTIVE);
+        
+        // Add activation note
+        if (user.getBusinessDetails() != null) {
+            String currentNotes = user.getBusinessDetails().getAdminNotes();
+            String newNotes = (currentNotes != null ? currentNotes + "\n" : "") + 
+                            "ACTIVATED: " + LocalDateTime.now();
+            user.getBusinessDetails().setAdminNotes(newNotes);
+        }
+        
+        userRepository.save(user);
+        
+        // Send activation email
+        try {
+            emailService.sendActivationEmail(user.getEmail(), user.getFirstName());
+        } catch (Exception e) {
+            System.err.println("Failed to send activation email: " + e.getMessage());
+        }
+        
+        return true;
+    }
+
+    /**
+     * Delete user account (soft delete by marking as deleted)
+     */
+    public boolean deleteUser(String userId) {
+        Optional<User> optionalUser = userRepository.findById(userId);
+        
+        if (!optionalUser.isPresent()) {
+            throw new RuntimeException("User not found with ID: " + userId);
+        }
+        
+        User user = optionalUser.get();
+        
+        // Soft delete - mark as deleted status
+        user.setAccountStatus(User.AccountStatus.SUSPENDED);
+        
+        // Add deletion marker in admin notes
+        if (user.getBusinessDetails() != null) {
+            String currentNotes = user.getBusinessDetails().getAdminNotes();
+            String newNotes = (currentNotes != null ? currentNotes + "\n" : "") + 
+                            "DELETED: " + LocalDateTime.now();
+            user.getBusinessDetails().setAdminNotes(newNotes);
+        }
+        
+        // Mark email as deleted
+        user.setEmail("DELETED_" + user.getId() + "_" + user.getEmail());
+        
+        userRepository.save(user);
+        
+        return true;
+    }
+
+    /**
+     * Generate mock retailer orders for testing
+     */
+    public List<RetailerOrder> generateMockRetailerOrders(String retailerId, int count) {
+        List<RetailerOrder> mockOrders = new ArrayList<>();
+        Random random = new Random();
+        
+        String[] bundleNames = {
+            "Lyca 11GB Bundle", "Lyca 22GB Bundle", "Lyca 33GB Bundle",
+            "Data Bundle 10GB", "Data Bundle 20GB", "Voice Bundle Premium",
+            "International Bundle", "Unlimited Bundle", "Student Bundle"
+        };
+        
+        String[] customerNames = {
+            "John Smith", "Emma Johnson", "Michael Brown", "Sarah Davis",
+            "David Wilson", "Lisa Anderson", "James Taylor", "Maria Garcia",
+            "Robert Martinez", "Jennifer Lopez", "William Robinson", "Elizabeth Clark"
+        };
+        
+        RetailerOrder.OrderStatus[] statuses = RetailerOrder.OrderStatus.values();
+        RetailerOrder.PaymentStatus[] paymentStatuses = RetailerOrder.PaymentStatus.values();
+        
+        for (int i = 0; i < count; i++) {
+            RetailerOrder order = new RetailerOrder();
+            order.setRetailerId(retailerId);
+            order.setOrderNumber("ORD-MOCK-" + System.currentTimeMillis() + "-" + i);
+            
+            // Create random order items
+            List<RetailerOrder.OrderItem> items = new ArrayList<>();
+            int itemCount = random.nextInt(3) + 1; // 1-3 items
+            
+            for (int j = 0; j < itemCount; j++) {
+                RetailerOrder.OrderItem item = new RetailerOrder.OrderItem();
+                item.setProductId("PROD-MOCK-" + random.nextInt(100));
+                item.setProductName(bundleNames[random.nextInt(bundleNames.length)]);
+                item.setProductType("BUNDLE");
+                item.setCategory("MOBILE_DATA");
+                item.setQuantity(random.nextInt(20) + 1); // 1-20 units
+                
+                BigDecimal unitPrice = BigDecimal.valueOf(49 + random.nextInt(200)); // 49-249 NOK
+                item.setUnitPrice(unitPrice);
+                item.setRetailPrice(unitPrice.multiply(BigDecimal.valueOf(1.2))); // 20% markup
+                item.setDataAmount((10 + random.nextInt(30)) + "GB");
+                item.setValidity((7 + random.nextInt(23)) + " days");
+                
+                items.add(item);
+            }
+            
+            order.setItems(items);
+            order.calculateTotalAmount();
+            order.setCurrency("NOK");
+            
+            // Random status
+            RetailerOrder.OrderStatus status = statuses[random.nextInt(statuses.length)];
+            order.setStatus(status);
+            
+            // Payment status based on order status
+            if (status == RetailerOrder.OrderStatus.DELIVERED) {
+                order.setPaymentStatus(RetailerOrder.PaymentStatus.COMPLETED);
+            } else if (status == RetailerOrder.OrderStatus.CANCELLED) {
+                order.setPaymentStatus(RetailerOrder.PaymentStatus.FAILED);
+            } else {
+                order.setPaymentStatus(paymentStatuses[random.nextInt(paymentStatuses.length)]);
+            }
+            
+            order.setPaymentMethod(random.nextBoolean() ? "CREDIT_ACCOUNT" : "BANK_TRANSFER");
+            order.setPaymentTransactionId("TXN-" + UUID.randomUUID().toString().substring(0, 8));
+            
+            // Billing info
+            RetailerOrder.BillingInfo billingInfo = new RetailerOrder.BillingInfo();
+            billingInfo.setCompanyName("Test Company " + (i + 1));
+            billingInfo.setContactName(customerNames[random.nextInt(customerNames.length)]);
+            billingInfo.setEmail("customer" + (i + 1) + "@example.com");
+            billingInfo.setPhone("+47" + (10000000 + random.nextInt(90000000)));
+            billingInfo.setAddress("Test Address " + (i + 1));
+            billingInfo.setCity("Oslo");
+            billingInfo.setPostalCode("0" + (100 + random.nextInt(900)));
+            billingInfo.setCountry("Norway");
+            order.setBillingInfo(billingInfo);
+            
+            // Random dates within last 30 days
+            LocalDateTime createdDate = LocalDateTime.now().minusDays(random.nextInt(30));
+            order.setCreatedDate(createdDate);
+            order.setLastModifiedDate(createdDate.plusHours(random.nextInt(48)));
+            
+            if (status == RetailerOrder.OrderStatus.DELIVERED) {
+                order.setDeliveredDate(createdDate.plusDays(random.nextInt(7)));
+            }
+            
+            if (status == RetailerOrder.OrderStatus.CANCELLED) {
+                String[] reasons = {
+                    "Customer request", "Out of stock", "Payment failed",
+                    "Duplicate order", "Address incorrect"
+                };
+                order.setCancellationReason(reasons[random.nextInt(reasons.length)]);
+            }
+            
+            order.setCreatedBy(retailerId);
+            
+            mockOrders.add(order);
+        }
+        
+        // Save all mock orders
+        return retailerOrderRepository.saveAll(mockOrders);
+    }
+    
+    /**
+     * Clear all mock retailer orders
+     */
+    public void clearMockRetailerOrders() {
+        List<RetailerOrder> mockOrders = retailerOrderRepository.findAll().stream()
+            .filter(order -> order.getOrderNumber().contains("MOCK"))
+            .collect(Collectors.toList());
+        
+        retailerOrderRepository.deleteAll(mockOrders);
     }
 }

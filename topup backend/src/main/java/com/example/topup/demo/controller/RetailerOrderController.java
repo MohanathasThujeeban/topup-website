@@ -8,6 +8,7 @@ import com.example.topup.demo.service.RetailerOrderService;
 import com.example.topup.demo.service.RetailerOrderService.PaymentDetails;
 import com.example.topup.demo.service.RetailerOrderService.PaymentResult;
 import com.example.topup.demo.service.RetailerOrderService.OrderStatistics;
+import com.example.topup.demo.service.AdminService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +34,9 @@ public class RetailerOrderController {
     
     @Autowired
     private RetailerOrderService orderService;
+    
+    @Autowired
+    private AdminService adminService;
     
     // Create new order
     @PostMapping
@@ -339,6 +343,60 @@ public class RetailerOrderController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
                 "success", false,
                 "message", "Failed to retrieve statistics: " + e.getMessage()
+            ));
+        }
+    }
+    
+    // ==================== MOCK DATA ENDPOINTS ====================
+    
+    /**
+     * Generate mock retailer orders for testing
+     * POST /api/retailer/order-management/mock/generate
+     */
+    @PostMapping("/mock/generate")
+    public ResponseEntity<?> generateMockOrders(
+            @RequestParam String retailerId,
+            @RequestParam(defaultValue = "10") int count) {
+        logger.info("Generating {} mock orders for retailer: {}", count, retailerId);
+        
+        try {
+            List<RetailerOrder> mockOrders = adminService.generateMockRetailerOrders(retailerId, count);
+            
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", count + " mock orders generated successfully",
+                "count", mockOrders.size(),
+                "data", mockOrders
+            ));
+        } catch (Exception e) {
+            logger.error("Error generating mock orders: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "success", false,
+                "message", "Failed to generate mock orders: " + e.getMessage()
+            ));
+        }
+    }
+    
+    /**
+     * Clear all mock retailer orders
+     * DELETE /api/retailer/order-management/mock/clear
+     */
+    @DeleteMapping("/mock/clear")
+    public ResponseEntity<?> clearMockOrders() {
+        logger.info("Clearing all mock orders");
+        
+        try {
+            adminService.clearMockRetailerOrders();
+            
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "All mock orders cleared successfully"
+            ));
+        } catch (Exception e) {
+            logger.error("Error clearing mock orders: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "success", false,
+                "message", "Failed to clear mock orders: " + e.getMessage()
             ));
         }
     }

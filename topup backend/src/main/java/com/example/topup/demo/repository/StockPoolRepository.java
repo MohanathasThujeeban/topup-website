@@ -24,6 +24,9 @@ public interface StockPoolRepository extends MongoRepository<StockPool, String> 
     @Query("{ 'availableQuantity' : { $gt: 0 } }")
     List<StockPool> findAllWithAvailableStock();
     
-    @Query("{ 'availableQuantity' : { $lt: 10 } }")
+    @Query("{ 'status': 'ACTIVE', 'availableQuantity': { $lt: 10, $gt: 0 } }")
     List<StockPool> findLowStockPools();
+    
+    @Query("{ 'status': 'ACTIVE', 'availableQuantity': { $lt: ?0, $gt: 0 } }")
+    List<StockPool> findLowStockPoolsByThreshold(int threshold);
 }

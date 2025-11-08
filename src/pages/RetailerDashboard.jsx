@@ -33,6 +33,75 @@ const RetailerDashboard = () => {
   const [activePromotions, setActivePromotions] = useState([]);
   const [showPromoBanner, setShowPromoBanner] = useState(true);
 
+  // Mock orders data
+  const generateMockOrders = () => {
+    const bundleNames = [
+      "Lyca 11GB Bundle", "Lyca 22GB Bundle", "Lyca 33GB Bundle",
+      "Data Bundle 10GB", "Data Bundle 20GB", "Voice Bundle Premium",
+      "International Bundle", "Unlimited Bundle", "Student Bundle"
+    ];
+    
+    const customerNames = [
+      "John Smith", "Emma Johnson", "Michael Brown", "Sarah Davis",
+      "David Wilson", "Lisa Anderson", "James Taylor", "Maria Garcia",
+      "Robert Martinez", "Jennifer Lopez", "William Robinson", "Elizabeth Clark"
+    ];
+    
+    const statuses = ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
+    
+    const mockOrders = [];
+    for (let i = 0; i < 25; i++) {
+      const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
+      const randomAmount = (49 + Math.floor(Math.random() * 200)) * (1 + Math.floor(Math.random() * 20));
+      const randomDaysAgo = Math.floor(Math.random() * 30);
+      const orderDate = new Date();
+      orderDate.setDate(orderDate.getDate() - randomDaysAgo);
+      
+      mockOrders.push({
+        id: `mock-order-${i + 1}`,
+        orderNumber: `ORD-MOCK-${Date.now()}-${i}`,
+        productName: bundleNames[Math.floor(Math.random() * bundleNames.length)],
+        productType: 'BUNDLE',
+        customerName: customerNames[Math.floor(Math.random() * customerNames.length)],
+        customerEmail: `customer${i + 1}@example.com`,
+        customerPhone: `+47${10000000 + Math.floor(Math.random() * 90000000)}`,
+        amount: randomAmount,
+        currency: 'NOK',
+        status: randomStatus,
+        createdDate: orderDate.toISOString(),
+        paymentStatus: randomStatus === 'DELIVERED' ? 'COMPLETED' : randomStatus === 'CANCELLED' ? 'FAILED' : 'PENDING'
+      });
+    }
+    
+    return mockOrders.sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate));
+  };
+
+  useEffect(() => {
+    // Load mock orders immediately
+    const mockOrdersData = generateMockOrders();
+    setOrders(mockOrdersData);
+    
+    // Set mock analytics
+    setAnalytics({
+      totalOrders: mockOrdersData.length,
+      totalRevenue: mockOrdersData.reduce((sum, order) => 
+        order.status === 'DELIVERED' ? sum + order.amount : sum, 0
+      ),
+      monthlyGrowth: 12.5,
+      pendingOrders: mockOrdersData.filter(o => o.status === 'PENDING').length,
+      orderGrowth: 8.3,
+      successRate: 85
+    });
+    
+    setConnectionStatus('connected');
+    setLoading(false);
+    
+    // Still try to fetch real data in background
+    fetchRetailerData();
+    fetchAvailableBundles();
+    fetchActivePromotions();
+  }, []);
+
   useEffect(() => {
     fetchRetailerData();
     fetchAvailableBundles();

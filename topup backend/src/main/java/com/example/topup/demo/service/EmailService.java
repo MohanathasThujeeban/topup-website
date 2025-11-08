@@ -1084,4 +1084,151 @@ public class EmailService {
             supportEmail
         );
     }
+
+    /**
+     * Send account suspension email
+     */
+    public void sendSuspensionEmail(String toEmail, String firstName, String reason) {
+        try {
+            MimeMessage message = javaMailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Account Suspended - " + appName);
+            
+            String htmlContent = String.format("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background: linear-gradient(135deg, #ef4444 0%%, #dc2626 100%%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+                        .alert-box { background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0; }
+                        .reason { background: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
+                        .footer { text-align: center; margin-top: 20px; color: #6b7280; font-size: 12px; }
+                        .contact-btn { display: inline-block; padding: 12px 30px; background: #3b82f6; color: white; text-decoration: none; border-radius: 5px; margin: 15px 0; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>⚠️ Account Suspended</h1>
+                        </div>
+                        <div class="content">
+                            <p>Hello %s,</p>
+                            
+                            <div class="alert-box">
+                                <strong>Your account has been temporarily suspended.</strong>
+                            </div>
+                            
+                            <div class="reason">
+                                <strong>Reason:</strong><br>
+                                %s
+                            </div>
+                            
+                            <p>Your account access has been restricted. If you believe this is an error or would like to appeal this decision, please contact our support team.</p>
+                            
+                            <div style="text-align: center;">
+                                <a href="mailto:%s" class="contact-btn">Contact Support</a>
+                            </div>
+                            
+                            <div class="footer">
+                                <p>This is an automated message from %s</p>
+                                <p>Support: %s</p>
+                            </div>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """, 
+                firstName,
+                reason,
+                supportEmail,
+                appName,
+                supportEmail
+            );
+            
+            helper.setText(htmlContent, true);
+            javaMailSender.send(message);
+            
+            log.info("Suspension email sent to: {}", toEmail);
+        } catch (MessagingException e) {
+            log.error("Failed to send suspension email to {}: {}", toEmail, e.getMessage());
+            throw new RuntimeException("Failed to send suspension email", e);
+        }
+    }
+
+    /**
+     * Send account activation email
+     */
+    public void sendActivationEmail(String toEmail, String firstName) {
+        try {
+            MimeMessage message = javaMailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Account Activated - " + appName);
+            
+            String htmlContent = String.format("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background: linear-gradient(135deg, #10b981 0%%, #059669 100%%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+                        .success-box { background: #d1fae5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; }
+                        .footer { text-align: center; margin-top: 20px; color: #6b7280; font-size: 12px; }
+                        .login-btn { display: inline-block; padding: 12px 30px; background: #3b82f6; color: white; text-decoration: none; border-radius: 5px; margin: 15px 0; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>✅ Account Activated</h1>
+                        </div>
+                        <div class="content">
+                            <p>Hello %s,</p>
+                            
+                            <div class="success-box">
+                                <strong>Good news! Your account has been activated.</strong>
+                            </div>
+                            
+                            <p>You now have full access to your account and can continue using our services.</p>
+                            
+                            <div style="text-align: center;">
+                                <a href="%s/login" class="login-btn">Login to Your Account</a>
+                            </div>
+                            
+                            <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
+                            
+                            <div class="footer">
+                                <p>This is an automated message from %s</p>
+                                <p>Support: %s</p>
+                            </div>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """, 
+                firstName,
+                appUrl,
+                appName,
+                supportEmail
+            );
+            
+            helper.setText(htmlContent, true);
+            javaMailSender.send(message);
+            
+            log.info("Activation email sent to: {}", toEmail);
+        } catch (MessagingException e) {
+            log.error("Failed to send activation email to {}: {}", toEmail, e.getMessage());
+            throw new RuntimeException("Failed to send activation email", e);
+        }
+    }
 }

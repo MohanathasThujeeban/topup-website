@@ -263,4 +263,111 @@ public class AdminController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         }
     }
+
+    /**
+     * Get user details with purchases and usage
+     */
+    @GetMapping("/users/{userId}/details")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getUserDetails(@PathVariable String userId) {
+        try {
+            Map<String, Object> userDetails = adminService.getUserDetails(userId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", userDetails);
+            response.put("message", "User details fetched successfully");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to fetch user details: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Suspend user account
+     */
+    @PostMapping("/users/{userId}/suspend")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> suspendUser(
+            @PathVariable String userId,
+            @RequestBody(required = false) Map<String, String> requestBody) {
+        try {
+            String reason = requestBody != null ? requestBody.get("reason") : "Account suspended by admin";
+            boolean success = adminService.suspendUser(userId, reason);
+            
+            Map<String, Object> response = new HashMap<>();
+            if (success) {
+                response.put("success", true);
+                response.put("message", "User suspended successfully");
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("success", false);
+                response.put("error", "Failed to suspend user");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to suspend user: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Activate user account
+     */
+    @PostMapping("/users/{userId}/activate")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> activateUser(@PathVariable String userId) {
+        try {
+            boolean success = adminService.activateUser(userId);
+            
+            Map<String, Object> response = new HashMap<>();
+            if (success) {
+                response.put("success", true);
+                response.put("message", "User activated successfully");
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("success", false);
+                response.put("error", "Failed to activate user");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to activate user: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Delete user account
+     */
+    @DeleteMapping("/users/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> deleteUser(@PathVariable String userId) {
+        try {
+            boolean success = adminService.deleteUser(userId);
+            
+            Map<String, Object> response = new HashMap<>();
+            if (success) {
+                response.put("success", true);
+                response.put("message", "User deleted successfully");
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("success", false);
+                response.put("error", "Failed to delete user");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to delete user: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
 }

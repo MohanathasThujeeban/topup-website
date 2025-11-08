@@ -3,10 +3,12 @@ package com.example.topup.demo.controller;
 import com.example.topup.demo.entity.Order;
 import com.example.topup.demo.entity.Product;
 import com.example.topup.demo.entity.User;
+import com.example.topup.demo.entity.RetailerOrder;
 import com.example.topup.demo.entity.Order.OrderStatus;
 import com.example.topup.demo.service.RetailerService;
 import com.example.topup.demo.service.UserService;
 import com.example.topup.demo.service.BundleService;
+import com.example.topup.demo.repository.RetailerOrderRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -19,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/retailer")
@@ -34,17 +37,65 @@ public class RetailerController {
     
     @Autowired
     private UserService userService;
+    
+    @Autowired
+    private RetailerOrderRepository retailerOrderRepository;
 
     // Get all orders for the authenticated retailer
     @GetMapping("/orders")
     public ResponseEntity<?> getOrders(Authentication authentication) {
         try {
             User retailer = getUserFromAuthentication(authentication);
+            
+            // First try to get RetailerOrder entities (new system)
+            List<RetailerOrder> retailerOrders = retailerOrderRepository.findByRetailerId(retailer.getId());
+            
+            if (!retailerOrders.isEmpty()) {
+                // Convert RetailerOrder to a format compatible with frontend
+                List<Map<String, Object>> formattedOrders = retailerOrders.stream()
+                    .map(order -> {
+                        Map<String, Object> orderMap = new HashMap<>();
+                        orderMap.put("id", order.getId());
+                        orderMap.put("orderNumber", order.getOrderNumber());
+                        orderMap.put("status", order.getStatus().toString());
+                        orderMap.put("amount", order.getTotalAmount());
+                        orderMap.put("currency", order.getCurrency());
+                        orderMap.put("createdDate", order.getCreatedDate());
+                        orderMap.put("paymentStatus", order.getPaymentStatus().toString());
+                        
+                        // Extract product/bundle info from first item
+                        if (order.getItems() != null && !order.getItems().isEmpty()) {
+                            RetailerOrder.OrderItem firstItem = order.getItems().get(0);
+                            orderMap.put("productName", firstItem.getProductName());
+                            orderMap.put("productType", firstItem.getProductType());
+                        }
+                        
+                        // Extract customer info from billing
+                        if (order.getBillingInfo() != null) {
+                            orderMap.put("customerName", order.getBillingInfo().getContactName());
+                            orderMap.put("customerEmail", order.getBillingInfo().getEmail());
+                            orderMap.put("customerPhone", order.getBillingInfo().getPhone());
+                        }
+                        
+                        return orderMap;
+                    })
+                    .collect(Collectors.toList());
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", true);
+                response.put("data", formattedOrders);
+                response.put("total", formattedOrders.size());
+                
+                return ResponseEntity.ok(response);
+            }
+            
+            // Fallback to old Order entities if no RetailerOrders found
+            // Fallback to old Order entities if no RetailerOrders found
             List<Order> orders = retailerService.getOrdersByRetailer(retailer);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("orders", orders);
+            response.put("data", orders);
             response.put("total", orders.size());
             
             return ResponseEntity.ok(response);
