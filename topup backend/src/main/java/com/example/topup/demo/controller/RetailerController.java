@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/retailer")
 @PreAuthorize("hasRole('BUSINESS')")
-@CrossOrigin(origins = {"http://localhost:3001", "http://localhost:5173", "https://topup.neirahtech"})
+@CrossOrigin(origins = {"http://localhost:3001", "http://localhost:5173", "https://topup.neirahtech", "https://topup-website-gmoj.vercel.app"})
 public class RetailerController {
 
     @Autowired

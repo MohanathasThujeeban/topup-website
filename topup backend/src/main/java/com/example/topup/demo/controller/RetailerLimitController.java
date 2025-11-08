@@ -16,7 +16,7 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/admin/retailers")
-@CrossOrigin(origins = {"http://localhost:5173", "https://topup-website-nine.vercel.app"}, allowCredentials = "true")
+@CrossOrigin(origins = {"http://localhost:5173", "https://topup-website-nine.vercel.app", "https://topup-website-gmoj.vercel.app"}, allowCredentials = "true")
 public class RetailerLimitController {
 
     @Autowired

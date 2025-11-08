@@ -23,7 +23,7 @@ import java.util.Map;
 @RequestMapping("/api/retailer")
 // Temporarily disabled authentication for development
 // @PreAuthorize("hasRole('BUSINESS')")
-@CrossOrigin(origins = {"http://localhost:3001", "http://localhost:5173", "https://topup.neirahtech.com", "https://topup-website-beta.vercel.app"})
+@CrossOrigin(origins = {"http://localhost:3001", "http://localhost:5173", "https://topup.neirahtech.com", "https://topup-website-beta.vercel.app", "https://topup-website-gmoj.vercel.app"})
 public class RetailerBundlePurchaseController {
 
     @Autowired

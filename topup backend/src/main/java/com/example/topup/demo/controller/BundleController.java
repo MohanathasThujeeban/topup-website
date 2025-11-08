@@ -19,7 +19,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/admin/bundles")
 @CrossOrigin(
-    origins = {"http://localhost:3000", "http://localhost:5173", "https://topup.neirahtech"}, 
+    origins = {"http://localhost:3000", "http://localhost:5173", "https://topup.neirahtech", "https://topup-website-gmoj.vercel.app"}, 
     allowCredentials = "true",
     allowedHeaders = {"Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"},
     methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS}

@@ -20,7 +20,17 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "http://172.20.10.3:3000", "http://172.20.10.3", "https://topup.neirahtech"}, 
+@CrossOrigin(origins = {
+    "http://localhost:3000", 
+    "http://localhost:3001", 
+    "http://localhost:5173", 
+    "http://172.20.10.3:3000", 
+    "http://172.20.10.3", 
+    "https://topup.neirahtech",
+    "https://topup-website-nine.vercel.app",
+    "https://topup-website-gmoj.vercel.app",
+    "https://topup-backend-production.up.railway.app"
+}, 
     allowedHeaders = "*", 
     exposedHeaders = {"Authorization", "Content-Type"},
     allowCredentials = "true", 

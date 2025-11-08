@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/public/bundles")
 @CrossOrigin(
-    origins = {"http://localhost:3000", "http://localhost:5173", "https://topup.neirahtech", "https://topup-website-beta.vercel.app"}, 
+    origins = {"http://localhost:3000", "http://localhost:5173", "https://topup.neirahtech", "https://topup-website-beta.vercel.app", "https://topup-website-gmoj.vercel.app"}, 
     allowCredentials = "true",
     allowedHeaders = {"Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"},
     methods = {RequestMethod.GET, RequestMethod.OPTIONS}

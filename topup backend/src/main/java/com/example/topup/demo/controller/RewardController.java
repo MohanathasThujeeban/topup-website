@@ -16,7 +16,7 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/admin/rewards")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "https://topup-website-nine.vercel.app"}, allowCredentials = "true")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "https://topup-website-nine.vercel.app", "https://topup-website-gmoj.vercel.app"}, allowCredentials = "true")
 public class RewardController {
 
     @Autowired

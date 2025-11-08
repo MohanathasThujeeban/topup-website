@@ -164,11 +164,14 @@ const PersonalRegistrationPage = () => {
     setSubmitError('');
 
     try {
+      // Clean mobile number - remove spaces, dashes, parentheses
+      const cleanedMobile = formData.mobileNumber.replace(/[\s\-\(\)]/g, '');
+      
       const result = await registerPersonal({
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         email: formData.email.trim().toLowerCase(),
-        mobileNumber: formData.mobileNumber.trim(),
+        mobileNumber: cleanedMobile,
         password: formData.password,
         acceptMarketing: formData.acceptMarketing,
         accountType: 'personal'

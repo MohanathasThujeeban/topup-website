@@ -15,7 +15,7 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173", "https://topup-website-gmoj.vercel.app"})
 public class EsimOrderController {
 
     @Autowired

@@ -21,7 +21,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/stock")
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:8080"})
+@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:8080", "https://topup-website-gmoj.vercel.app"})
 public class StockController {
 
     @Autowired
