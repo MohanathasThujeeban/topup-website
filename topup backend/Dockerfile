@@ -16,8 +16,8 @@ COPY src ./src
 # Build the application
 RUN mvn clean package -DskipTests
 
-# Runtime stage
-FROM openjdk:17-jdk-slim
+# Runtime stage - Use Eclipse Temurin (recommended replacement for OpenJDK)
+FROM eclipse-temurin:17-jre-jammy
 
 # Set working directory
 WORKDIR /app
@@ -28,5 +28,5 @@ COPY --from=build /app/target/demo-0.0.1-SNAPSHOT.jar app.jar
 # Expose port (typically 8080 for Spring Boot apps)
 EXPOSE 8080
 
-# Run the application
-CMD ["java", "-jar", "app.jar"]
+# Run the application with optimized JVM settings
+CMD ["java", "-Xmx512m", "-Xms256m", "-jar", "app.jar"]
