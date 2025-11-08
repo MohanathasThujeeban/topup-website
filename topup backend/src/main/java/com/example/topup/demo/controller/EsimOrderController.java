@@ -447,5 +447,44 @@ public class EsimOrderController {
             return ResponseEntity.status(500).body(error);
         }
     }
+    
+    // Test endpoint to verify email configuration
+    @PostMapping("/test/send-email")
+    public ResponseEntity<Map<String, Object>> testEmail(@RequestBody Map<String, String> emailData) {
+        try {
+            String toEmail = emailData.get("email");
+            String testPin = "1234567890123456";
+            
+            System.out.println("=== Testing Email Send ===");
+            System.out.println("Sending test ePIN email to: " + toEmail);
+            
+            emailService.sendEpinDeliveryEmail(
+                toEmail,
+                "Test Customer",
+                "TEST-" + System.currentTimeMillis(),
+                testPin,
+                "Test Product Bundle",
+                "30 days"
+            );
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Test email sent successfully to " + toEmail);
+            response.put("sentTo", toEmail);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("❌ Test email failed: " + e.getMessage());
+            e.printStackTrace();
+            
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "Failed to send test email: " + e.getMessage());
+            error.put("error", e.getClass().getSimpleName());
+            error.put("details", e.toString());
+            
+            return ResponseEntity.status(500).body(error);
+        }
+    }
 }
 

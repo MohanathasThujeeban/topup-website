@@ -938,6 +938,12 @@ public class EmailService {
     public void sendEpinDeliveryEmail(String toEmail, String customerName, String orderNumber, 
                                       String pinCode, String productName, String validity) {
         try {
+            log.info("=== Starting ePIN email delivery ===");
+            log.info("Recipient: {}", toEmail);
+            log.info("From Email: {}", fromEmail);
+            log.info("Order Number: {}", orderNumber);
+            log.info("Product: {}", productName);
+            
             String htmlContent = generateEpinDeliveryHtml(
                 customerName, 
                 orderNumber, 
@@ -945,6 +951,8 @@ public class EmailService {
                 productName, 
                 validity
             );
+            
+            log.info("HTML content generated, length: {} characters", htmlContent.length());
             
             MimeMessage message = javaMailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -954,11 +962,23 @@ public class EmailService {
             helper.setSubject("🎉 Your Lycamobile ePIN - Ready to Use!");
             helper.setText(htmlContent, true);
             
+            log.info("Message configured, attempting to send...");
             javaMailSender.send(message);
+            
+            log.info("✅ ePIN delivery email sent successfully to: {}", toEmail);
             System.out.println("✅ ePIN delivery email sent successfully to: " + toEmail);
         } catch (Exception e) {
+            log.error("❌ Failed to send ePIN delivery email to: {}", toEmail, e);
+            log.error("Error type: {}", e.getClass().getName());
+            log.error("Error message: {}", e.getMessage());
+            if (e.getCause() != null) {
+                log.error("Root cause: {}", e.getCause().getMessage());
+            }
             System.err.println("❌ Failed to send ePIN delivery email: " + e.getMessage());
             e.printStackTrace();
+            
+            // Rethrow to make the calling code aware of the failure
+            throw new RuntimeException("Failed to send ePIN delivery email: " + e.getMessage(), e);
         }
     }
 
