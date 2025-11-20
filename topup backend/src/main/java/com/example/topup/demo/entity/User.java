@@ -237,6 +237,15 @@ public class User implements UserDetails {
         this.lastModifiedDate = lastModifiedDate;
     }
 
+    // Alias methods for compatibility
+    public LocalDateTime getUpdatedDate() {
+        return lastModifiedDate;
+    }
+
+    public void setUpdatedDate(LocalDateTime updatedDate) {
+        this.lastModifiedDate = updatedDate;
+    }
+
     // Utility Methods
     public String getFullName() {
         return firstName + " " + lastName;

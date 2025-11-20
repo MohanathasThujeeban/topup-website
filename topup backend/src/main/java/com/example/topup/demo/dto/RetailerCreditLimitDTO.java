@@ -22,6 +22,12 @@ public class RetailerCreditLimitDTO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     
+    // Unit Limit Management
+    private Integer unitLimit;
+    private Integer usedUnits;
+    private Integer availableUnits;
+    private Double unitUsagePercentage;
+    
     // Constructors
     public RetailerCreditLimitDTO() {}
     
@@ -152,5 +158,38 @@ public class RetailerCreditLimitDTO {
     
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+    
+    // Unit Limit Getters and Setters
+    public Integer getUnitLimit() {
+        return unitLimit;
+    }
+    
+    public void setUnitLimit(Integer unitLimit) {
+        this.unitLimit = unitLimit;
+    }
+    
+    public Integer getUsedUnits() {
+        return usedUnits;
+    }
+    
+    public void setUsedUnits(Integer usedUnits) {
+        this.usedUnits = usedUnits;
+    }
+    
+    public Integer getAvailableUnits() {
+        return availableUnits;
+    }
+    
+    public void setAvailableUnits(Integer availableUnits) {
+        this.availableUnits = availableUnits;
+    }
+    
+    public Double getUnitUsagePercentage() {
+        return unitUsagePercentage;
+    }
+    
+    public void setUnitUsagePercentage(Double unitUsagePercentage) {
+        this.unitUsagePercentage = unitUsagePercentage;
     }
 }

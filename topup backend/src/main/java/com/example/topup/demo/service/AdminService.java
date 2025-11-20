@@ -8,6 +8,7 @@ import com.example.topup.demo.entity.RetailerLimit;
 import com.example.topup.demo.entity.EsimOrderRequest;
 import com.example.topup.demo.dto.RetailerCreditLimitDTO;
 import com.example.topup.demo.dto.UpdateCreditLimitRequest;
+import com.example.topup.demo.dto.UpdateUnitLimitRequest;
 import com.example.topup.demo.repository.UserRepository;
 import com.example.topup.demo.repository.BusinessDetailsRepository;
 import com.example.topup.demo.repository.OrderRepository;
@@ -752,6 +753,23 @@ public class AdminService {
                 limit.setPaymentTermsDays(request.getPaymentTermsDays());
             }
             
+            // Update unit limit if provided
+            if (request.getUnitLimit() != null) {
+                Integer oldUnitLimit = limit.getUnitLimit();
+                limit.setUnitLimit(request.getUnitLimit());
+                
+                // Initialize used units if not set
+                if (limit.getUsedUnits() == null) {
+                    limit.setUsedUnits(0);
+                }
+                
+                // Update available units
+                limit.updateAvailableUnits();
+                
+                System.out.println("✅ Updated unit limit for retailer " + retailer.getEmail() + 
+                                 " from " + oldUnitLimit + " to " + request.getUnitLimit());
+            }
+            
             // Save the updated limit
             retailerLimitRepository.save(limit);
             
@@ -763,6 +781,61 @@ public class AdminService {
             System.err.println("Error updating retailer credit limit: " + e.getMessage());
             e.printStackTrace();
             throw new RuntimeException("Failed to update credit limit: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Update retailer unit limit specifically
+     */
+    public RetailerCreditLimitDTO updateRetailerUnitLimit(com.example.topup.demo.dto.UpdateUnitLimitRequest request) {
+        try {
+            User retailer = userRepository.findById(request.getRetailerId())
+                .orElseThrow(() -> new RuntimeException("Retailer not found"));
+                
+            if (retailer.getAccountType() != User.AccountType.BUSINESS) {
+                throw new RuntimeException("User is not a business/retailer account");
+            }
+            
+            // Get or create retailer limit
+            RetailerLimit limit = retailerLimitRepository.findByRetailer(retailer)
+                .orElse(new RetailerLimit());
+            
+            // If new limit, set retailer and initial values
+            if (limit.getId() == null) {
+                limit.setRetailer(retailer);
+                limit.setUsedCredit(BigDecimal.ZERO);
+                limit.setOutstandingAmount(BigDecimal.ZERO);
+                limit.setStatus(RetailerLimit.LimitStatus.ACTIVE);
+                // Set default credit limit if not set
+                if (limit.getCreditLimit() == null) {
+                    limit.setCreditLimit(BigDecimal.ZERO);
+                    limit.setAvailableCredit(BigDecimal.ZERO);
+                }
+            }
+            
+            // Update unit limit
+            Integer oldUnitLimit = limit.getUnitLimit();
+            limit.setUnitLimit(request.getUnitLimit());
+            
+            // Initialize used units if not set
+            if (limit.getUsedUnits() == null) {
+                limit.setUsedUnits(0);
+            }
+            
+            // Update available units
+            limit.updateAvailableUnits();
+            
+            // Save the updated limit
+            retailerLimitRepository.save(limit);
+            
+            System.out.println("✅ Updated unit limit for retailer " + retailer.getEmail() + 
+                             " from " + oldUnitLimit + " to " + request.getUnitLimit());
+            
+            return convertToRetailerCreditLimitDTO(retailer);
+        } catch (Exception e) {
+            System.err.println("Error updating retailer unit limit: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to update unit limit: " + e.getMessage());
         }
     }
     
@@ -802,6 +875,12 @@ public class AdminService {
                 dto.setCreditUsagePercentage(0.0);
             }
             
+            // Set unit limit fields
+            dto.setUnitLimit(limit.getUnitLimit());
+            dto.setUsedUnits(limit.getUsedUnits());
+            dto.setAvailableUnits(limit.getAvailableUnits());
+            dto.setUnitUsagePercentage(limit.getUnitUsagePercentage());
+            
             // Determine level based on credit limit
             dto.setLevel(determineCreditLevel(limit.getCreditLimit()));
         } else {
@@ -814,6 +893,12 @@ public class AdminService {
             dto.setStatus("NOT_SET");
             dto.setCreditUsagePercentage(0.0);
             dto.setLevel("NOT_SET");
+            
+            // Default unit limit values
+            dto.setUnitLimit(0);
+            dto.setUsedUnits(0);
+            dto.setAvailableUnits(0);
+            dto.setUnitUsagePercentage(0.0);
         }
         
         return dto;
@@ -1073,6 +1158,68 @@ public class AdminService {
     }
 
     /**
+     * Update user details (email and mobile number)
+     */
+    public boolean updateUserDetails(String userId, String newEmail, String newMobileNumber) {
+        Optional<User> optionalUser = userRepository.findById(userId);
+        
+        if (!optionalUser.isPresent()) {
+            throw new RuntimeException("User not found with ID: " + userId);
+        }
+        
+        User user = optionalUser.get();
+        
+        // Check if new email is already taken by another user
+        if (newEmail != null && !newEmail.equals(user.getEmail())) {
+            if (userRepository.existsByEmailIgnoreCase(newEmail)) {
+                throw new RuntimeException("Email already exists for another user");
+            }
+            user.setEmail(newEmail.toLowerCase());
+            
+            // If email is changed, mark as unverified and send new verification
+            user.setEmailVerified(false);
+            
+            // Add update note
+            if (user.getBusinessDetails() != null) {
+                String currentNotes = user.getBusinessDetails().getAdminNotes();
+                String newNotes = (currentNotes != null ? currentNotes + "\n" : "") + 
+                                "EMAIL_UPDATED: " + LocalDateTime.now() + " - Changed by admin";
+                user.getBusinessDetails().setAdminNotes(newNotes);
+            }
+        }
+        
+        // Update mobile number if provided
+        if (newMobileNumber != null && !newMobileNumber.trim().isEmpty()) {
+            user.setMobileNumber(newMobileNumber.trim());
+            
+            // Add update note for mobile
+            if (user.getBusinessDetails() != null) {
+                String currentNotes = user.getBusinessDetails().getAdminNotes();
+                String newNotes = (currentNotes != null ? currentNotes + "\n" : "") + 
+                                "MOBILE_UPDATED: " + LocalDateTime.now() + " - Changed by admin";
+                user.getBusinessDetails().setAdminNotes(newNotes);
+            }
+        }
+        
+        user.setLastModifiedDate(LocalDateTime.now());
+        userRepository.save(user);
+        
+        // Send email verification if email was changed
+        if (newEmail != null && !newEmail.equals(user.getEmail())) {
+            try {
+                // Send verification email for new email
+                emailService.sendEmailVerification(newEmail, user.getFirstName(), 
+                    java.util.UUID.randomUUID().toString());
+            } catch (Exception e) {
+                // Log email error but don't fail the update
+                System.err.println("Failed to send verification email: " + e.getMessage());
+            }
+        }
+        
+        return true;
+    }
+
+    /**
      * Delete user account (soft delete by marking as deleted)
      */
     public boolean deleteUser(String userId) {
@@ -1218,5 +1365,97 @@ public class AdminService {
             .collect(Collectors.toList());
         
         retailerOrderRepository.deleteAll(mockOrders);
+    }
+    
+    // Margin Rate Management
+    public void updateRetailerMarginRate(String retailerEmail, Double marginRate) {
+        System.out.println("=== UPDATING MARGIN RATE ===");
+        System.out.println("Email: " + retailerEmail);
+        System.out.println("Margin Rate: " + marginRate);
+        
+        User retailer = userRepository.findByEmailIgnoreCase(retailerEmail)
+            .orElseThrow(() -> new RuntimeException("Retailer not found with email: " + retailerEmail));
+        
+        if (!retailer.getAccountType().equals(User.AccountType.BUSINESS)) {
+            throw new RuntimeException("User is not a business retailer");
+        }
+        
+        // Get or create business details
+        BusinessDetails businessDetails = retailer.getBusinessDetails();
+        if (businessDetails == null) {
+            businessDetails = new BusinessDetails();
+            businessDetails.setUser(retailer);
+            businessDetails.setCompanyName(retailer.getFullName() + " Business");
+            businessDetails.setCreatedDate(LocalDateTime.now());
+        }
+        
+        // Update metadata with margin rate
+        Map<String, Object> metadata = businessDetails.getMetadata();
+        if (metadata == null) {
+            metadata = new HashMap<>();
+        }
+        
+        metadata.put("marginRate", marginRate);
+        metadata.put("marginRateSetDate", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        metadata.put("marginRateSetBy", "admin");
+        
+        businessDetails.setMetadata(metadata);
+        businessDetails.setUpdatedDate(LocalDateTime.now());
+        
+        // Save business details
+        businessDetailsRepository.save(businessDetails);
+        
+        // Update retailer's updated date
+        retailer.setUpdatedDate(LocalDateTime.now());
+        userRepository.save(retailer);
+        
+        System.out.println("✅ Margin rate saved successfully!");
+        System.out.println("Saved metadata: " + metadata);
+    }
+    
+    public Double getRetailerMarginRate(String retailerEmail) {
+        System.out.println("=== GETTING MARGIN RATE ===");
+        System.out.println("Email: " + retailerEmail);
+        
+        User retailer = userRepository.findByEmailIgnoreCase(retailerEmail)
+            .orElseThrow(() -> new RuntimeException("Retailer not found with email: " + retailerEmail));
+        
+        if (!retailer.getAccountType().equals(User.AccountType.BUSINESS)) {
+            throw new RuntimeException("User is not a business retailer");
+        }
+        
+        // Check business details for margin rate
+        BusinessDetails businessDetails = retailer.getBusinessDetails();
+        System.out.println("Business Details: " + (businessDetails != null ? "Found" : "NULL"));
+        
+        if (businessDetails != null) {
+            Map<String, Object> metadata = businessDetails.getMetadata();
+            System.out.println("Metadata: " + metadata);
+            
+            if (metadata != null && metadata.containsKey("marginRate")) {
+                Object marginRateObj = metadata.get("marginRate");
+                System.out.println("Found marginRate in metadata: " + marginRateObj + " (type: " + (marginRateObj != null ? marginRateObj.getClass().getSimpleName() : "null") + ")");
+                
+                if (marginRateObj instanceof Number) {
+                    Double rate = ((Number) marginRateObj).doubleValue();
+                    System.out.println("✅ Returning margin rate: " + rate + "%");
+                    return rate;
+                }
+                if (marginRateObj instanceof String) {
+                    try {
+                        Double rate = Double.parseDouble((String) marginRateObj);
+                        System.out.println("✅ Returning parsed margin rate: " + rate + "%");
+                        return rate;
+                    } catch (NumberFormatException e) {
+                        System.out.println("❌ Failed to parse margin rate string: " + marginRateObj);
+                    }
+                }
+            } else {
+                System.out.println("❌ No marginRate found in metadata");
+            }
+        }
+        
+        System.out.println("❌ Returning null - no admin margin rate set");
+        return null;
     }
 }

@@ -40,6 +40,16 @@ public class RetailerLimit {
     @Max(value = 365, message = "Payment terms cannot exceed 365 days")
     private Integer paymentTermsDays = 30; // Default 30 days
 
+    // Unit Limit Management
+    @Min(value = 0, message = "Unit limit must be non-negative")
+    private Integer unitLimit = 0; // Maximum units retailer can purchase
+
+    @Min(value = 0, message = "Used units must be non-negative")
+    private Integer usedUnits = 0; // Total units purchased
+
+    @Min(value = 0, message = "Available units must be non-negative")
+    private Integer availableUnits = 0; // Remaining units
+
     private LocalDateTime lastPaymentDate;
     private LocalDateTime nextDueDate;
 
@@ -357,6 +367,33 @@ public class RetailerLimit {
         this.paymentTermsDays = paymentTermsDays;
     }
 
+    // Unit Limit Getters and Setters
+    public Integer getUnitLimit() {
+        return unitLimit;
+    }
+
+    public void setUnitLimit(Integer unitLimit) {
+        this.unitLimit = unitLimit;
+        updateAvailableUnits();
+    }
+
+    public Integer getUsedUnits() {
+        return usedUnits;
+    }
+
+    public void setUsedUnits(Integer usedUnits) {
+        this.usedUnits = usedUnits;
+        updateAvailableUnits();
+    }
+
+    public Integer getAvailableUnits() {
+        return availableUnits;
+    }
+
+    public void setAvailableUnits(Integer availableUnits) {
+        this.availableUnits = availableUnits;
+    }
+
     public LocalDateTime getLastPaymentDate() {
         return lastPaymentDate;
     }
@@ -451,5 +488,66 @@ public class RetailerLimit {
 
     public void setLastModifiedBy(String lastModifiedBy) {
         this.lastModifiedBy = lastModifiedBy;
+    }
+
+    // Unit Limit Business Logic
+    public boolean hasAvailableUnits(Integer requiredUnits) {
+        if (unitLimit == null || unitLimit <= 0) {
+            return true; // No unit limit set
+        }
+        return availableUnits != null && availableUnits >= requiredUnits;
+    }
+
+    public void consumeUnits(Integer units) {
+        if (units == null || units <= 0) {
+            return;
+        }
+        
+        if (usedUnits == null) {
+            usedUnits = 0;
+        }
+        
+        usedUnits += units;
+        updateAvailableUnits();
+    }
+
+    public void refundUnits(Integer units) {
+        if (units == null || units <= 0) {
+            return;
+        }
+        
+        if (usedUnits == null) {
+            usedUnits = 0;
+        }
+        
+        usedUnits = Math.max(0, usedUnits - units);
+        updateAvailableUnits();
+    }
+
+    public void updateAvailableUnits() {
+        if (unitLimit != null && usedUnits != null) {
+            availableUnits = Math.max(0, unitLimit - usedUnits);
+        } else if (unitLimit != null) {
+            availableUnits = unitLimit;
+        }
+    }
+
+    public Double getUnitUsagePercentage() {
+        if (unitLimit == null || unitLimit <= 0 || usedUnits == null) {
+            return 0.0;
+        }
+        return (usedUnits.doubleValue() / unitLimit.doubleValue()) * 100.0;
+    }
+
+    public boolean isUnitLimitExceeded() {
+        return unitLimit != null && unitLimit > 0 && usedUnits != null && usedUnits > unitLimit;
+    }
+
+    public boolean isNearingUnitLimit(Double thresholdPercentage) {
+        if (unitLimit == null || unitLimit <= 0 || thresholdPercentage == null) {
+            return false;
+        }
+        Double usagePercentage = getUnitUsagePercentage();
+        return usagePercentage >= thresholdPercentage;
     }
 }

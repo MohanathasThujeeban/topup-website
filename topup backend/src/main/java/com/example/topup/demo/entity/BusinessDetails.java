@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Document(collection = "business_details")
 public class BusinessDetails {
@@ -56,6 +57,10 @@ public class BusinessDetails {
 
     @LastModifiedDate
     private LocalDateTime lastModifiedDate;
+
+    // Additional fields for margin rate functionality
+    private User user;
+    private java.util.Map<String, Object> metadata;
 
     // Constructors
     public BusinessDetails() {}
@@ -242,6 +247,31 @@ public class BusinessDetails {
         this.bankIdToken = bankIdToken;
         this.bankIdVerificationTime = LocalDateTime.now();
         this.verificationStatus = VerificationStatus.VERIFIED;
+    }
+
+    // Additional getters and setters for margin rate functionality
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public java.util.Map<String, Object> getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(java.util.Map<String, Object> metadata) {
+        this.metadata = metadata;
+    }
+
+    public LocalDateTime getUpdatedDate() {
+        return lastModifiedDate;
+    }
+
+    public void setUpdatedDate(LocalDateTime updatedDate) {
+        this.lastModifiedDate = updatedDate;
     }
 
     // toString method for debugging

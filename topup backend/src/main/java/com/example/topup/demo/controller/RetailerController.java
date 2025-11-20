@@ -9,6 +9,7 @@ import com.example.topup.demo.service.RetailerService;
 import com.example.topup.demo.service.UserService;
 import com.example.topup.demo.service.BundleService;
 import com.example.topup.demo.repository.RetailerOrderRepository;
+import com.example.topup.demo.repository.OrderRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -17,6 +18,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +43,9 @@ public class RetailerController {
     
     @Autowired
     private RetailerOrderRepository retailerOrderRepository;
+    
+    @Autowired
+    private OrderRepository orderRepository;
 
     // Get all orders for the authenticated retailer
     @GetMapping("/orders")
@@ -474,6 +480,84 @@ public class RetailerController {
         item.put("quantity", quantity);
         item.put("totalValue", wholesalePrice * quantity);
         return item;
+    }
+
+    // Get POS sales history
+    @GetMapping("/pos-sales")
+    public ResponseEntity<?> getPosSales(Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            
+            // Get all SOLD orders (POS sales)
+            List<Order> posSales = orderRepository.findByRetailerAndStatusOrderByCreatedDateDesc(
+                retailer, Order.OrderStatus.SOLD);
+            
+            List<Map<String, Object>> salesData = posSales.stream().map(sale -> {
+                Map<String, Object> saleInfo = new HashMap<>();
+                saleInfo.put("id", sale.getId());
+                saleInfo.put("productName", sale.getProductName());
+                saleInfo.put("quantity", sale.getQuantity());
+                saleInfo.put("amount", sale.getAmount());
+                saleInfo.put("date", sale.getCreatedDate());
+                saleInfo.put("paymentMethod", sale.getPaymentMethod());
+                saleInfo.put("status", sale.getStatus());
+                
+                // Add metadata if available
+                if (sale.getMetadata() != null) {
+                    saleInfo.put("saleType", sale.getMetadata().get("saleType"));
+                }
+                
+                return saleInfo;
+            }).collect(Collectors.toList());
+            
+            // Calculate totals
+            BigDecimal totalRevenue = posSales.stream()
+                .map(Order::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            int totalSales = posSales.size();
+            int totalPinsSold = posSales.stream()
+                .mapToInt(Order::getQuantity)
+                .sum();
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("sales", salesData);
+            response.put("summary", Map.of(
+                "totalSales", totalSales,
+                "totalRevenue", totalRevenue,
+                "totalPinsSold", totalPinsSold,
+                "averageSaleAmount", totalSales > 0 ? totalRevenue.divide(BigDecimal.valueOf(totalSales), 2, RoundingMode.HALF_UP) : BigDecimal.ZERO
+            ));
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to fetch POS sales: " + e.getMessage()));
+        }
+    }
+
+    // Get retailer's margin rate
+    @GetMapping("/margin-rate")
+    public ResponseEntity<?> getMarginRate(Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            
+            // Get margin rate from user's business details
+            Double marginRate = retailerService.getRetailerMarginRate(retailer);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("marginRate", marginRate);
+            response.put("isSet", marginRate != null);
+            response.put("description", marginRate != null ? "Retailer's profit margin rate set by admin" : "No margin rate set by admin yet");
+            response.put("lastUpdated", retailer.getUpdatedDate());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to fetch margin rate: " + e.getMessage()));
+        }
     }
 
     public static class UpdateOrderStatusRequest {

@@ -51,6 +51,13 @@ export default function AdminDashboard() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [userDetails, setUserDetails] = useState(null);
   const [loadingUserDetails, setLoadingUserDetails] = useState(false);
+  
+  // Edit user form state
+  const [editUserData, setEditUserData] = useState({
+    email: '',
+    mobileNumber: ''
+  });
+  const [updating, setUpdating] = useState(false);
 
   // Fetch data from backend
   useEffect(() => {
@@ -784,6 +791,10 @@ export default function AdminDashboard() {
 
   const handleEditUser = (user) => {
     setSelectedUser(user);
+    setEditUserData({
+      email: user.email || '',
+      mobileNumber: user.mobileNumber || ''
+    });
     setShowEditUserModal(true);
   };
 
@@ -850,6 +861,41 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error activating user:', error);
       alert('Error activating user');
+    }
+  };
+
+  const handleUpdateUser = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      setUpdating(true);
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`${API_BASE_URL}/admin/users/${selectedUser.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(editUserData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          alert('User updated successfully');
+          setShowEditUserModal(false);
+          fetchAllData(); // Refresh users list
+        }
+      } else {
+        const error = await response.json();
+        alert('Failed to update user: ' + (error.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      alert('Error updating user: ' + error.message);
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -2973,12 +3019,15 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Edit User Modal (Suspend/Activate) */}
+      {/* Edit User Modal (Enhanced with form fields) */}
       {showEditUserModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-            <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 flex justify-between items-center">
-              <h3 className="text-xl font-bold">Edit User Status</h3>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 flex justify-between items-center">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <Edit size={24} />
+                Edit User Details
+              </h3>
               <button
                 onClick={() => {
                   setShowEditUserModal(false);
@@ -2990,50 +3039,112 @@ export default function AdminDashboard() {
               </button>
             </div>
             
-            <div className="p-6">
-              <div className="mb-6">
-                <p className="text-gray-700 mb-2">
-                  <strong>User:</strong> {selectedUser.firstName} {selectedUser.lastName}
-                </p>
-                <p className="text-gray-700 mb-2">
-                  <strong>Email:</strong> {selectedUser.email}
-                </p>
-                <p className="text-gray-700 mb-4">
-                  <strong>Current Status:</strong>{' '}
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    selectedUser.accountStatus === 'ACTIVE' ? 'bg-green-100 text-green-800' :
-                    selectedUser.accountStatus === 'SUSPENDED' ? 'bg-red-100 text-red-800' :
-                    'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {selectedUser.accountStatus}
-                  </span>
-                </p>
+            <div className="p-6 space-y-6">
+              {/* User Info Section */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-semibold text-gray-900 mb-2">User Information</h4>
+                <div className="grid grid-cols-1 gap-2 text-sm">
+                  <div><strong>Name:</strong> {selectedUser.firstName} {selectedUser.lastName}</div>
+                  <div><strong>Account Type:</strong> {selectedUser.accountType}</div>
+                  <div className="flex items-center gap-2">
+                    <strong>Status:</strong>
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      selectedUser.accountStatus === 'ACTIVE' ? 'bg-green-100 text-green-800' :
+                      selectedUser.accountStatus === 'SUSPENDED' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {selectedUser.accountStatus}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex gap-3">
-                {selectedUser.accountStatus === 'ACTIVE' ? (
-                  <button
-                    onClick={handleSuspendUser}
-                    className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
-                  >
-                    <XCircle size={20} />
-                    Suspend User
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleActivateUser}
-                    className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
-                  >
-                    <CheckCircle size={20} />
-                    Activate User
-                  </button>
-                )}
+              {/* Edit Form Section */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Mail size={16} />
+                  Contact Details
+                </h4>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={editUserData.email}
+                    onChange={(e) => setEditUserData(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter email address"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={editUserData.mobileNumber}
+                    onChange={(e) => setEditUserData(prev => ({ ...prev, mobileNumber: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter phone number"
+                  />
+                </div>
+              </div>
+
+              {/* Status Actions Section */}
+              <div className="border-t pt-4">
+                <h4 className="font-semibold text-gray-900 mb-3">Account Status Actions</h4>
+                <div className="flex gap-2">
+                  {selectedUser.accountStatus === 'ACTIVE' ? (
+                    <button
+                      onClick={handleSuspendUser}
+                      disabled={updating}
+                      className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-1 text-sm disabled:opacity-50"
+                    >
+                      <XCircle size={16} />
+                      Suspend
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleActivateUser}
+                      disabled={updating}
+                      className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1 text-sm disabled:opacity-50"
+                    >
+                      <CheckCircle size={16} />
+                      Activate
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  onClick={handleUpdateUser}
+                  disabled={updating}
+                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {updating ? (
+                    <>
+                      <RefreshCw size={20} className="animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={20} />
+                      Update Details
+                    </>
+                  )}
+                </button>
                 <button
                   onClick={() => {
                     setShowEditUserModal(false);
                     setSelectedUser(null);
                   }}
-                  className="px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                  disabled={updating}
+                  className="px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
                 >
                   Cancel
                 </button>

@@ -258,7 +258,9 @@ public class Order {
         PROCESSING,
         COMPLETED,
         CANCELLED,
-        REFUNDED
+        REFUNDED,
+        DEPLETED,  // When all PINs from this order have been sold
+        SOLD       // When this order represents a direct sale to customer
     }
     
     public enum PaymentStatus {

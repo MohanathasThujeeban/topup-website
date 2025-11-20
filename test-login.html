@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quick Retailer Login Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 50px; }
+        .container { max-width: 400px; margin: 0 auto; }
+        input, button { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 20px; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Quick Retailer Login Test</h2>
+        <p>Test login to get a valid token for the retailer dashboard</p>
+        
+        <input type="email" id="email" placeholder="Email" value="retailer@test.com">
+        <input type="password" id="password" placeholder="Password" value="password123">
+        <button onclick="testLogin()">Login & Get Token</button>
+        
+        <div id="result"></div>
+        
+        <h3>Quick Actions:</h3>
+        <button onclick="openDashboard()">Open Retailer Dashboard</button>
+        <button onclick="createTestAccount()">Create Test Retailer Account</button>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8080/api';
+        
+        async function testLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                resultDiv.innerHTML = '<div>Logging in...</div>';
+                
+                const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Store in localStorage for the main app to use
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Login successful!<br>
+                            User: ${data.user.name || data.user.email}<br>
+                            Type: ${data.user.accountType}<br>
+                            Token stored in localStorage
+                        </div>
+                    `;
+                } else {
+                    const error = await response.json();
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            ❌ Login failed: ${error.message || 'Unknown error'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        ❌ Network error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        async function createTestAccount() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                resultDiv.innerHTML = '<div>Creating test account...</div>';
+                
+                const response = await fetch(`${API_BASE_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: 'Test Retailer',
+                        email: 'retailer@test.com',
+                        password: 'password123',
+                        accountType: 'BUSINESS'
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Test retailer account created!<br>
+                            Now click "Login & Get Token" to authenticate
+                        </div>
+                    `;
+                } else {
+                    const error = await response.json();
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            ❌ Account creation failed: ${error.message || 'Account might already exist'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        ❌ Network error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        function openDashboard() {
+            window.open('http://localhost:3002/retailer/dashboard', '_blank');
+        }
+    </script>
+</body>
+</html>

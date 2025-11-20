@@ -3,6 +3,8 @@ package com.example.topup.demo.controller;
 import com.example.topup.demo.service.AdminService;
 import com.example.topup.demo.dto.RetailerCreditLimitDTO;
 import com.example.topup.demo.dto.UpdateCreditLimitRequest;
+import com.example.topup.demo.dto.UpdateUnitLimitRequest;
+import com.example.topup.demo.dto.UpdateMarginRateRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -265,6 +267,122 @@ public class AdminController {
     }
 
     /**
+     * Update retailer unit limit specifically
+     */
+    @PostMapping("/retailers/unit-limit")
+    public ResponseEntity<Map<String, Object>> updateRetailerUnitLimit(
+            @Valid @RequestBody UpdateUnitLimitRequest request) {
+        try {
+            RetailerCreditLimitDTO updatedLimit = adminService.updateRetailerUnitLimit(request);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", updatedLimit);
+            response.put("message", "Unit limit updated successfully");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Set retailer margin rate (Test version without auth)
+     */
+    @PostMapping("/retailers/margin-rate-test")
+    public ResponseEntity<Map<String, Object>> setRetailerMarginRateTest(@RequestBody UpdateMarginRateRequest request) {
+        try {
+            adminService.updateRetailerMarginRate(request.getRetailerEmail(), request.getMarginRate());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Margin rate updated successfully (test mode)");
+            response.put("retailerEmail", request.getRetailerEmail());
+            response.put("marginRate", request.getMarginRate());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Set retailer margin rate
+     */
+    @PostMapping("/retailers/margin-rate")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> setRetailerMarginRate(@Valid @RequestBody UpdateMarginRateRequest request) {
+        try {
+            adminService.updateRetailerMarginRate(request.getRetailerEmail(), request.getMarginRate());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Margin rate updated successfully");
+            response.put("retailerEmail", request.getRetailerEmail());
+            response.put("marginRate", request.getMarginRate());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Get retailer margin rate (Test version without auth)
+     */
+    @GetMapping("/retailers/{retailerEmail}/margin-rate-test")
+    public ResponseEntity<Map<String, Object>> getRetailerMarginRateTest(@PathVariable String retailerEmail) {
+        try {
+            Double marginRate = adminService.getRetailerMarginRate(retailerEmail);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("marginRate", marginRate);
+            response.put("retailerEmail", retailerEmail);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Get retailer margin rate
+     */
+    @GetMapping("/retailers/{retailerEmail}/margin-rate")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getRetailerMarginRate(@PathVariable String retailerEmail) {
+        try {
+            Double marginRate = adminService.getRetailerMarginRate(retailerEmail);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("marginRate", marginRate);
+            response.put("isSet", marginRate != null);
+            response.put("retailerEmail", retailerEmail);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
      * Get user details with purchases and usage
      */
     @GetMapping("/users/{userId}/details")
@@ -340,6 +458,38 @@ public class AdminController {
             Map<String, Object> error = new HashMap<>();
             error.put("success", false);
             error.put("error", "Failed to activate user: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Update user details (email and phone)
+     */
+    @PutMapping("/users/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> updateUser(
+            @PathVariable String userId,
+            @RequestBody Map<String, String> updateData) {
+        try {
+            String newEmail = updateData.get("email");
+            String newMobileNumber = updateData.get("mobileNumber");
+            
+            boolean success = adminService.updateUserDetails(userId, newEmail, newMobileNumber);
+            
+            Map<String, Object> response = new HashMap<>();
+            if (success) {
+                response.put("success", true);
+                response.put("message", "User updated successfully");
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("success", false);
+                response.put("error", "Failed to update user");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to update user: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }

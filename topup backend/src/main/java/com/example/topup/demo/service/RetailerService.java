@@ -104,13 +104,31 @@ public class RetailerService {
         long pendingOrders = orderRepository.countByRetailerAndStatus(retailer, OrderStatus.PENDING);
         analytics.put("pendingOrders", pendingOrders);
         
-        // Calculate total revenue
+        // Calculate total revenue (including both COMPLETED orders and SOLD POS sales)
         List<Order> completedOrders = orderRepository.findByRetailerAndStatusOrderByCreatedDateDesc(
             retailer, OrderStatus.COMPLETED);
+        List<Order> soldOrders = orderRepository.findByRetailerAndStatusOrderByCreatedDateDesc(
+            retailer, OrderStatus.SOLD);
+        
         BigDecimal totalRevenue = completedOrders.stream()
             .map(Order::getAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        // Add POS sales revenue
+        BigDecimal posRevenue = soldOrders.stream()
+            .map(Order::getAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        totalRevenue = totalRevenue.add(posRevenue);
         analytics.put("totalRevenue", totalRevenue);
+        
+        // Add customer sales count (POS transactions)
+        long customerSales = soldOrders.size();
+        analytics.put("customerSales", customerSales);
+        
+        // Add total profit calculation (assuming 30% profit margin on POS sales)
+        BigDecimal totalProfit = posRevenue.multiply(new BigDecimal("0.30"));
+        analytics.put("totalProfit", totalProfit);
         
         // Monthly growth calculation
         long currentMonthOrders = orderRepository.countByRetailerAndDateRange(
@@ -137,9 +155,11 @@ public class RetailerService {
         }
         analytics.put("monthlyGrowth", Math.round(revenueGrowth * 100.0) / 100.0);
         
-        // Success rate calculation
+        // Success rate calculation (include both COMPLETED and SOLD orders as successful)
         long completedOrdersCount = orderRepository.countByRetailerAndStatus(retailer, OrderStatus.COMPLETED);
-        double successRate = totalOrders > 0 ? ((double) completedOrdersCount / totalOrders) * 100 : 0;
+        long soldOrdersCount = orderRepository.countByRetailerAndStatus(retailer, OrderStatus.SOLD);
+        long successfulOrders = completedOrdersCount + soldOrdersCount;
+        double successRate = totalOrders > 0 ? ((double) successfulOrders / totalOrders) * 100 : 0;
         analytics.put("successRate", Math.round(successRate * 100.0) / 100.0);
         
         // Top products
@@ -163,20 +183,38 @@ public class RetailerService {
     }
     
     private BigDecimal getCurrentMonthRevenue(User retailer, LocalDateTime start, LocalDateTime end) {
-        List<Order> orders = orderRepository.findCompletedOrdersByRetailerAndDateRange(retailer, start, end);
-        return orders.stream()
+        List<Order> completedOrders = orderRepository.findCompletedOrdersByRetailerAndDateRange(retailer, start, end);
+        List<Order> soldOrders = orderRepository.findSoldOrdersByRetailerAndDateRange(retailer, start, end);
+        
+        BigDecimal completedRevenue = completedOrders.stream()
             .map(Order::getAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+        BigDecimal soldRevenue = soldOrders.stream()
+            .map(Order::getAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+        return completedRevenue.add(soldRevenue);
     }
     
     private List<Map<String, Object>> getTopProducts(User retailer) {
         List<Order> completedOrders = orderRepository.findByRetailerAndStatusOrderByCreatedDateDesc(
             retailer, OrderStatus.COMPLETED);
+        List<Order> soldOrders = orderRepository.findByRetailerAndStatusOrderByCreatedDateDesc(
+            retailer, OrderStatus.SOLD);
         
         Map<String, Integer> productSales = new HashMap<>();
         Map<String, BigDecimal> productRevenue = new HashMap<>();
         
+        // Process completed orders
         for (Order order : completedOrders) {
+            String productName = order.getProductName();
+            productSales.put(productName, productSales.getOrDefault(productName, 0) + order.getQuantity());
+            productRevenue.put(productName, productRevenue.getOrDefault(productName, BigDecimal.ZERO).add(order.getAmount()));
+        }
+        
+        // Process POS sales (SOLD orders)
+        for (Order order : soldOrders) {
             String productName = order.getProductName();
             productSales.merge(productName, order.getQuantity(), Integer::sum);
             productRevenue.merge(productName, order.getAmount(), BigDecimal::add);
@@ -267,5 +305,35 @@ public class RetailerService {
         
         if (lastWeekOrders == 0) return thisWeekOrders > 0 ? 100.0 : 0.0;
         return ((double) (thisWeekOrders - lastWeekOrders) / lastWeekOrders) * 100;
+    }
+    
+    // Get retailer's margin rate from business details or default
+    public Double getRetailerMarginRate(User retailer) {
+        try {
+            // Check if retailer has business details with margin rate
+            if (retailer.getBusinessDetails() != null) {
+                // First check if there's a specific margin rate set for this retailer
+                Map<String, Object> metadata = retailer.getBusinessDetails().getMetadata();
+                if (metadata != null && metadata.containsKey("marginRate")) {
+                    Object marginRateObj = metadata.get("marginRate");
+                    if (marginRateObj instanceof Number) {
+                        return ((Number) marginRateObj).doubleValue();
+                    }
+                    if (marginRateObj instanceof String) {
+                        try {
+                            return Double.parseDouble((String) marginRateObj);
+                        } catch (NumberFormatException e) {
+                            // Fall through to default
+                        }
+                    }
+                }
+            }
+            
+            // Return null if no admin margin rate is set
+            return null;
+        } catch (Exception e) {
+            // If any error occurs, return null
+            return null;
+        }
     }
 }

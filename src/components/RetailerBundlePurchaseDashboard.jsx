@@ -742,10 +742,6 @@ export default function RetailerBundlePurchaseDashboard() {
                     <p className="text-sm text-gray-600 mb-4">{bundle.description}</p>
                     
                     <div className="mb-4">
-                      <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="text-gray-600">Stock Available</span>
-                        <span className="font-semibold text-gray-900">{bundle.stockQuantity} units</span>
-                      </div>
                       {bundle.dataAmount && (
                         <div className="flex items-center justify-between text-sm mb-1">
                           <span className="text-gray-600">Data</span>
@@ -813,7 +809,7 @@ export default function RetailerBundlePurchaseDashboard() {
 
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    How many units would you like to purchase?
+                    How many would you like to purchase?
                   </label>
                   <div className="flex items-center gap-3">
                     <button
@@ -842,9 +838,7 @@ export default function RetailerBundlePurchaseDashboard() {
                       +
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Available stock: {selectedBundle.stockQuantity} units
-                  </p>
+
                 </div>
 
                 <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg p-4 mb-6 border border-blue-100">
@@ -854,7 +848,7 @@ export default function RetailerBundlePurchaseDashboard() {
                   </div>
                   <div className="flex justify-between mb-2">
                     <span className="text-gray-600">Quantity</span>
-                    <span className="font-semibold">{purchaseQuantity} units</span>
+                    <span className="font-semibold">{purchaseQuantity}</span>
                   </div>
                   <div className="border-t border-blue-200 pt-2 mt-2">
                     <div className="flex justify-between items-center">

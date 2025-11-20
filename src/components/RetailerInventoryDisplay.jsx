@@ -16,31 +16,95 @@ export default function RetailerInventoryDisplay() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchInventory();
+    let isMounted = true;
+    const controller = new AbortController();
+    
+    const loadInventory = async () => {
+      try {
+        await fetchInventory(controller.signal, isMounted);
+      } catch (error) {
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Error loading inventory:', error);
+        }
+      }
+    };
+    
+    loadInventory();
+    
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
   }, []);
 
-  const fetchInventory = async () => {
+  const fetchInventory = async (signal = null, isMounted = true) => {
     try {
-      setLoading(true);
+      if (isMounted) {
+        setLoading(true);
+      }
+      
       const token = localStorage.getItem('token');
       const headers = {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       };
 
-      const response = await fetch(`${API_BASE_URL}/retailer/inventory`, { headers });
+      // Use provided signal or create a new one with timeout
+      const controller = signal ? { signal } : new AbortController();
+      const timeoutId = !signal ? setTimeout(() => controller.abort(), 15000) : null; // 15 second timeout
+
+      const response = await fetch(`${API_BASE_URL}/retailer/inventory`, { 
+        headers,
+        signal: controller.signal
+      });
+      
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
 
       if (response.ok) {
         const data = await response.json();
-        setInventory(data.data?.inventory || []);
+        console.log('📦 Inventory data received:', data);
+        
+        // Handle new PIN-based inventory structure
+        let inventoryList = [];
+        if (data.success && data.data && data.data.inventory) {
+          inventoryList = data.data.inventory;
+        } else if (data.data?.inventory) {
+          inventoryList = data.data.inventory;
+        } else if (Array.isArray(data)) {
+          inventoryList = data;
+        }
+        
+        console.log('📋 Processed inventory:', inventoryList);
+        if (isMounted) {
+          setInventory(inventoryList);
+          setError(''); // Clear any previous errors
+        }
       } else {
-        setError('Failed to load inventory');
+        console.error('❌ Failed to fetch inventory:', response.status);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Error details:', errorData);
+        
+        if (isMounted) {
+          // Set empty inventory with helpful message
+          setInventory([]);
+          setError(`Failed to load inventory (${response.status}). ${errorData.message || 'Please try purchasing some bundles first.'}`);
+        }
       }
     } catch (error) {
-      console.error('Error fetching inventory:', error);
-      setError('Failed to load inventory');
+      // Only log and set error if it's not an AbortError and component is still mounted
+      if (error.name !== 'AbortError') {
+        console.error('💥 Error fetching inventory:', error);
+        if (isMounted) {
+          setInventory([]);
+          setError('Network error. Please check your connection and try again.');
+        }
+      }
     } finally {
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     }
   };
 
@@ -48,9 +112,8 @@ export default function RetailerInventoryDisplay() {
   const getUniquePrices = () => {
     const prices = new Set();
     inventory.forEach(item => {
-      if (item.totalAmount && item.quantity) {
-        const pricePerUnit = item.totalAmount / item.quantity;
-        prices.add(Math.round(pricePerUnit));
+      if (item.bundlePrice) {
+        prices.add(Math.round(item.bundlePrice));
       }
     });
     return Array.from(prices).sort((a, b) => a - b);
@@ -68,9 +131,8 @@ export default function RetailerInventoryDisplay() {
     // Filter by price
     if (selectedPriceFilter) {
       filtered = filtered.filter(item => {
-        if (item.totalAmount && item.quantity) {
-          const pricePerUnit = Math.round(item.totalAmount / item.quantity);
-          return pricePerUnit === selectedPriceFilter;
+        if (item.bundlePrice) {
+          return Math.round(item.bundlePrice) === selectedPriceFilter;
         }
         return false;
       });
@@ -82,9 +144,8 @@ export default function RetailerInventoryDisplay() {
   // Helper function to count items by price
   const getCountByPrice = (price) => {
     return inventory.filter(item => {
-      if (item.totalAmount && item.quantity) {
-        const pricePerUnit = Math.round(item.totalAmount / item.quantity);
-        return pricePerUnit === price;
+      if (item.bundlePrice) {
+        return Math.round(item.bundlePrice) === price;
       }
       return false;
     }).length;
@@ -268,13 +329,11 @@ export default function RetailerInventoryDisplay() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredInventory.map((item, index) => {
-            const pricePerUnit = item.totalAmount && item.quantity 
-              ? Math.round(item.totalAmount / item.quantity) 
-              : 0;
+            const bundlePrice = item.bundlePrice || 0;
 
             return (
               <div 
-                key={index} 
+                key={item.bundleId || index} 
                 className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition border border-gray-100"
               >
                 {/* Header with Type Badge */}
@@ -286,57 +345,59 @@ export default function RetailerInventoryDisplay() {
                   <div className="flex items-center justify-between mb-2">
                     <span className="px-2 py-1 bg-white/20 rounded text-xs font-medium flex items-center gap-1">
                       {item.productType === 'ESIM' ? <Globe2 size={14} /> : <Package size={14} />}
-                      {item.productType}
+                      {item.productType || 'EPIN'}
                     </span>
-                    <span className="text-2xl font-bold">NOK {pricePerUnit}</span>
+                    <span className="text-2xl font-bold">NOK {bundlePrice}</span>
                   </div>
-                  <h4 className="text-lg font-bold truncate">{item.productName}</h4>
+                  <h4 className="text-lg font-bold truncate">{item.bundleName}</h4>
                 </div>
 
                 {/* Content */}
                 <div className="p-4">
                   <div className="space-y-2 mb-4">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Order ID:</span>
-                      <span className="font-mono text-gray-900 text-xs">{item.orderId}</span>
+                      <span className="text-gray-600">Bundle ID:</span>
+                      <span className="font-mono text-gray-900 text-xs">{item.bundleId}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Quantity:</span>
-                      <span className="font-semibold text-gray-900">{item.quantity} units</span>
+                      <span className="text-gray-600">Available PINs:</span>
+                      <span className="font-semibold text-gray-900">{item.availablePins || 0}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Total Paid:</span>
-                      <span className="font-semibold text-green-600">NOK {item.totalAmount?.toLocaleString()}</span>
+                      <span className="text-gray-600">Unit Price:</span>
+                      <span className="font-semibold text-blue-600">NOK {bundlePrice}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Price per Unit:</span>
-                      <span className="font-semibold text-blue-600">NOK {pricePerUnit}</span>
+                      <span className="text-gray-600">Total Value:</span>
+                      <span className="font-semibold text-green-600">NOK {((item.availablePins || 0) * bundlePrice).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Purchase Date:</span>
-                      <span className="text-gray-900 text-xs">
-                        {new Date(item.purchaseDate).toLocaleDateString()}
+                      <span className="text-gray-600">Status:</span>
+                      <span className={`font-semibold ${item.status === 'ACTIVE' ? 'text-green-600' : 'text-gray-500'}`}>
+                        {item.status || 'ACTIVE'}
                       </span>
                     </div>
                   </div>
 
-                  {/* Items Section */}
-                  {item.items && item.items.length > 0 && (
+                  {/* PINs Section */}
+                  {item.pins && item.pins.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-gray-200">
                       <p className="text-sm font-medium text-gray-700 mb-2">
-                        Items Available: {item.items.length}
+                        PINs Available: {item.pins.length}
                       </p>
                       <div className="bg-gray-50 rounded p-3 max-h-32 overflow-y-auto">
                         <div className="space-y-1">
-                          {item.items.slice(0, 3).map((encItem, idx) => (
+                          {item.pins.slice(0, 3).map((pinItem, idx) => (
                             <div key={idx} className="flex items-center gap-2 text-xs font-mono text-gray-600">
                               <Package size={12} className="text-gray-400" />
-                              <span className="truncate">{encItem.substring(0, 30)}...</span>
+                              <span className="truncate">
+                                {pinItem.pin ? pinItem.pin.substring(0, 20) + '...' : 'PIN-' + idx}
+                              </span>
                             </div>
                           ))}
-                          {item.items.length > 3 && (
+                          {item.pins.length > 3 && (
                             <p className="text-xs text-gray-500 mt-2">
-                              +{item.items.length - 3} more items
+                              +{item.pins.length - 3} more PINs
                             </p>
                           )}
                         </div>

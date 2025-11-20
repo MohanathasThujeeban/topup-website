@@ -6,6 +6,14 @@ export default function RequireBusiness({ children }) {
   const { isAuthenticated, user } = useAuth();
   const location = useLocation();
 
+  // DEMO MODE: Bypass authentication for development testing
+  const isDemoMode = process.env.NODE_ENV === 'development' && location.search.includes('demo=true');
+  
+  if (isDemoMode) {
+    console.log('🚧 DEMO MODE: Bypassing authentication for testing');
+    return children;
+  }
+
   if (!isAuthenticated) {
     return <Navigate to="/retailer/login" state={{ from: location }} replace />;
   }

@@ -47,6 +47,10 @@ public interface OrderRepository extends MongoRepository<Order, String> {
     @Query(value = "{ 'retailer': ?0, 'status': 'COMPLETED', 'createdDate': { $gte: ?1, $lt: ?2 } }")
     List<Order> findCompletedOrdersByRetailerAndDateRange(User retailer, LocalDateTime startDate, LocalDateTime endDate);
     
+    // Get POS sales revenue for retailer in date range
+    @Query(value = "{ 'retailer': ?0, 'status': 'SOLD', 'createdDate': { $gte: ?1, $lt: ?2 } }")
+    List<Order> findSoldOrdersByRetailerAndDateRange(User retailer, LocalDateTime startDate, LocalDateTime endDate);
+    
     // Find orders by created date range
     List<Order> findByCreatedDateBetween(LocalDateTime startDate, LocalDateTime endDate);
 }

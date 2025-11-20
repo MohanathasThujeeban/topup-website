@@ -18,6 +18,10 @@ public class UpdateCreditLimitRequest {
     
     private String notes;
     
+    // Unit Limit Management
+    @Min(value = 0, message = "Unit limit must be non-negative")
+    private Integer unitLimit;
+    
     // Constructors
     public UpdateCreditLimitRequest() {}
     
@@ -59,5 +63,13 @@ public class UpdateCreditLimitRequest {
     
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+    
+    public Integer getUnitLimit() {
+        return unitLimit;
+    }
+    
+    public void setUnitLimit(Integer unitLimit) {
+        this.unitLimit = unitLimit;
     }
 }

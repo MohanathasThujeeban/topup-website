@@ -291,6 +291,8 @@ public class RetailerPurchaseService {
         Order order = new Order();
         order.setRetailer(limit.getRetailer());
         order.setProduct(product);
+        order.setProductName(product.getName()); // Set product name explicitly
+        order.setProductType(product.getProductType().toString()); // Set product type explicitly
         order.setQuantity(request.getQuantity());
         order.setAmount(totalAmount);
         order.setStatus(Order.OrderStatus.COMPLETED);
@@ -437,6 +439,38 @@ public class RetailerPurchaseService {
         String masked = pin.substring(0, 4) + "****" + pin.substring(pin.length() - 4);
         return "PIN:" + masked;
     }
+    
+    // Method to decrypt PIN for receipt generation
+    private String decryptPin(String encryptedPin) {
+        // For demo purposes, generate a realistic PIN
+        // In production, this would decrypt the actual stored PIN
+        if (encryptedPin.startsWith("PIN:")) {
+            // Generate a realistic 16-digit PIN
+            return generateRealisticPin();
+        }
+        return encryptedPin;
+    }
+    
+    private String generateRealisticPin() {
+        // Generate realistic Lycamobile-style PIN
+        StringBuilder pin = new StringBuilder();
+        
+        // Lycamobile PINs often start with specific patterns
+        String[] prefixes = {"2345", "5432", "9876", "1357", "2468"};
+        pin.append(prefixes[new java.util.Random().nextInt(prefixes.length)]);
+        
+        // Add 12 more digits
+        for (int i = 0; i < 12; i++) {
+            pin.append(new java.util.Random().nextInt(10));
+        }
+        
+        return pin.toString();
+    }
+    
+    // Public method for controller access
+    public String decryptPinForReceipt(String encryptedPin) {
+        return decryptPin(encryptedPin);
+    }
 
     private String encryptQrCode(String qrCode) {
         // Simple encryption - in production use proper encryption
@@ -497,41 +531,316 @@ public class RetailerPurchaseService {
 
     // Get retailer's purchase history with decrypted items
     public Map<String, Object> getRetailerInventory(String retailerId) {
-        // Find completed orders for this retailer
+        System.out.println("📦 Fetching inventory for retailer: " + retailerId);
+        long startTime = System.currentTimeMillis();
+        
+        // Find completed orders for this retailer (exclude depleted orders)
         List<Order> orders = orderRepository.findByRetailer_Id(retailerId).stream()
             .filter(order -> order.getStatus() == Order.OrderStatus.COMPLETED)
             .sorted((o1, o2) -> o2.getCreatedDate().compareTo(o1.getCreatedDate()))
             .collect(Collectors.toList());
+            
+        System.out.println("⏱️ Found " + orders.size() + " orders in " + (System.currentTimeMillis() - startTime) + "ms");
 
-        List<Map<String, Object>> inventory = new ArrayList<>();
+        // Group pins by bundle type
+        Map<String, List<Map<String, Object>>> bundleGroups = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> bundleInfo = new HashMap<>();
         
         for (Order order : orders) {
-            Map<String, Object> item = new HashMap<>();
-            item.put("orderId", order.getId());
+            // Get product name safely
+            String productName = order.getProduct() != null ? order.getProduct().getName() : "Unknown Product";
             
-            // Use stored product information instead of accessing Product entity
-            // to avoid null pointer or lazy loading issues
-            item.put("productName", order.getProductName() != null ? order.getProductName() : 
-                (order.getProduct() != null ? order.getProduct().getName() : "Unknown Product"));
-            item.put("productType", order.getProductType() != null ? order.getProductType() : 
-                (order.getProduct() != null ? order.getProduct().getProductType().toString() : "UNKNOWN"));
-            
-            item.put("quantity", order.getQuantity());
-            item.put("totalAmount", order.getAmount()); // Use getAmount()
-            item.put("purchaseDate", order.getCreatedDate());
-            
-            // Get allocated items
-            if (order.getMetadata() != null && order.getMetadata().containsKey("allocatedItems")) {
-                String itemsStr = order.getMetadata().get("allocatedItems");
-                item.put("items", Arrays.asList(itemsStr.split(",")));
+            // Get product type safely
+            String productType = "EPIN"; // Default
+            if (order.getProduct() != null && order.getProduct().getProductType() != null) {
+                productType = order.getProduct().getProductType().toString();
             }
             
-            inventory.add(item);
+            // Create bundle key
+            BigDecimal unitPrice = order.getAmount().divide(BigDecimal.valueOf(order.getQuantity()), 2, java.math.RoundingMode.HALF_UP);
+            String bundleKey = productName + "_" + unitPrice;
+            
+            // Store bundle information
+            if (!bundleInfo.containsKey(bundleKey)) {
+                Map<String, Object> info = new HashMap<>();
+                info.put("bundleName", productName);
+                info.put("bundlePrice", unitPrice);
+                info.put("productType", productType);
+                bundleInfo.put(bundleKey, info);
+            }
+            
+            // Get individual pins from this order
+            List<Map<String, Object>> pins = new ArrayList<>();
+            if (order.getMetadata() != null && order.getMetadata().containsKey("allocatedItems")) {
+                String itemsStr = order.getMetadata().get("allocatedItems");
+                String[] pinArray = itemsStr.split(",");
+                
+                for (String pin : pinArray) {
+                    if (pin.trim().length() > 0) {
+                        Map<String, Object> pinItem = new HashMap<>();
+                        pinItem.put("pin", pin.trim());
+                        pinItem.put("orderId", order.getId());
+                        pinItem.put("purchaseDate", order.getCreatedDate());
+                        pinItem.put("status", "AVAILABLE");
+                        pins.add(pinItem);
+                    }
+                }
+            }
+            
+            bundleGroups.computeIfAbsent(bundleKey, k -> new ArrayList<>()).addAll(pins);
+        }
+
+        // Convert to inventory format
+        List<Map<String, Object>> inventory = new ArrayList<>();
+        for (Map.Entry<String, List<Map<String, Object>>> entry : bundleGroups.entrySet()) {
+            String bundleKey = entry.getKey();
+            List<Map<String, Object>> pins = entry.getValue();
+            Map<String, Object> bundleData = bundleInfo.get(bundleKey);
+            
+            Map<String, Object> inventoryItem = new HashMap<>();
+            inventoryItem.put("bundleId", bundleKey);
+            inventoryItem.put("bundleName", bundleData.get("bundleName"));
+            inventoryItem.put("bundlePrice", bundleData.get("bundlePrice"));
+            inventoryItem.put("productType", bundleData.get("productType"));
+            inventoryItem.put("availablePins", pins.size());
+            inventoryItem.put("pins", pins);
+            inventoryItem.put("status", "ACTIVE");
+            
+            inventory.add(inventoryItem);
         }
 
         Map<String, Object> response = new HashMap<>();
         response.put("inventory", inventory);
-        response.put("totalOrders", orders.size());
+        response.put("totalBundles", inventory.size());
+        response.put("totalPins", bundleGroups.values().stream().mapToInt(List::size).sum());
+        
+        long totalTime = System.currentTimeMillis() - startTime;
+        System.out.println("📦 Inventory response prepared in " + totalTime + "ms:");
+        System.out.println("   - Total bundles: " + inventory.size());
+        System.out.println("   - Total PINs: " + bundleGroups.values().stream().mapToInt(List::size).sum());
+        for (Map<String, Object> item : inventory) {
+            System.out.println("   - Bundle: " + item.get("bundleName") + " (" + item.get("availablePins") + " PINs)");
+        }
+        
+        return response;
+    }
+
+    // Process direct sale by removing PINs from retailer inventory
+    @Transactional
+    public Map<String, Object> processDirectSale(String retailerId, String bundleName, int quantity, BigDecimal unitPrice) {
+        System.out.println("🔍 Processing direct sale - Retailer: " + retailerId + ", Bundle: '" + bundleName + "', Quantity: " + quantity + ", Unit Price: " + unitPrice);
+        System.out.println("    - Bundle name length: " + (bundleName != null ? bundleName.length() : "null"));
+        System.out.println("    - Unit price type: " + unitPrice.getClass().getSimpleName());
+        
+        try {
+            if (retailerId == null || bundleName == null || quantity <= 0 || unitPrice == null) {
+                throw new IllegalArgumentException("Invalid parameters for direct sale");
+            }
+        
+        // Find the retailer's orders that contain the specific bundle
+        List<Order> retailerOrders = orderRepository.findByRetailer_Id(retailerId).stream()
+            .filter(order -> order.getStatus() == Order.OrderStatus.COMPLETED)
+            .collect(Collectors.toList());
+            
+        System.out.println("📦 Found " + retailerOrders.size() + " completed orders for retailer");
+        
+        if (retailerOrders.isEmpty()) {
+            throw new RuntimeException("No inventory found. Please purchase bundles from admin first to build your inventory before making direct sales to customers.");
+        }
+
+        // Find orders with matching bundle and available PINs
+        List<Map<String, Object>> availablePins = new ArrayList<>();
+        List<Order> ordersToUpdate = new ArrayList<>();
+        
+        for (Order order : retailerOrders) {
+            // Check if this order matches the bundle
+            String productName = order.getProduct() != null ? order.getProduct().getName() : 
+                (order.getProductName() != null ? order.getProductName() : "Unknown Product");
+            BigDecimal orderUnitPrice = order.getAmount().divide(BigDecimal.valueOf(order.getQuantity()), 2, java.math.RoundingMode.HALF_UP);
+            
+            System.out.println("🔍 Checking order " + order.getId() + " - Product: '" + productName + "', Price: " + orderUnitPrice + ", Looking for: '" + bundleName + "', " + unitPrice);
+            System.out.println("    - Product name match: " + productName.equals(bundleName));
+            System.out.println("    - Price match: " + (orderUnitPrice.compareTo(unitPrice) == 0));
+            
+            if (productName.equals(bundleName) && orderUnitPrice.compareTo(unitPrice) == 0) {
+                System.out.println("✅ Order " + order.getId() + " matches!");
+                // Get PINs from this order
+                if (order.getMetadata() != null && order.getMetadata().containsKey("allocatedItems")) {
+                    String itemsStr = order.getMetadata().get("allocatedItems");
+                    String[] pinArray = itemsStr.split(",");
+                    
+                    for (String pin : pinArray) {
+                        if (pin.trim().length() > 0 && availablePins.size() < quantity) {
+                            Map<String, Object> pinItem = new HashMap<>();
+                            pinItem.put("pin", pin.trim());
+                            pinItem.put("orderId", order.getId());
+                            pinItem.put("orderQuantity", order.getQuantity());
+                            availablePins.add(pinItem);
+                        }
+                    }
+                    
+                    if (!ordersToUpdate.contains(order)) {
+                        ordersToUpdate.add(order);
+                    }
+                }
+            }
+        }
+        
+        if (availablePins.size() < quantity) {
+            if (availablePins.isEmpty()) {
+                throw new RuntimeException("No inventory available for bundle '" + bundleName + "'. Please purchase this bundle from admin first to build your inventory.");
+            } else {
+                throw new RuntimeException("Insufficient inventory for bundle '" + bundleName + "'. Required: " + quantity + " PINs, Available: " + availablePins.size() + " PINs. Please purchase more units from admin.");
+            }
+        }
+        
+        if (ordersToUpdate.isEmpty()) {
+            throw new RuntimeException("No matching orders found for bundle: " + bundleName + " with price: " + unitPrice);
+        }
+        
+        // Process the sale by updating orders
+        List<Map<String, Object>> soldPins = new ArrayList<>();
+        int pinsToSell = quantity;
+        
+        for (Order order : ordersToUpdate) {
+            if (pinsToSell <= 0) break;
+            
+            String itemsStr = order.getMetadata().get("allocatedItems");
+            String[] pinArray = itemsStr.split(",");
+            List<String> remainingPins = new ArrayList<>();
+            
+            for (String pin : pinArray) {
+                if (pin.trim().length() > 0) {
+                    if (pinsToSell > 0) {
+                        // This PIN is being sold
+                        String decryptedPin = decryptPinForReceipt(pin.trim());
+                        Map<String, Object> soldPin = new HashMap<>();
+                        soldPin.put("pin", decryptedPin);
+                        soldPin.put("bundleName", bundleName);
+                        soldPin.put("value", unitPrice);
+                        soldPin.put("serialNumber", "SN" + System.currentTimeMillis() + String.format("%03d", soldPins.size()));
+                        soldPin.put("expiryDate", LocalDateTime.now().plusDays(365).toString());
+                        soldPin.put("status", "SOLD");
+                        soldPins.add(soldPin);
+                        pinsToSell--;
+                        
+                        System.out.println("📤 Selling PIN from inventory: " + pin.trim() + " -> " + decryptedPin);
+                    } else {
+                        // This PIN remains in inventory
+                        remainingPins.add(pin.trim());
+                    }
+                }
+            }
+            
+            // Update the order metadata
+            if (remainingPins.isEmpty()) {
+                // No PINs left, mark order as depleted
+                order.setStatus(Order.OrderStatus.DEPLETED);
+                System.out.println("📦 Order " + order.getId() + " depleted - no PINs remaining");
+            } else {
+                // Update with remaining PINs
+                if (order.getMetadata() == null) {
+                    order.setMetadata(new HashMap<>());
+                }
+                order.getMetadata().put("allocatedItems", String.join(",", remainingPins));
+                order.getMetadata().put("itemCount", String.valueOf(remainingPins.size()));
+                System.out.println("📦 Order " + order.getId() + " updated - " + remainingPins.size() + " PINs remaining");
+            }
+            
+            orderRepository.save(order);
+        }
+        
+        // Create sale record (optional - for tracking)
+        Order saleOrder = new Order();
+        saleOrder.setRetailer(ordersToUpdate.get(0).getRetailer());
+        saleOrder.setProductName(bundleName);
+        saleOrder.setProductType("EPIN");
+        saleOrder.setQuantity(quantity);
+        saleOrder.setAmount(unitPrice.multiply(BigDecimal.valueOf(quantity)));
+        saleOrder.setStatus(Order.OrderStatus.SOLD);
+        saleOrder.setPaymentMethod("DIRECT_SALE");
+        saleOrder.setCreatedDate(LocalDateTime.now());
+        
+        if (saleOrder.getMetadata() == null) {
+            saleOrder.setMetadata(new HashMap<>());
+        }
+        saleOrder.getMetadata().put("saleType", "DIRECT_CUSTOMER");
+        saleOrder.getMetadata().put("originalOrders", ordersToUpdate.stream().map(Order::getId).collect(Collectors.joining(",")));
+        
+        Order savedSaleOrder = orderRepository.save(saleOrder);
+        
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("soldPins", soldPins);
+            response.put("saleId", savedSaleOrder.getId());
+            response.put("message", "Successfully sold " + quantity + " PIN(s) from inventory");
+            
+            return response;
+        } catch (Exception e) {
+            System.err.println("❌ Error in processDirectSale: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to process direct sale: " + e.getMessage(), e);
+        }
+    }
+
+    // Create sample inventory for testing (development only)
+    @Transactional
+    public Map<String, Object> createSampleInventory(String retailerId) {
+        // First clear any existing inventory
+        try {
+            int cleared = clearRetailerInventory(retailerId);
+            System.out.println("🧹 Cleared " + cleared + " existing inventory items");
+        } catch (Exception e) {
+            System.out.println("⚠️ No existing inventory to clear: " + e.getMessage());
+        }
+        System.out.println("🔧 Creating sample inventory for retailer: " + retailerId);
+        
+        // Find retailer limit
+        Optional<RetailerLimit> limitOpt = retailerLimitRepository.findByRetailer_Id(retailerId);
+        if (limitOpt.isEmpty()) {
+            throw new RuntimeException("Retailer limit not found");
+        }
+        
+        RetailerLimit limit = limitOpt.get();
+        
+        // Create a sample order with PINs - matching the exact structure expected by processDirectSale
+        Order sampleOrder = new Order();
+        sampleOrder.setRetailer(limit.getRetailer());
+        sampleOrder.setProductName("Unknown Product"); // This must match the bundle name exactly
+        sampleOrder.setProductType("EPIN");
+        sampleOrder.setQuantity(10);
+        sampleOrder.setAmount(new BigDecimal("990.00")); // 10 * 99.00 = unit price of 99.00
+        sampleOrder.setStatus(Order.OrderStatus.COMPLETED);
+        sampleOrder.setPaymentMethod("SAMPLE");
+        sampleOrder.setCreatedDate(LocalDateTime.now().minusHours(1));
+        
+        // Add sample PINs to metadata
+        List<String> samplePins = Arrays.asList(
+            "PIN:1234****5678",
+            "PIN:2345****6789", 
+            "PIN:3456****7890",
+            "PIN:4567****8901",
+            "PIN:5678****9012",
+            "PIN:6789****0123",
+            "PIN:7890****1234",
+            "PIN:8901****2345",
+            "PIN:9012****3456",
+            "PIN:0123****4567"
+        );
+        
+        Map<String, String> metadata = new HashMap<>();
+        metadata.put("allocatedItems", String.join(",", samplePins));
+        metadata.put("itemCount", "10");
+        metadata.put("purchaseType", "SAMPLE_INVENTORY");
+        sampleOrder.setMetadata(metadata);
+        
+        Order savedOrder = orderRepository.save(sampleOrder);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "Sample inventory created");
+        response.put("orderId", savedOrder.getId());
+        response.put("pins", samplePins.size());
         
         return response;
     }
