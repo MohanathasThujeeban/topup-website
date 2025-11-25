@@ -33,9 +33,9 @@ public class StockService {
 
     /**
      * Upload PIN stock from CSV file
-     * Expected CSV format: pinNumber, serialNumber, productId, notes, poolName, type, price
+     * Expected CSV format: PIN ID, PINS
      */
-    public Map<String, Object> uploadPinStock(MultipartFile file, String adminUser, String poolName, String productId, String notes) throws Exception {
+    public Map<String, Object> uploadPinStock(MultipartFile file, String adminUser, String poolName, String productId, String price, String notes) throws Exception {
         System.out.println("\n🚀 Starting PIN stock upload process...");
         
         // Use provided pool name or fallback to CSV filename
@@ -45,6 +45,7 @@ public class StockService {
         System.out.println("📦 Pool Name: " + finalPoolName);
         System.out.println("👤 Admin User: " + adminUser);
         System.out.println("🆔 Product ID: " + productId);
+        System.out.println("💰 Price: " + price);
         System.out.println("📝 Notes: " + notes);
         
         List<StockItemDTO> items = parseCSV(file);
@@ -91,10 +92,10 @@ public class StockService {
                     
                     StockItem item = new StockItem(encryptedPin, dto.getSerialNumber());
                     item.setItemId(UUID.randomUUID().toString());
-                    item.setNotes(dto.getNotes());
-                    item.setProductId(dto.getProductId()); // Set productId from CSV
-                    item.setPrice(dto.getPrice()); // Set price from CSV
-                    item.setType(dto.getType()); // Set type from CSV
+                    item.setNotes(notes); // Use form notes
+                    item.setProductId(poolProductId); // Use product ID from form
+                    item.setPrice(price); // Use price from form
+                    item.setType("EPIN"); // Set type as EPIN
                     pool.addItem(item);
                     totalImported++;
                 }
@@ -124,12 +125,31 @@ public class StockService {
         System.out.println("   Pools Created/Updated: " + createdPools.size());
         System.out.println("   Errors: " + errors.size());
 
+        // Build detailed response with stock card data
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);
         result.put("totalImported", totalImported);
         result.put("poolsUpdated", createdPools.size());
         result.put("bundleName", finalPoolName);
         result.put("errors", errors);
+        
+        // Add stock card details
+        List<Map<String, Object>> stockCards = new ArrayList<>();
+        for (StockPool pool : createdPools) {
+            Map<String, Object> card = new HashMap<>();
+            card.put("poolId", pool.getId());
+            card.put("poolName", pool.getName());
+            card.put("price", price); // Price from form
+            card.put("unitCount", pool.getTotalQuantity()); // Total PINs
+            card.put("availableCount", pool.getAvailableQuantity());
+            card.put("stockType", pool.getStockType().toString());
+            card.put("status", pool.getStatus().toString());
+            card.put("productId", pool.getProductId());
+            card.put("notes", pool.getDescription());
+            card.put("createdDate", pool.getCreatedDate());
+            stockCards.add(card);
+        }
+        result.put("stockCards", stockCards);
         result.put("stockPools", createdPools);
 
         return result;
@@ -423,106 +443,126 @@ public class StockService {
         return newPool;
     }
 
+    /**
+     * Parse CSV with only PIN ID and PINS columns
+     * Expected format: PIN ID, PINS (flexible column names)
+     */
     private List<StockItemDTO> parseCSV(MultipartFile file) throws Exception {
         List<StockItemDTO> items = new ArrayList<>();
         
-        System.out.println("📄 Starting CSV parsing...");
+        System.out.println("📄 Starting simplified CSV parsing (PIN ID and PINS only)...");
+        System.out.println("File name: " + file.getOriginalFilename());
+        System.out.println("File size: " + file.getSize() + " bytes");
+        System.out.println("Content type: " + file.getContentType());
+        
+        // Check if file is actually a CSV
+        String filename = file.getOriginalFilename();
+        if (filename != null && !filename.toLowerCase().endsWith(".csv")) {
+            throw new IllegalArgumentException("File must be a CSV file. Got: " + filename);
+        }
         
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
             
-            CSVParser csvParser = new CSVParser(reader, CSVFormat.DEFAULT
-                .withFirstRecordAsHeader()
-                .withIgnoreHeaderCase()
-                .withTrim());
+            // Read first line to get headers
+            String headerLine = reader.readLine();
+            if (headerLine == null || headerLine.trim().isEmpty()) {
+                throw new IllegalArgumentException("CSV file is empty or has no headers");
+            }
             
-            // Print headers for debugging
-            System.out.println("CSV Headers: " + csvParser.getHeaderNames());
+            // Remove BOM if present
+            if (headerLine.startsWith("\uFEFF")) {
+                headerLine = headerLine.substring(1);
+            }
             
-            int rowCount = 0;
-            for (CSVRecord record : csvParser) {
-                rowCount++;
-                System.out.println("Processing row " + rowCount + ": " + record);
+            // Check if file is corrupted or not a text CSV
+            if (headerLine.contains("\0") || headerLine.contains("PK\u0003\u0004") || headerLine.contains("[Content_Types]")) {
+                throw new IllegalArgumentException("File appears to be corrupted or not a plain CSV text file. Please save your Excel file as 'CSV UTF-8 (Comma delimited) (*.csv)' format.");
+            }
+            
+            System.out.println("Raw header line: '" + headerLine + "'");
+            String[] headers = headerLine.split(",");
+            System.out.println("Number of headers: " + headers.length);
+            for (int i = 0; i < headers.length; i++) {
+                System.out.println("  Header[" + i + "]: '" + headers[i].trim() + "'");
+            }
+            
+            // Find column indices for PIN ID and PINS (case insensitive)
+            int pinIdIndex = -1;
+            int pinsIndex = -1;
+            
+            for (int i = 0; i < headers.length; i++) {
+                String header = headers[i].trim().toLowerCase();
                 
-                StockItemDTO item = new StockItemDTO();
-                
-                // Support both "pin" and "pinNumber" column names
-                String pinData = null;
-                if (record.isMapped("pin")) {
-                    pinData = record.get("pin");
-                    System.out.println("  Found 'pin': " + pinData);
-                } else if (record.isMapped("pinNumber")) {
-                    pinData = record.get("pinNumber");
-                    System.out.println("  Found 'pinNumber': " + pinData);
+                if (header.equals("pin id") || header.equals("pin_id") || header.equals("pinid") || header.equals("pin-id")) {
+                    pinIdIndex = i;
+                    System.out.println("✓ Found PIN ID at index " + i);
+                } else if (header.equals("pins") || header.equals("pin") || header.equals("pinnumber") || header.equals("pin number")) {
+                    pinsIndex = i;
+                    System.out.println("✓ Found PINS at index " + i);
                 }
-                
-                // Skip rows with empty PIN data
-                if (pinData == null || pinData.trim().isEmpty()) {
-                    System.out.println("  ⚠️ Skipping row " + rowCount + " - no PIN data");
+            }
+            
+            if (pinsIndex == -1) {
+                String headersList = String.join(", ", headers);
+                System.err.println("❌ Could not find PINS column. Available headers: " + headersList);
+                throw new IllegalArgumentException("CSV must have a 'PINS' or 'PIN' column. Found headers: " + headersList);
+            }
+            
+            System.out.println("Column mapping - PIN ID index: " + pinIdIndex + ", PINS index: " + pinsIndex);
+            
+            // Read data rows
+            String line;
+            int rowCount = 0;
+            while ((line = reader.readLine()) != null) {
+                if (line.trim().isEmpty()) {
+                    System.out.println("  Skipping empty line");
                     continue;
                 }
                 
-                // Convert scientific notation to full number (fixes Excel formatting)
-                pinData = convertScientificNotation(pinData);
-                item.setItemData(pinData);
-                System.out.println("  ✅ PIN after conversion: " + pinData);
+                rowCount++;
+                String[] values = line.split(",", -1);
                 
-                // Support both "serial_number" and "serialNumber"
-                String serialNum = null;
-                if (record.isMapped("serial_number")) {
-                    serialNum = record.get("serial_number");
-                } else if (record.isMapped("serialNumber")) {
-                    serialNum = record.get("serialNumber");
+                System.out.println("  Row " + rowCount + " has " + values.length + " columns");
+                
+                if (values.length <= pinsIndex) {
+                    System.out.println("  ⚠️ Skipping row " + rowCount + " - not enough columns (expected at least " + (pinsIndex + 1) + ")");
+                    continue;
                 }
                 
-                // Also convert serial number if it's in scientific notation
-                if (serialNum != null && !serialNum.trim().isEmpty()) {
-                    serialNum = convertScientificNotation(serialNum);
-                    item.setSerialNumber(serialNum);
-                    System.out.println("  Serial Number: " + serialNum);
+                String pins = values[pinsIndex].trim();
+                
+                if (pins.isEmpty()) {
+                    System.out.println("  ⚠️ Skipping row " + rowCount + " - empty PINS value");
+                    continue;
                 }
                 
-                // Store productId separately
-                if (record.isMapped("productId")) {
-                    String productIdValue = record.get("productId");
-                    if (productIdValue != null && !productIdValue.trim().isEmpty()) {
-                        item.setProductId(productIdValue.trim());
-                        System.out.println("  Product ID: " + productIdValue.trim());
-                    }
-                }
+                StockItemDTO item = new StockItemDTO();
                 
-                // Store notes separately
-                if (record.isMapped("notes")) {
-                    String notesValue = record.get("notes");
-                    if (notesValue != null && !notesValue.trim().isEmpty()) {
-                        item.setNotes(notesValue.trim());
-                        System.out.println("  Notes: " + notesValue.trim());
-                    }
-                }
+                // Convert scientific notation to full number
+                pins = convertScientificNotation(pins);
+                item.setItemData(pins);
+                System.out.println("  ✓ Row " + rowCount + " - PIN: " + pins.substring(0, Math.min(4, pins.length())) + "...");
                 
-                // Store price separately
-                if (record.isMapped("price")) {
-                    String priceValue = record.get("price");
-                    if (priceValue != null && !priceValue.trim().isEmpty()) {
-                        item.setPrice(priceValue.trim());
-                        System.out.println("  Price: " + priceValue.trim());
-                    }
-                }
-                
-                // Store type separately
-                if (record.isMapped("type")) {
-                    String typeValue = record.get("type");
-                    if (typeValue != null && !typeValue.trim().isEmpty()) {
-                        item.setType(typeValue.trim());
-                        System.out.println("  Type: " + typeValue.trim());
+                // Set PIN ID as serial number if available
+                if (pinIdIndex != -1 && values.length > pinIdIndex) {
+                    String pinId = values[pinIdIndex].trim();
+                    if (!pinId.isEmpty()) {
+                        pinId = convertScientificNotation(pinId);
+                        item.setSerialNumber(pinId);
+                        System.out.println("    PIN ID: " + pinId);
                     }
                 }
                 
                 items.add(item);
-                System.out.println("  ✅ Item added to list");
             }
             
             System.out.println("📊 CSV parsing complete. Total items parsed: " + items.size());
+            
+            if (items.isEmpty()) {
+                throw new IllegalArgumentException("No valid PIN data found in CSV file. Please check the file format.");
+            }
+            
         } catch (Exception e) {
             System.err.println("❌ Error parsing CSV: " + e.getMessage());
             e.printStackTrace();
@@ -751,5 +791,16 @@ public class StockService {
         }
         
         stockPoolRepository.save(pool);
+    }
+
+    /**
+     * Delete ALL stock pools from the database
+     * WARNING: This operation is irreversible!
+     */
+    public long deleteAllStockPools() {
+        long count = stockPoolRepository.count();
+        stockPoolRepository.deleteAll();
+        System.out.println("🗑️ Deleted all " + count + " stock pools from database");
+        return count;
     }
 }

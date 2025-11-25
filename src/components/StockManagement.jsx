@@ -32,7 +32,8 @@ export default function StockManagement() {
     available: '',
     status: 'ACTIVE',
     productId: '',
-    notes: ''
+    notes: '',
+    price: ''
   });
 
   useEffect(() => {
@@ -126,10 +127,34 @@ export default function StockManagement() {
     setShowPoolForm(true);
   };
 
-  const handleFileSelect = (event) => {
-    const file = event.target.files[0];
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
     if (file) {
       setSelectedFile(file);
+      
+      // Auto-detect PIN count from CSV
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const text = event.target.result;
+          const lines = text.split('\n').filter(line => line.trim() !== '');
+          
+          // Subtract 1 for header row
+          const pinCount = Math.max(0, lines.length - 1);
+          
+          // Auto-fill totalStock with detected count
+          setPoolMetadata(prev => ({
+            ...prev,
+            totalStock: pinCount.toString(),
+            available: pinCount.toString()
+          }));
+          
+          console.log(`Auto-detected ${pinCount} PINs from CSV`);
+        } catch (error) {
+          console.error('Error parsing CSV:', error);
+        }
+      };
+      reader.readAsText(file);
     }
   };
 
@@ -139,8 +164,8 @@ export default function StockManagement() {
       return;
     }
     
-    if (!poolMetadata.poolName || !poolMetadata.totalStock) {
-      alert('Please fill in Pool Name and Total Stock');
+    if (!poolMetadata.poolName || !poolMetadata.totalStock || !poolMetadata.price) {
+      alert('Please fill in Pool Name, Total Stock, and Price');
       return;
     }
     
@@ -153,6 +178,7 @@ export default function StockManagement() {
     formData.append('status', poolMetadata.status);
     formData.append('productId', poolMetadata.productId);
     formData.append('notes', poolMetadata.notes);
+    formData.append('price', poolMetadata.price);
 
     try {
       const token = localStorage.getItem('token');
@@ -176,7 +202,20 @@ export default function StockManagement() {
 
       if (response.ok) {
         const result = await response.json();
-        alert(`Successfully uploaded ${result.totalImported} ${uploadType === 'pin' ? 'PINs' : 'eSIMs'}!`);
+        
+        // Show success message with stock card details
+        if (result.stockCards && result.stockCards.length > 0) {
+          const card = result.stockCards[0];
+          const successMsg = `✅ Stock Pool Created Successfully!\n\n` +
+            `📦 Pool Name: ${card.poolName}\n` +
+            `💰 Price: ${card.price} NOK\n` +
+            `📊 Total Units: ${card.unitCount}\n` +
+            `✓ Available: ${card.availableCount}\n` +
+            `🔐 All ${card.unitCount} PINs encrypted and stored securely`;
+          alert(successMsg);
+        } else {
+          alert(`Successfully uploaded ${result.totalImported} ${uploadType === 'pin' ? 'PINs' : 'eSIMs'}!`);
+        }
         
         // Reset form
         setShowPoolForm(false);
@@ -188,7 +227,8 @@ export default function StockManagement() {
           available: '',
           status: 'ACTIVE',
           productId: '',
-          notes: ''
+          notes: '',
+          price: ''
         });
         
         fetchStockData();
@@ -608,7 +648,8 @@ export default function StockManagement() {
                       poolName: '',
                       type: 'EPIN',
                       productId: '',
-                      notes: ''
+                      notes: '',
+                      price: ''
                     });
                   }}
                   className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2"
@@ -687,9 +728,12 @@ export default function StockManagement() {
                     required
                     value={poolMetadata.totalStock}
                     onChange={(e) => setPoolMetadata({...poolMetadata, totalStock: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="e.g., 100"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50"
+                    placeholder="Auto-detected from CSV"
+                    readOnly
+                    title="Auto-filled from CSV file"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Auto-detected from CSV</p>
                 </div>
 
                 <div>
@@ -700,8 +744,26 @@ export default function StockManagement() {
                     type="number"
                     value={poolMetadata.available}
                     onChange={(e) => setPoolMetadata({...poolMetadata, available: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50"
                     placeholder="Same as Total Stock"
+                    readOnly
+                    title="Auto-filled from CSV file"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Auto-detected from CSV</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Price (NOK) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={poolMetadata.price}
+                    onChange={(e) => setPoolMetadata({...poolMetadata, price: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="e.g., 99.00"
                   />
                 </div>
 
@@ -750,10 +812,11 @@ export default function StockManagement() {
               <div className="bg-gray-50 rounded-lg p-4">
                 <h4 className="font-medium text-gray-900 mb-2">CSV Requirements:</h4>
                 <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• Headers: <code className="bg-white px-2 py-1 rounded text-xs">pinNumber, serialNumber, productId, notes, poolName, type, price</code></li>
-                  <li>• PINs should be formatted as text (not scientific notation)</li>
-                  <li>• Price should be numeric (e.g., 99)</li>
-                  <li>• Type: "Data bundle" for bundles</li>
+                  <li>• <strong>Headers:</strong> <code className="bg-white px-2 py-1 rounded text-xs">PIN ID, PINS</code></li>
+                  <li>• <strong>PIN ID:</strong> Serial number or identifier for the PIN</li>
+                  <li>• <strong>PINS:</strong> The actual PIN number (16 digits)</li>
+                  <li>• Both columns are required</li>
+                  <li>• CSV will be automatically counted for Total Stock</li>
                 </ul>
               </div>
             </div>
@@ -770,7 +833,8 @@ export default function StockManagement() {
                     available: '',
                     status: 'ACTIVE',
                     productId: '',
-                    notes: ''
+                    notes: '',
+                    price: ''
                   });
                 }}
                 className="px-6 py-2 text-gray-600 border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
@@ -779,7 +843,7 @@ export default function StockManagement() {
               </button>
               <button
                 onClick={submitUpload}
-                disabled={!selectedFile || !poolMetadata.poolName || !poolMetadata.totalStock || uploadingPins || uploadingEsims}
+                disabled={!selectedFile || !poolMetadata.poolName || !poolMetadata.totalStock || !poolMetadata.price || uploadingPins || uploadingEsims}
                 className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 flex items-center gap-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploadingPins || uploadingEsims ? (

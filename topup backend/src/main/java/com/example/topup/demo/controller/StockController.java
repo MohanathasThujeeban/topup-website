@@ -160,6 +160,7 @@ public class StockController {
             @RequestParam(required = false) String available,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String productId,
+            @RequestParam(required = false) String price,
             @RequestParam(required = false) String notes,
             @RequestParam(required = false, defaultValue = "admin") String uploadedBy) {
         try {
@@ -173,6 +174,7 @@ public class StockController {
             System.out.println("Available: " + available);
             System.out.println("Status: " + status);
             System.out.println("Product ID: " + productId);
+            System.out.println("Price: " + price);
             System.out.println("Notes: " + notes);
             System.out.println("Uploaded By: " + uploadedBy);
             System.out.println("===============================================");
@@ -181,7 +183,7 @@ public class StockController {
                 throw new IllegalArgumentException("Uploaded file is empty");
             }
             
-            Map<String, Object> result = stockService.uploadPinStock(file, uploadedBy, poolName, productId, notes);
+            Map<String, Object> result = stockService.uploadPinStock(file, uploadedBy, poolName, productId, price, notes);
             
             System.out.println("✅ Upload successful!");
             System.out.println("Result: " + result);
@@ -341,14 +343,14 @@ public class StockController {
         }
     }
 
-    // 12. Download PIN CSV template
+    // 12. Download PIN CSV template (Simplified: PIN ID and PINS only)
     @GetMapping("/templates/pin-template.csv")
     public ResponseEntity<Resource> downloadPinTemplate() {
         try {
-            String csvContent = "pin,serial_number,validity_days,batch_number\n" +
-                    "1234567890123456,SN001,30,BATCH001\n" +
-                    "2345678901234567,SN002,30,BATCH001\n" +
-                    "3456789012345678,SN003,30,BATCH001\n";
+            String csvContent = "PIN ID,PINS\n" +
+                    "22828126454,5.00004E+11\n" +
+                    "99989145671,5.00004E+11\n" +
+                    "62497545631,5.00004E+11\n";
             
             ByteArrayResource resource = new ByteArrayResource(csvContent.getBytes(StandardCharsets.UTF_8));
             
@@ -475,6 +477,27 @@ public class StockController {
             error.put("success", false);
             error.put("message", "Failed to update item: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    // Delete ALL stock pools (use with caution!)
+    @DeleteMapping("/pools/clear-all")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> clearAllStockPools() {
+        try {
+            long deletedCount = stockService.deleteAllStockPools();
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "All stock pools deleted successfully");
+            response.put("deletedCount", deletedCount);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "Failed to delete all pools: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
 }

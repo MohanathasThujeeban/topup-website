@@ -96,84 +96,15 @@ const RetailerDashboard = () => {
   };
   
   // Retailer margin rate state (set by admin only - no defaults)
-  const [retailerMarginRate, setRetailerMarginRate] = useState(() => {
-    try {
-      const saved = localStorage.getItem('retailerMarginRate');
-      return saved ? parseFloat(saved) : null; // No default - must be set by admin
-    } catch {
-      return null; // No default - admin must set margin rate
-    }
-  });
+  const [retailerMarginRate, setRetailerMarginRate] = useState(null);
   
-  // Profit tracking state with localStorage persistence
-  const [totalProfit, setTotalProfit] = useState(() => {
-    try {
-      const saved = localStorage.getItem('retailerTotalProfit');
-      return saved ? parseFloat(saved) : 0;
-    } catch {
-      return 0;
-    }
-  });
+  // Profit tracking state - starts from zero
+  const [totalProfit, setTotalProfit] = useState(0);
   
-  const [dailyProfit, setDailyProfit] = useState(() => {
-    try {
-      const saved = localStorage.getItem('retailerDailyProfit');
-      const savedDate = localStorage.getItem('retailerDailyProfitDate');
-      const today = new Date().toDateString();
-      if (saved && savedDate === today) {
-        return parseFloat(saved);
-      }
-      return 0;
-    } catch {
-      return 0;
-    }
-  });
+  const [dailyProfit, setDailyProfit] = useState(0);
   
-  // Recent Activities state with localStorage persistence
-  const [recentActivities, setRecentActivities] = useState(() => {
-    try {
-      const saved = localStorage.getItem('retailerRecentActivities');
-      if (saved) {
-        const activities = JSON.parse(saved);
-        // Clean up navigation activities that were incorrectly marked as pos_sale
-        const cleanedActivities = activities.map(activity => {
-          if (activity.type === 'pos_sale' && 
-              activity.details?.action === 'navigation' && 
-              (activity.description?.includes('Opened Point of Sale') || activity.details?.amount === undefined || activity.details?.amount === 0)) {
-            return {
-              ...activity,
-              type: 'navigation'
-            };
-          }
-          return activity;
-        });
-        return cleanedActivities;
-      }
-      return [];
-    } catch {
-      return [];
-    }
-  });
-  
-  // Save activities to localStorage whenever they change and recalculate analytics
-  useEffect(() => {
-    localStorage.setItem('retailerRecentActivities', JSON.stringify(recentActivities));
-  }, [recentActivities]);
-  
-  // Save profit data to localStorage
-  useEffect(() => {
-    localStorage.setItem('retailerTotalProfit', totalProfit.toString());
-  }, [totalProfit]);
-  
-  useEffect(() => {
-    localStorage.setItem('retailerDailyProfit', dailyProfit.toString());
-    localStorage.setItem('retailerDailyProfitDate', new Date().toDateString());
-  }, [dailyProfit]);
-  
-  // Save margin rate to localStorage
-  useEffect(() => {
-    localStorage.setItem('retailerMarginRate', retailerMarginRate.toString());
-  }, [retailerMarginRate]);
+  // Recent Activities state - starts empty
+  const [recentActivities, setRecentActivities] = useState([]);
   
   // Temporarily disable promotions fetching due to backend performance issues
   // Effect for fetching active promotions - only once on mount
@@ -984,223 +915,10 @@ const RetailerDashboard = () => {
 
 
   const fetchInventoryBundles = async (signal = null) => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const hasDemoParam = urlParams.get('demo') === 'true';
-    
-    // If demo mode explicitly requested, load demo inventory
-    if (hasDemoParam) {
-      console.log('🎯 Demo mode: Loading demo inventory');
-      const demoInventory = [
-        {
-          id: 'demo-1',
-          bundleId: 'demo-bundle-1',
-          bundleName: 'Lyca 49 NOK Bundle (Demo)',
-          bundlePrice: 49,
-          purchasePrice: 34.3,
-          availableQuantity: 50,
-          totalPins: 50,
-          status: 'ACTIVE',
-          productType: 'EPIN'
-        },
-        {
-          id: 'demo-2',
-          bundleId: 'demo-bundle-2',
-          bundleName: 'Lyca 99 NOK Bundle (Demo)',
-          bundlePrice: 99,
-          purchasePrice: 69.3,
-          availableQuantity: 25,
-          totalPins: 25,
-          status: 'ACTIVE',
-          productType: 'EPIN'
-        }
-      ];
-      setInventoryBundles(demoInventory);
-      return;
-    }
-    
-    // Prevent multiple simultaneous calls
-    if (fetchingData) {
-      console.log('⏳ Already fetching data - skipping inventory call');
-      return;
-    }
-    
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.log('🔄 No token: Loading fallback inventory');
-        // Load fallback inventory when no token
-        setInventoryBundles([
-          {
-            id: 'fallback-1',
-            bundleId: 'fallback-bundle-1',
-            bundleName: 'Lyca 49 NOK Bundle',
-            bundlePrice: 49,
-            purchasePrice: 34.3,
-            availableQuantity: 10,
-            totalPins: 10,
-            status: 'ACTIVE',
-            productType: 'EPIN'
-          }
-        ]);
-        return;
-      }
-      
-      const fetchController = new AbortController();
-      const fetchSignal = signal || fetchController.signal;
-      
-      const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      };
-
-      console.log('🔄 Fetching retailer inventory bundles...');
-      
-      // Add timeout to prevent hanging requests
-      const timeoutController = new AbortController();
-      const timeoutId = setTimeout(() => timeoutController.abort(), 10000); // 10 second timeout
-      
-      const response = await fetch(`${API_BASE_URL}/retailer/inventory`, { 
-        headers, 
-        signal: timeoutController.signal, // Use timeout controller for actual fetch
-        keepalive: false // Prevent connection hanging
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log('📦 Real inventory received:', result);
-        
-        let inventoryList = [];
-        
-        // Parse real inventory data from various response formats
-        if (result.success && result.data) {
-          if (Array.isArray(result.data.inventory)) {
-            inventoryList = result.data.inventory;
-            console.log('📦 Using result.data.inventory format');
-          } else if (Array.isArray(result.data.bundles)) {
-            inventoryList = result.data.bundles;
-            console.log('📦 Using result.data.bundles format');
-          } else if (Array.isArray(result.data)) {
-            inventoryList = result.data;
-            console.log('📦 Using result.data array format');
-          }
-        } else if (Array.isArray(result)) {
-          inventoryList = result;
-          console.log('📦 Using direct array format');
-        }
-        
-        console.log('📊 Real inventory parsed:', inventoryList.length, 'bundles found');
-        if (inventoryList.length > 0) {
-          console.log('📊 First inventory item structure:', inventoryList[0]);
-        }
-
-        // Transform the PIN-based inventory to the expected format
-        const availableInventory = inventoryList
-          .filter(item => (item.availablePins > 0 || item.availableQuantity > 0) && (item.status === 'ACTIVE' || !item.status))
-          .map(item => {
-            // Better bundle name handling
-            let bundleName = item.bundleName || item.name || item.productName;
-            if (!bundleName || bundleName === 'Unknown Product' || bundleName.trim() === '') {
-              bundleName = (item.bundlePrice ? `NOK ${item.bundlePrice}` : 'Unknown') + ' Bundle';
-            }
-            
-            // Calculate cost price using admin-set margin rate (only if available)
-            const salePrice = parseFloat(item.bundlePrice) || parseFloat(item.price) || 99.00;
-            const realCostPrice = item.purchasePrice || (retailerMarginRate ? (salePrice * (1 - retailerMarginRate / 100)) : salePrice);
-            const availableQty = item.availablePins || item.availableQuantity || 0;
-            
-            return {
-              id: item.bundleId || item.id || `bundle-${Date.now()}-${Math.random()}`,
-              bundleId: item.bundleId || item.id,
-              bundleName: bundleName,
-              bundlePrice: salePrice,
-              productType: item.productType || 'EPIN',
-              availableQuantity: availableQty,
-              availablePins: item.pins || [],
-              totalPins: availableQty,
-              status: item.status || 'ACTIVE',
-              purchasePrice: realCostPrice,
-              realMarginRate: retailerMarginRate,
-              expectedProfit: salePrice - realCostPrice
-            };
-          });
-        
-        if (availableInventory.length > 0) {
-          setInventoryBundles(availableInventory);
-          const totalUnits = availableInventory.reduce((sum, item) => sum + (item.availableQuantity || 0), 0);
-          console.log(`✅ Real inventory bundles loaded: ${availableInventory.length} bundle types, ${totalUnits} total units`);
-          
-          // Force immediate analytics update with the new inventory
-          setTimeout(() => {
-            setAnalytics(prev => ({
-              ...prev,
-              bundleInventory: totalUnits
-            }));
-            console.log(`📊 Analytics updated with bundle inventory: ${totalUnits}`);
-          }, 100);
-        } else {
-          console.log('⚠️ No active inventory found, showing empty state');
-          setInventoryBundles([]);
-        }
-      } else {
-        console.log('❌ Failed to fetch inventory, status:', response.status);
-        
-        if (response.status === 404) {
-          console.log('🔧 No inventory endpoint found - showing empty state');
-          setInventoryBundles([]);
-        } else if (response.status === 401) {
-          console.log('🔐 Unauthorized - token may be invalid');
-          setInventoryBundles([]);
-        } else {
-          console.log('🔄 Server error - loading fallback inventory');
-          // Load fallback inventory for server errors
-          setInventoryBundles([
-            {
-              id: 'fallback-1',
-              bundleId: 'fallback-bundle-1',
-              bundleName: 'Lyca 49 NOK Bundle',
-              bundlePrice: 49,
-              purchasePrice: 34.3,
-              availableQuantity: 5,
-              totalPins: 5,
-              status: 'ACTIVE',
-              productType: 'EPIN'
-            },
-            {
-              id: 'fallback-2',
-              bundleId: 'fallback-bundle-2',
-              bundleName: 'Lyca 99 NOK Bundle',
-              bundlePrice: 99,
-              purchasePrice: 69.3,
-              availableQuantity: 3,
-              totalPins: 3,
-              status: 'ACTIVE',
-              productType: 'EPIN'
-            }
-          ]);
-        }
-      }
-    } catch (error) {
-      if (error.name !== 'AbortError') {
-        console.error('💥 Error fetching inventory:', error);
-        console.log('🔄 Network error - loading fallback inventory');
-        // Load fallback inventory for network errors
-        setInventoryBundles([
-          {
-            id: 'offline-1',
-            bundleId: 'offline-bundle-1',
-            bundleName: 'Lyca 49 NOK Bundle (Offline)',
-            bundlePrice: 49,
-            purchasePrice: 34.3,
-            availableQuantity: 10,
-            totalPins: 10,
-            status: 'ACTIVE',
-            productType: 'EPIN'
-          }
-        ]);
-      }
-    }
+    // Always return empty inventory - no demo data
+    console.log('📦 Inventory fetching disabled - returning empty');
+    setInventoryBundles([]);
+    return;
   };
 
   const fetchRetailerData = async () => {
@@ -2321,13 +2039,6 @@ const RetailerDashboard = () => {
                 onClick={handleTabChange}
               />
               <SidebarNavItem
-                id="inventory"
-                label="Inventory"
-                icon={Box}
-                active={activeTab === 'inventory'}
-                onClick={handleTabChange}
-              />
-              <SidebarNavItem
                 id="offers"
                 label="Offers"
                 icon={Tag}
@@ -2363,9 +2074,6 @@ const RetailerDashboard = () => {
               </button>
               <button onClick={() => handleTabChange('esim')} className={`w-full p-3 rounded-xl ${activeTab === 'esim' ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <Globe2 size={20} />
-              </button>
-              <button onClick={() => setActiveTab('inventory')} className={`w-full p-3 rounded-xl ${activeTab === 'inventory' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
-                <Box size={20} />
               </button>
               <button onClick={() => setActiveTab('offers')} className={`w-full p-3 rounded-xl relative ${activeTab === 'offers' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <Tag size={20} />
@@ -2409,7 +2117,6 @@ const RetailerDashboard = () => {
                 {activeTab === 'pos' && 'Point of Sale'}
                 {activeTab === 'bundles' && 'Buy Bundles'}
                 {activeTab === 'esim' && 'Buy eSIMs'}
-                {activeTab === 'inventory' && 'Inventory'}
                 {activeTab === 'offers' && 'Offers'}
                 {activeTab === 'margin' && 'Margin Rate'}
                 {activeTab === 'analytics' && 'Analytics'}
@@ -2739,19 +2446,6 @@ const RetailerDashboard = () => {
                       <Package size={32} className="text-gray-400 mx-auto mb-2" />
                       <p className="text-gray-500">No bundles in inventory</p>
                       <p className="text-sm text-gray-400 mb-4">Purchase bundles from the admin to sell to customers</p>
-                      
-                      <div className="space-y-2">
-                        <button
-                          onClick={createSampleInventory}
-                          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm transition-colors block w-full"
-                        >
-                          🔧 Create Sample Inventory for Testing
-                        </button>
-                        
-                        <div className="text-xs text-gray-400 bg-blue-50 p-2 rounded">
-                          💡 <strong>Tip:</strong> If backend is offline, sample inventory will work in offline mode
-                        </div>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -2946,10 +2640,6 @@ const RetailerDashboard = () => {
 
         {activeTab === 'esim' && (
           <RetailerEsimPurchase />
-        )}
-
-        {activeTab === 'inventory' && (
-          <RetailerInventoryDisplay />
         )}
 
         {activeTab === 'analytics' && (
