@@ -31,6 +31,9 @@ public class RetailerPurchaseService {
     
     @Autowired
     private StockPoolRepository stockPoolRepository;
+    
+    @Autowired
+    private RetailerOrderRepository retailerOrderRepository;
 
     // Credit level definitions (NOK)
     private static final List<BigDecimal> CREDIT_LEVELS = Arrays.asList(
@@ -72,8 +75,28 @@ public class RetailerPurchaseService {
         product.setProductType(stockPool.getStockType() == StockPool.StockType.EPIN ? 
             Product.ProductType.EPIN : Product.ProductType.ESIM);
         
-        // Set pricing (you can adjust these)
-        BigDecimal basePrice = new BigDecimal("99.00"); // Default price
+        // Set pricing from first available StockItem price or use default
+        BigDecimal basePrice;
+        try {
+            // Try to get price from first available item in the pool
+            String priceStr = stockPool.getItems().stream()
+                .filter(item -> item.getPrice() != null && !item.getPrice().isEmpty())
+                .map(StockPool.StockItem::getPrice)
+                .findFirst()
+                .orElse(null);
+            
+            if (priceStr != null && !priceStr.isEmpty()) {
+                basePrice = new BigDecimal(priceStr);
+                System.out.println("✅ Price for " + stockPool.getName() + ": NOK " + basePrice);
+            } else {
+                basePrice = new BigDecimal("99.00"); // Default fallback
+                System.out.println("⚠️ No price found for " + stockPool.getName() + ", using default: NOK " + basePrice);
+            }
+        } catch (NumberFormatException e) {
+            System.err.println("⚠️ Invalid price format for " + stockPool.getName());
+            basePrice = new BigDecimal("99.00"); // Fallback on error
+        }
+        
         product.setBasePrice(basePrice);
         
         product.setStockQuantity(stockPool.getAvailableQuantity());
@@ -312,6 +335,43 @@ public class RetailerPurchaseService {
         }
         
         Order savedOrder = orderRepository.save(order);
+
+        // ALSO CREATE RETAILER ORDER FOR INVENTORY TRACKING
+        RetailerOrder retailerOrder = new RetailerOrder();
+        retailerOrder.setRetailerId(retailerId);
+        retailerOrder.setOrderNumber("RO-" + System.currentTimeMillis());
+        retailerOrder.setTotalAmount(totalAmount);
+        retailerOrder.setCurrency("NOK");
+        retailerOrder.setStatus(RetailerOrder.OrderStatus.COMPLETED);
+        retailerOrder.setPaymentStatus(RetailerOrder.PaymentStatus.COMPLETED);
+        retailerOrder.setPaymentMethod("DIRECT");
+        retailerOrder.setCreatedDate(LocalDateTime.now());
+        retailerOrder.setLastModifiedDate(LocalDateTime.now());
+        
+        // Create order item
+        RetailerOrder.OrderItem orderItem = new RetailerOrder.OrderItem();
+        orderItem.setProductId(product.getId());
+        orderItem.setProductName(product.getName());
+        orderItem.setProductType(product.getProductType().toString());
+        orderItem.setCategory("bundle");
+        orderItem.setQuantity(request.getQuantity());
+        orderItem.setUnitPrice(unitPrice);
+        orderItem.setRetailPrice(unitPrice);
+        
+        List<RetailerOrder.OrderItem> items = new ArrayList<>();
+        items.add(orderItem);
+        retailerOrder.setItems(items);
+        
+        // Store encrypted PINs in order notes
+        if (!allocatedItems.isEmpty()) {
+            String encryptedPins = String.join(",", allocatedItems);
+            retailerOrder.setNotes("ENCRYPTED_PINS:" + encryptedPins);
+            System.out.println("📌 Stored " + allocatedItems.size() + " encrypted PINs in order");
+        }
+        
+        // Save retailer order
+        RetailerOrder savedRetailerOrder = retailerOrderRepository.save(retailerOrder);
+        System.out.println("✅ Created RetailerOrder: " + savedRetailerOrder.getOrderNumber() + " with " + savedRetailerOrder.getItems().size() + " items");
 
         // Update credit usage (for level tracking)
         limit.useCredit(totalAmount, savedOrder.getId(), 

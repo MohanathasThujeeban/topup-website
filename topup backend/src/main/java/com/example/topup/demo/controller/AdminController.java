@@ -319,13 +319,21 @@ public class AdminController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> setRetailerMarginRate(@Valid @RequestBody UpdateMarginRateRequest request) {
         try {
-            adminService.updateRetailerMarginRate(request.getRetailerEmail(), request.getMarginRate());
+            adminService.updateRetailerMarginRate(
+                request.getRetailerEmail(), 
+                request.getMarginRate(),
+                request.getProductId(),
+                request.getProductName(),
+                request.getPoolName()
+            );
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Margin rate updated successfully");
+            response.put("message", "Margin rate updated successfully for product");
             response.put("retailerEmail", request.getRetailerEmail());
             response.put("marginRate", request.getMarginRate());
+            response.put("productName", request.getProductName());
+            response.put("poolName", request.getPoolName());
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -372,6 +380,29 @@ public class AdminController {
             response.put("marginRate", marginRate);
             response.put("isSet", marginRate != null);
             response.put("retailerEmail", retailerEmail);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Get retailer purchase history
+     */
+    @GetMapping("/retailers/{retailerEmail}/purchase-history")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getRetailerPurchaseHistory(@PathVariable String retailerEmail) {
+        try {
+            // This would be implemented in the service layer
+            // For now, return empty history
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("purchases", new ArrayList<>());
+            response.put("totalAmount", 0.0);
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -517,6 +548,62 @@ public class AdminController {
             Map<String, Object> error = new HashMap<>();
             error.put("success", false);
             error.put("error", "Failed to delete user: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Send invoice email to retailer
+     */
+    @PostMapping("/send-invoice-email")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> sendInvoiceEmail(@RequestBody Map<String, Object> request) {
+        try {
+            String retailerEmail = (String) request.get("retailerEmail");
+            String retailerName = (String) request.get("retailerName");
+            String invoiceNumber = (String) request.get("invoiceNumber");
+            String invoiceDate = (String) request.get("invoiceDate");
+            String dueDate = (String) request.get("dueDate");
+            
+            Object creditLimitObj = request.get("creditLimit");
+            Object usedCreditObj = request.get("usedCredit");
+            Object creditUsagePercentageObj = request.get("creditUsagePercentage");
+            Object totalAmountObj = request.get("totalAmount");
+            
+            Double creditLimit = creditLimitObj instanceof Number ? ((Number) creditLimitObj).doubleValue() : 0.0;
+            Double usedCredit = usedCreditObj instanceof Number ? ((Number) usedCreditObj).doubleValue() : 0.0;
+            Double creditUsagePercentage = creditUsagePercentageObj instanceof Number ? ((Number) creditUsagePercentageObj).doubleValue() : 0.0;
+            Double totalAmount = totalAmountObj instanceof Number ? ((Number) totalAmountObj).doubleValue() : usedCredit;
+            
+            String level = (String) request.getOrDefault("level", "ENTRY");
+            
+            boolean sent = adminService.sendInvoiceEmail(
+                retailerEmail,
+                retailerName,
+                invoiceNumber,
+                invoiceDate,
+                dueDate,
+                creditLimit,
+                usedCredit,
+                creditUsagePercentage,
+                totalAmount,
+                level
+            );
+            
+            Map<String, Object> response = new HashMap<>();
+            if (sent) {
+                response.put("success", true);
+                response.put("message", "Invoice email sent successfully to " + retailerEmail);
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("success", false);
+                response.put("error", "Failed to send invoice email");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Error sending invoice: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }

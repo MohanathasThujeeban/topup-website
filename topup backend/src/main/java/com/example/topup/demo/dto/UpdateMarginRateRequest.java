@@ -13,14 +13,25 @@ public class UpdateMarginRateRequest {
     @DecimalMax(value = "100.0", message = "Margin rate cannot exceed 100%")
     private Double marginRate;
     
+    @NotBlank(message = "Product ID is required")
+    private String productId;
+    
+    @NotBlank(message = "Product name is required")
+    private String productName;
+    
+    private String poolName;
+    
     private String notes;
     
     // Constructors
     public UpdateMarginRateRequest() {}
     
-    public UpdateMarginRateRequest(String retailerEmail, Double marginRate, String notes) {
+    public UpdateMarginRateRequest(String retailerEmail, Double marginRate, String productId, String productName, String poolName, String notes) {
         this.retailerEmail = retailerEmail;
         this.marginRate = marginRate;
+        this.productId = productId;
+        this.productName = productName;
+        this.poolName = poolName;
         this.notes = notes;
     }
     
@@ -49,11 +60,38 @@ public class UpdateMarginRateRequest {
         this.notes = notes;
     }
     
+    public String getProductId() {
+        return productId;
+    }
+    
+    public void setProductId(String productId) {
+        this.productId = productId;
+    }
+    
+    public String getProductName() {
+        return productName;
+    }
+    
+    public void setProductName(String productName) {
+        this.productName = productName;
+    }
+    
+    public String getPoolName() {
+        return poolName;
+    }
+    
+    public void setPoolName(String poolName) {
+        this.poolName = poolName;
+    }
+    
     @Override
     public String toString() {
         return "UpdateMarginRateRequest{" +
                 "retailerEmail='" + retailerEmail + '\'' +
                 ", marginRate=" + marginRate +
+                ", productId='" + productId + '\'' +
+                ", productName='" + productName + '\'' +
+                ", poolName='" + poolName + '\'' +
                 ", notes='" + notes + '\'' +
                 '}';
     }

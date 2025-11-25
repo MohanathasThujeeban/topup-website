@@ -1,0 +1,46 @@
+// Create retailer_orders collection from orders collection
+// Fix field name: 'retailer' -> 'retailerId'
+
+use('topupdb');
+
+print("📦 Creating retailer_orders collection from orders...\n");
+
+// Get all orders from 'orders' collection
+const orders = db.orders.find({}).toArray();
+
+print(`Found ${orders.length} orders to copy\n`);
+
+// Copy each order to retailer_orders with proper field mapping
+orders.forEach(order => {
+    // Extract retailer ID from DBRef or direct field
+    let retailerIdValue = null;
+    
+    if (order.retailer) {
+        // Handle DBRef format: DBRef("users", ObjectId("..."))
+        if (order.retailer.$id) {
+            retailerIdValue = order.retailer.$id.toString();
+        } else if (typeof order.retailer === 'object' && order.retailer.toString) {
+            retailerIdValue = order.retailer.toString();
+        } else {
+            retailerIdValue = order.retailer;
+        }
+    }
+    
+    // Create new document with retailerId field
+    const newOrder = {
+        ...order,
+        retailerId: retailerIdValue
+    };
+    
+    // Remove the old 'retailer' field
+    delete newOrder.retailer;
+    
+    // Insert into retailer_orders
+    db.retailer_orders.insertOne(newOrder);
+    
+    print(`✅ Copied order ${order.orderNumber || order._id}: retailerId = ${retailerIdValue}, status = ${order.status}`);
+});
+
+print("\n🎉 Done! Verifying retailer_orders collection:");
+print("=".repeat(60));
+db.retailer_orders.find({}, { orderNumber: 1, retailerId: 1, status: 1, totalAmount: 1 }).forEach(printjson);

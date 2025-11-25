@@ -335,4 +335,20 @@ public class UserService {
     public PasswordEncoder getPasswordEncoder() {
         return passwordEncoder;
     }
+
+    /**
+     * Verify user's password
+     */
+    public boolean verifyPassword(User user, String rawPassword) {
+        return passwordEncoder.matches(rawPassword, user.getPassword());
+    }
+
+    /**
+     * Update user's password
+     */
+    public void updatePassword(User user, String newPassword) {
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setLastModifiedDate(LocalDateTime.now());
+        userRepository.save(user);
+    }
 }

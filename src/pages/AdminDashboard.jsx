@@ -15,6 +15,7 @@ import StockManagement from '../components/StockManagement';
 import PromotionCampaignManager from '../components/PromotionCampaignManager';
 import RetailerCreditManagement from '../components/RetailerCreditManagement';
 import EsimApprovals from '../components/EsimApprovals';
+import InvoiceAndSales from '../components/InvoiceAndSales';
 import { QRCodeSVG } from 'qrcode.react';
 
 // API Base URL - should match AuthContext
@@ -2520,6 +2521,13 @@ export default function AdminDashboard() {
                 onClick={setActiveTab}
               />
               <SidebarNavItem
+                id="invoices"
+                label="Invoice & Sales"
+                icon={FileText}
+                active={activeTab === 'invoices'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
                 id="business-approvals"
                 label="Business Approvals"
                 icon={Building}
@@ -2573,6 +2581,9 @@ export default function AdminDashboard() {
               </button>
               <button onClick={() => { setActiveTab('retailer-credit'); }} className={`w-full p-3 rounded-xl ${activeTab === 'retailer-credit' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
                 <CreditCard size={20} className="mx-auto" />
+              </button>
+              <button onClick={() => { setActiveTab('invoices'); }} className={`w-full p-3 rounded-xl ${activeTab === 'invoices' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
+                <FileText size={20} className="mx-auto" />
               </button>
             </>
           )}
@@ -2662,6 +2673,7 @@ export default function AdminDashboard() {
             {activeTab === 'esim-approvals' && <EsimApprovals />}
             {activeTab === 'stock' && <StockManagement />}
             {activeTab === 'retailer-credit' && <RetailerCreditManagement />}
+            {activeTab === 'invoices' && <InvoiceAndSales />}
             {activeTab === 'business-approvals' && renderBusinessApprovals()}
             {activeTab === 'enquiries' && renderEnquiries()}
             {activeTab === 'promotions' && <PromotionCampaignManager />}

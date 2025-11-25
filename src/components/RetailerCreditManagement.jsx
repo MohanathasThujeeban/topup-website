@@ -9,25 +9,26 @@ const RetailerCreditManagement = () => {
   const [error, setError] = useState(null);
   const [selectedRetailer, setSelectedRetailer] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [showUnitModal, setShowUnitModal] = useState(false);
   const [formData, setFormData] = useState({
     creditLimit: '',
     paymentTermsDays: 30,
     notes: ''
   });
-  const [unitFormData, setUnitFormData] = useState({
-    unitLimit: '',
-    notes: ''
-  });
   const [marginFormData, setMarginFormData] = useState({
     marginRate: '',
-    notes: ''
+    notes: '',
+    productId: '',
+    productName: '',
+    poolName: ''
   });
   const [showMarginModal, setShowMarginModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [availableProducts, setAvailableProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   useEffect(() => {
     fetchRetailers();
+    fetchAvailableProducts();
   }, []);
 
   const fetchRetailers = async () => {
@@ -148,6 +149,53 @@ const RetailerCreditManagement = () => {
     }
   };
 
+  const fetchAvailableProducts = async () => {
+    try {
+      setLoadingProducts(true);
+      const response = await fetch(`${API_BASE_URL}/retailer/bundles`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.bundles) {
+          // Extract unique products with pool information
+          const productsMap = new Map();
+          data.bundles.forEach(bundle => {
+            const key = `${bundle.name}-${bundle.poolName || 'default'}`;
+            if (!productsMap.has(key)) {
+              productsMap.set(key, {
+                id: bundle.id,
+                name: bundle.name,
+                poolName: bundle.poolName || 'Default Pool',
+                basePrice: bundle.basePrice,
+                stockQuantity: bundle.stockQuantity
+              });
+            }
+          });
+          setAvailableProducts(Array.from(productsMap.values()));
+        }
+      } else {
+        console.log('Could not fetch products, using demo data');
+        setAvailableProducts([
+          { id: '1', name: 'Dialog', poolName: 'EPIN', basePrice: 75.00, stockQuantity: 10 },
+          { id: '2', name: 'MOBITAL', poolName: 'EPIN', basePrice: 75.00, stockQuantity: 9 }
+        ]);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setAvailableProducts([
+        { id: '1', name: 'Dialog', poolName: 'EPIN', basePrice: 75.00, stockQuantity: 10 },
+        { id: '2', name: 'MOBITAL', poolName: 'EPIN', basePrice: 75.00, stockQuantity: 9 }
+      ]);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
   const handleEditClick = (retailer) => {
     setSelectedRetailer(retailer);
     setFormData({
@@ -156,15 +204,6 @@ const RetailerCreditManagement = () => {
       notes: ''
     });
     setShowModal(true);
-  };
-
-  const handleEditUnitClick = (retailer) => {
-    setSelectedRetailer(retailer);
-    setUnitFormData({
-      unitLimit: retailer.unitLimit || '',
-      notes: ''
-    });
-    setShowUnitModal(true);
   };
 
   const handleSubmit = async (e) => {
@@ -205,43 +244,6 @@ const RetailerCreditManagement = () => {
     }
   };
 
-  const handleUnitSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/admin/retailers/unit-limit`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          retailerId: selectedRetailer.retailerId,
-          unitLimit: parseInt(unitFormData.unitLimit),
-          notes: unitFormData.notes
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Refresh the retailers list
-        await fetchRetailers();
-        setShowUnitModal(false);
-        setSelectedRetailer(null);
-        setUnitFormData({ unitLimit: '', notes: '' });
-      } else {
-        alert('Failed to update unit limit: ' + data.error);
-      }
-    } catch (err) {
-      console.error('Error updating unit limit:', err);
-      alert('Failed to update unit limit');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const getLevelColor = (level) => {
     switch (level) {
       case 'DIAMOND': return 'bg-gradient-to-r from-blue-400 to-purple-400';
@@ -264,7 +266,10 @@ const RetailerCreditManagement = () => {
     setSelectedRetailer(retailer);
     setMarginFormData({
       marginRate: retailer.marginRate || '',
-      notes: ''
+      notes: '',
+      productId: '',
+      productName: '',
+      poolName: ''
     });
     setShowMarginModal(true);
   };
@@ -283,6 +288,9 @@ const RetailerCreditManagement = () => {
         body: JSON.stringify({
           retailerEmail: selectedRetailer.retailerEmail,
           marginRate: parseFloat(marginFormData.marginRate),
+          productId: marginFormData.productId,
+          productName: marginFormData.productName,
+          poolName: marginFormData.poolName,
           notes: marginFormData.notes
         })
       });
@@ -293,11 +301,10 @@ const RetailerCreditManagement = () => {
         await fetchRetailers(); // Refresh the data
         setShowMarginModal(false);
         setSelectedRetailer(null);
-        setMarginFormData({ marginRate: '', notes: '' });
+        setMarginFormData({ marginRate: '', notes: '', productId: '', productName: '', poolName: '' });
         
-        // Show success message
-        const successMessage = `Margin rate updated to ${marginFormData.marginRate}% for ${selectedRetailer.retailerName}!`;
-        alert(successMessage);
+        // Show success message with product info
+        alert(`✅ Margin rate ${marginFormData.marginRate}% set for ${marginFormData.productName} (${marginFormData.poolName})`);
       } else {
         alert(data.error || 'Failed to update margin rate');
       }
@@ -318,11 +325,10 @@ const RetailerCreditManagement = () => {
       
       setShowMarginModal(false);
       setSelectedRetailer(null);
-      setMarginFormData({ marginRate: '', notes: '' });
+      setMarginFormData({ marginRate: '', notes: '', productId: '', productName: '', poolName: '' });
       
       // Show success message
-      const successMessage = `✅ Demo Mode: Margin rate updated to ${marginFormData.marginRate}% for ${selectedRetailer.retailerName}!`;
-      alert(successMessage);
+      alert(`✅ Demo: Margin rate ${marginFormData.marginRate}% set for ${marginFormData.productName}!`);
     } finally {
       setSaving(false);
     }
@@ -551,12 +557,6 @@ const RetailerCreditManagement = () => {
                         💰 Edit Credit
                       </button>
                       <button
-                        onClick={() => handleEditUnitClick(retailer)}
-                        className="text-blue-600 hover:text-blue-900 font-medium"
-                      >
-                        📦 Edit Units
-                      </button>
-                      <button
                         onClick={() => handleEditMarginClick(retailer)}
                         className="text-green-600 hover:text-green-900 font-medium"
                       >
@@ -657,80 +657,6 @@ const RetailerCreditManagement = () => {
         </div>
       )}
 
-      {/* Edit Unit Limit Modal */}
-      {showUnitModal && selectedRetailer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900">
-                Update Unit Limit
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                {selectedRetailer.retailerName}
-              </p>
-              <p className="text-xs text-blue-600 mt-1">
-                Current: {selectedRetailer.unitLimit || 0} units | Used: {selectedRetailer.usedUnits || 0} units
-              </p>
-            </div>
-
-            <form onSubmit={handleUnitSubmit} className="px-6 py-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Unit Limit
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  required
-                  value={unitFormData.unitLimit}
-                  onChange={(e) => setUnitFormData({ ...unitFormData, unitLimit: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter unit limit"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Maximum number of bundle units retailer can purchase
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Notes (Optional)
-                </label>
-                <textarea
-                  value={unitFormData.notes}
-                  onChange={(e) => setUnitFormData({ ...unitFormData, notes: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  rows="3"
-                  placeholder="Add any notes about this unit limit change"
-                ></textarea>
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowUnitModal(false);
-                    setSelectedRetailer(null);
-                  }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-                  disabled={saving}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                  disabled={saving}
-                >
-                  {saving ? 'Saving...' : 'Update Unit Limit'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Margin Rate Edit Modal */}
       {showMarginModal && selectedRetailer && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -761,6 +687,46 @@ const RetailerCreditManagement = () => {
                   Margin rate determines retailer profit. For a NOK 100 sale with 25% margin:
                   <br />• Cost to retailer: NOK 75 • Profit: NOK 25
                 </p>
+              </div>
+
+              {/* Product Selection Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Product <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={marginFormData.productId}
+                  onChange={(e) => {
+                    const selectedProduct = availableProducts.find(p => p.id === e.target.value);
+                    setMarginFormData({
+                      ...marginFormData,
+                      productId: e.target.value,
+                      productName: selectedProduct?.name || '',
+                      poolName: selectedProduct?.poolName || ''
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  disabled={loadingProducts}
+                >
+                  <option value="">
+                    {loadingProducts ? 'Loading products...' : 'Select a product from stock'}
+                  </option>
+                  {availableProducts.map(product => (
+                    <option key={product.id} value={product.id}>
+                      {product.name} ({product.poolName}) - NOK {product.basePrice} - Stock: {product.stockQuantity}
+                    </option>
+                  ))}
+                </select>
+                {marginFormData.productName && (
+                  <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+                    <div className="text-xs text-blue-700">
+                      <strong>Selected:</strong> {marginFormData.productName}
+                      <br />
+                      <strong>Pool:</strong> {marginFormData.poolName}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -829,7 +795,7 @@ const RetailerCreditManagement = () => {
                   onClick={() => {
                     setShowMarginModal(false);
                     setSelectedRetailer(null);
-                    setMarginFormData({ marginRate: '', notes: '' });
+                    setMarginFormData({ marginRate: '', notes: '', productId: '', productName: '', poolName: '' });
                   }}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
                   disabled={saving}
@@ -839,7 +805,7 @@ const RetailerCreditManagement = () => {
                 <button
                   type="submit"
                   className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 rounded-md transition-colors disabled:opacity-50 shadow-md"
-                  disabled={saving || !marginFormData.marginRate}
+                  disabled={saving || !marginFormData.marginRate || !marginFormData.productId}
                 >
                   {saving ? 'Setting...' : 'Set Margin Rate'}
                 </button>

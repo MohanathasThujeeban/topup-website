@@ -257,6 +257,7 @@ public class RetailerOrder {
         CONFIRMED,
         PROCESSING,
         SHIPPED,
+        COMPLETED,
         DELIVERED,
         CANCELLED,
         REFUNDED

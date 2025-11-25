@@ -1369,9 +1369,16 @@ public class AdminService {
     
     // Margin Rate Management
     public void updateRetailerMarginRate(String retailerEmail, Double marginRate) {
+        updateRetailerMarginRate(retailerEmail, marginRate, null, null, null);
+    }
+    
+    public void updateRetailerMarginRate(String retailerEmail, Double marginRate, String productId, String productName, String poolName) {
         System.out.println("=== UPDATING MARGIN RATE ===");
         System.out.println("Email: " + retailerEmail);
         System.out.println("Margin Rate: " + marginRate);
+        System.out.println("Product ID: " + productId);
+        System.out.println("Product Name: " + productName);
+        System.out.println("Pool Name: " + poolName);
         
         User retailer = userRepository.findByEmailIgnoreCase(retailerEmail)
             .orElseThrow(() -> new RuntimeException("Retailer not found with email: " + retailerEmail));
@@ -1393,6 +1400,35 @@ public class AdminService {
         Map<String, Object> metadata = businessDetails.getMetadata();
         if (metadata == null) {
             metadata = new HashMap<>();
+        }
+        
+        // If product-specific margin rate
+        if (productId != null && !productId.isEmpty()) {
+            // Store product-specific margin rates in a nested map
+            @SuppressWarnings("unchecked")
+            Map<String, Object> productMarginRates = (Map<String, Object>) metadata.get("productMarginRates");
+            if (productMarginRates == null) {
+                productMarginRates = new HashMap<>();
+            }
+            
+            // Create product margin rate entry
+            Map<String, Object> productMargin = new HashMap<>();
+            productMargin.put("marginRate", marginRate);
+            productMargin.put("productName", productName);
+            productMargin.put("poolName", poolName);
+            productMargin.put("setDate", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            productMargin.put("setBy", "admin");
+            
+            productMarginRates.put(productId, productMargin);
+            metadata.put("productMarginRates", productMarginRates);
+            
+            System.out.println("✅ Product-specific margin rate stored for product: " + productName);
+        } else {
+            // Store global margin rate (for backward compatibility)
+            metadata.put("marginRate", marginRate);
+            metadata.put("marginRateSetDate", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            metadata.put("marginRateSetBy", "admin");
+            System.out.println("✅ Global margin rate stored");
         }
         
         metadata.put("marginRate", marginRate);
@@ -1457,5 +1493,17 @@ public class AdminService {
         
         System.out.println("❌ Returning null - no admin margin rate set");
         return null;
+    }
+
+    public boolean sendInvoiceEmail(String retailerEmail, String retailerName, String invoiceNumber, String invoiceDate, String dueDate, Double creditLimit, Double usedCredit, Double creditUsagePercentage, Double totalAmount, String level) {
+        try {
+            String subject = "Payment Required - Invoice " + invoiceNumber;
+            String html = "<!DOCTYPE html><html><body style='font-family:Arial,sans-serif'><h2 style='color:#333'>EasyTopup.no - PAYMENT INVOICE</h2><hr><table style='width:100%'><tr><td><strong>Invoice Number:</strong></td><td>" + invoiceNumber + "</td></tr><tr><td><strong>Date:</strong></td><td>" + invoiceDate + "</td></tr><tr><td><strong>Due Date:</strong></td><td>" + dueDate + "</td></tr></table><hr><h3>Bill To:</h3><p>" + retailerName + "<br>" + retailerEmail + "</p><hr><h3>Credit Summary:</h3><table style='width:100%;border-collapse:collapse'><tr style='background:#f0f0f0'><td style='padding:8px;border:1px solid #ddd'>Credit Limit</td><td style='padding:8px;border:1px solid #ddd'>NOK " + String.format("%,.2f", creditLimit) + "</td></tr><tr><td style='padding:8px;border:1px solid #ddd'>Used Credit</td><td style='padding:8px;border:1px solid #ddd'>NOK " + String.format("%,.2f", usedCredit) + "</td></tr><tr><td style='padding:8px;border:1px solid #ddd'>Usage Level</td><td style='padding:8px;border:1px solid #ddd'>" + String.format("%.1f%%", creditUsagePercentage) + " (" + level + ")</td></tr></table><hr><h3 style='color:#d9534f'>Total Amount Due:</h3><h2 style='color:#d9534f'>NOK " + String.format("%,.2f", totalAmount) + "</h2><p>Please settle this amount at your earliest convenience.</p><p style='color:#666;font-size:12px'>For any queries, contact support@easytopup.no</p></body></html>";
+            emailService.sendEmail(retailerEmail, subject, html);
+            return true;
+        } catch (Exception e) {
+            System.err.println("Error sending invoice email: " + e.getMessage());
+            return false;
+        }
     }
 }

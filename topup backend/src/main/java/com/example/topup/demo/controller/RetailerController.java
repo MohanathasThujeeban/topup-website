@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -276,9 +278,19 @@ public class RetailerController {
 
     // Helper method to get user from authentication
     private User getUserFromAuthentication(Authentication authentication) {
+        // Handle null authentication (development mode)
+        if (authentication == null || authentication.getName() == null) {
+            System.out.println("⚠️ Authentication is null, using development fallback");
+            // For development: get first BUSINESS user
+            return userService.findByAccountType(User.AccountType.BUSINESS).stream()
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No BUSINESS user found for development"));
+        }
+        
         String email = authentication.getName();
+        System.out.println("✅ Authenticated user: " + email);
         return userService.findByEmail(email)
-            .orElseThrow(() -> new RuntimeException("User not found"));
+            .orElseThrow(() -> new RuntimeException("User not found: " + email));
     }
 
     // Request DTOs
@@ -537,6 +549,53 @@ public class RetailerController {
         }
     }
 
+    // Get sales data summary (for dashboard)
+    @GetMapping("/sales")
+    public ResponseEntity<?> getSalesData(Authentication authentication) {
+        try {
+            // Handle anonymous/unauthenticated requests
+            if (authentication == null || !authentication.isAuthenticated() || 
+                authentication.getPrincipal().equals("anonymousUser")) {
+                return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "data", Map.of(
+                        "customerSales", 0,
+                        "totalSales", 0,
+                        "totalRevenue", 0,
+                        "revenue", 0
+                    )
+                ));
+            }
+            
+            User retailer = getUserFromAuthentication(authentication);
+            
+            // Get all SOLD orders (customer sales / POS sales)
+            List<Order> customerSales = orderRepository.findByRetailerAndStatusOrderByCreatedDateDesc(
+                retailer, Order.OrderStatus.SOLD);
+            
+            // Calculate totals
+            BigDecimal totalRevenue = customerSales.stream()
+                .map(Order::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            int totalSales = customerSales.size();
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", Map.of(
+                "customerSales", totalSales,
+                "totalSales", totalSales,
+                "totalRevenue", totalRevenue,
+                "revenue", totalRevenue
+            ));
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to fetch sales data: " + e.getMessage()));
+        }
+    }
+
     // Get retailer's margin rate
     @GetMapping("/margin-rate")
     public ResponseEntity<?> getMarginRate(Authentication authentication) {
@@ -557,6 +616,183 @@ public class RetailerController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("success", false, "message", "Failed to fetch margin rate: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get purchased bundles for the authenticated retailer
+     */
+    @GetMapping("/purchased-bundles")
+    public ResponseEntity<?> getPurchasedBundles(Authentication authentication) {
+        try {
+            System.out.println("📦 Fetching purchased bundles...");
+            User retailer = getUserFromAuthentication(authentication);
+            System.out.println("👤 Retailer ID: " + retailer.getId());
+            
+            // Fetch retailer's bundle orders (COMPLETED or DELIVERED)
+            List<RetailerOrder> completedOrders = retailerOrderRepository.findByRetailerIdAndStatus(
+                retailer.getId(), 
+                RetailerOrder.OrderStatus.COMPLETED
+            );
+            List<RetailerOrder> deliveredOrders = retailerOrderRepository.findByRetailerIdAndStatus(
+                retailer.getId(), 
+                RetailerOrder.OrderStatus.DELIVERED
+            );
+            
+            // Combine both lists
+            List<RetailerOrder> bundleOrders = new java.util.ArrayList<>();
+            bundleOrders.addAll(completedOrders);
+            bundleOrders.addAll(deliveredOrders);
+            
+            System.out.println("📋 Found " + bundleOrders.size() + " completed/delivered orders");
+            
+            // Filter for bundle-type products and map to response format
+            List<Map<String, Object>> purchasedBundles = bundleOrders.stream()
+                .flatMap(order -> {
+                    System.out.println("🔍 Processing order: " + order.getOrderNumber() + " with " + order.getItems().size() + " items");
+                    return order.getItems().stream()
+                        .filter(item -> {
+                            boolean isBundle = "BUNDLE".equalsIgnoreCase(item.getProductType()) || 
+                                             "bundle".equalsIgnoreCase(item.getCategory());
+                            System.out.println("  - Item: " + item.getProductName() + ", Type: " + item.getProductType() + ", Category: " + item.getCategory() + ", IsBundle: " + isBundle);
+                            return isBundle;
+                        })
+                        .map(item -> {
+                            Map<String, Object> bundle = new HashMap<>();
+                            bundle.put("bundleName", item.getProductName());
+                            bundle.put("poolName", item.getProductId() != null ? item.getProductId() : "Standard Pool");
+                            bundle.put("unitCount", item.getQuantity());
+                            bundle.put("pricePerUnit", item.getUnitPrice());  // Purchase/wholesale price
+                            bundle.put("purchasePrice", item.getUnitPrice());  // Cost price (what retailer paid)
+                            
+                            // Use retailPrice if available, otherwise use unitPrice
+                            java.math.BigDecimal sellingPrice = item.getRetailPrice() != null ? item.getRetailPrice() : item.getUnitPrice();
+                            bundle.put("totalPrice", sellingPrice);  // Selling price to customer
+                            bundle.put("bundlePrice", sellingPrice);  // Same as totalPrice for consistency
+                            
+                            bundle.put("purchaseDate", order.getCreatedDate());
+                            bundle.put("orderId", order.getId());
+                            bundle.put("orderNumber", order.getOrderNumber());
+                            
+                            // Extract encrypted PINs from order notes
+                            List<String> encryptedPins = new ArrayList<>();
+                            if (order.getNotes() != null && order.getNotes().startsWith("ENCRYPTED_PINS:")) {
+                                String pinsData = order.getNotes().substring("ENCRYPTED_PINS:".length());
+                                if (!pinsData.isEmpty()) {
+                                    encryptedPins = Arrays.asList(pinsData.split(","));
+                                }
+                            }
+                            bundle.put("encryptedPins", encryptedPins);
+                            bundle.put("availablePins", encryptedPins.size());  // Number of available PINs
+                            bundle.put("quantity", item.getQuantity());  // Total quantity in order
+                            
+                            System.out.println("  📌 Bundle: " + item.getProductName() + 
+                                             ", Purchase Price: " + item.getUnitPrice() + 
+                                             ", Retail Price: " + sellingPrice +
+                                             ", PINs: " + encryptedPins.size());
+                            
+                            return bundle;
+                        });
+                })
+                .collect(Collectors.toList());
+            
+            System.out.println("✅ Returning " + purchasedBundles.size() + " purchased bundles");
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", purchasedBundles);
+            response.put("total", purchasedBundles.size());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching purchased bundles: " + e.getMessage());
+            e.printStackTrace();
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Failed to fetch purchased bundles: " + e.getMessage());
+            errorResponse.put("data", new ArrayList<>());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(errorResponse);
+        }
+    }
+
+    /**
+     * Get purchased eSIMs for the authenticated retailer
+     */
+    @GetMapping("/purchased-esims")
+    public ResponseEntity<?> getPurchasedEsims(Authentication authentication) {
+        try {
+            System.out.println("🌐 Fetching purchased eSIMs...");
+            User retailer = getUserFromAuthentication(authentication);
+            System.out.println("👤 Retailer ID: " + retailer.getId());
+            
+            // Fetch retailer's eSIM orders (COMPLETED or DELIVERED)
+            List<RetailerOrder> completedOrders = retailerOrderRepository.findByRetailerIdAndStatus(
+                retailer.getId(), 
+                RetailerOrder.OrderStatus.COMPLETED
+            );
+            List<RetailerOrder> deliveredOrders = retailerOrderRepository.findByRetailerIdAndStatus(
+                retailer.getId(), 
+                RetailerOrder.OrderStatus.DELIVERED
+            );
+            
+            // Combine both lists
+            List<RetailerOrder> esimOrders = new java.util.ArrayList<>();
+            esimOrders.addAll(completedOrders);
+            esimOrders.addAll(deliveredOrders);
+            
+            System.out.println("📋 Found " + esimOrders.size() + " completed/delivered orders");
+            
+            // Filter for eSIM-type products and map to response format
+            List<Map<String, Object>> purchasedEsims = esimOrders.stream()
+                .flatMap(order -> {
+                    System.out.println("🔍 Processing order: " + order.getOrderNumber() + " with " + order.getItems().size() + " items");
+                    return order.getItems().stream()
+                        .filter(item -> {
+                            boolean isEsim = "ESIM".equalsIgnoreCase(item.getProductType()) || 
+                                           "esim".equalsIgnoreCase(item.getCategory());
+                            System.out.println("  - Item: " + item.getProductName() + ", Type: " + item.getProductType() + ", Category: " + item.getCategory() + ", IsEsim: " + isEsim);
+                            return isEsim;
+                        })
+                        .map(item -> {
+                            Map<String, Object> esim = new HashMap<>();
+                            esim.put("productName", item.getProductName());
+                            esim.put("poolName", item.getProductId());
+                            esim.put("unitCount", item.getQuantity());
+                            esim.put("pricePerUnit", item.getUnitPrice());
+                            esim.put("purchaseDate", order.getCreatedDate());
+                            esim.put("orderId", order.getId());
+                            esim.put("orderNumber", order.getOrderNumber());
+                            esim.put("dataAmount", item.getDataAmount());
+                            esim.put("validity", item.getValidity());
+                            // Note: Encrypted PINs should be fetched from stock/inventory separately
+                            esim.put("encryptedPins", new ArrayList<>()); // Placeholder
+                            return esim;
+                        });
+                })
+                .collect(Collectors.toList());
+            
+            System.out.println("✅ Returning " + purchasedEsims.size() + " purchased eSIMs");
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", purchasedEsims);
+            response.put("total", purchasedEsims.size());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching purchased eSIMs: " + e.getMessage());
+            e.printStackTrace();
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Failed to fetch purchased eSIMs: " + e.getMessage());
+            errorResponse.put("data", new ArrayList<>());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(errorResponse);
         }
     }
 

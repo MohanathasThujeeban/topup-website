@@ -75,6 +75,19 @@ const RetailerDashboard = () => {
   const [fetchingPromotions, setFetchingPromotions] = useState(false);
   const [fetchingMarginRate, setFetchingMarginRate] = useState(false);
   
+  // Inventory state
+  const [purchasedBundles, setPurchasedBundles] = useState([]);
+  const [purchasedEsims, setPurchasedEsims] = useState([]);
+  const [loadingInventory, setLoadingInventory] = useState(false);
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
+  
+  // Privacy Settings state
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
+  const [passwordChangeMessage, setPasswordChangeMessage] = useState({ type: '', text: '' });
+  
   // Use ref to track if initialization has started
   const initializationStarted = useRef(false);
   
@@ -542,7 +555,7 @@ const RetailerDashboard = () => {
         totalRevenue: totalRevenue,
         totalProfit: totalProfit || 0, // Real total profit from POS sales
         dailyProfit: dailyProfit || 0, // Real daily profit
-        profitMargin: retailerMarginRate.toString(), // Real admin-set margin rate
+        profitMargin: retailerMarginRate !== null ? retailerMarginRate.toString() : '0', // Real admin-set margin rate
         monthlyGrowth: 12.5,
         pendingOrders: mockOrdersData.filter(o => o.status === 'PENDING').length,
         orderGrowth: 8.3,
@@ -569,6 +582,15 @@ const RetailerDashboard = () => {
       isMounted = false;
     };
   }, []);  // Remove dependencies to prevent constant re-fetching that causes lag
+
+  // Fetch inventory when inventory tab is opened
+  useEffect(() => {
+    if (activeTab === 'inventory' && !isDemoMode() && user) {
+      console.log('📦 Inventory tab opened - fetching purchased items...');
+      fetchPurchasedBundles();
+      fetchPurchasedEsims();
+    }
+  }, [activeTab]);
 
   const fetchRetailerMarginRate = async () => {
     // Prevent multiple concurrent calls
@@ -912,13 +934,225 @@ const RetailerDashboard = () => {
     }
   };
 
+  // Fetch purchased bundles from backend
+  const fetchPurchasedBundles = async () => {
+    if (!user || isDemoMode()) {
+      console.log('🔒 Cannot fetch purchased bundles in demo mode');
+      return;
+    }
+
+    try {
+      setLoadingInventory(true);
+      const token = localStorage.getItem('token');
+      
+      console.log('📦 Fetching purchased bundles...');
+      const response = await fetch(`${API_BASE_URL}/retailer/purchased-bundles`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Purchased bundles response:', data);
+        setPurchasedBundles(data.data || []);
+        console.log('✅ Purchased bundles loaded:', data.data?.length || 0);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Failed to fetch purchased bundles:', response.status, errorData);
+        console.log('⚠️ Error details:', errorData.message || 'No error message');
+        setPurchasedBundles([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching purchased bundles:', error);
+      console.error('❌ Error details:', error.message, error.stack);
+      setPurchasedBundles([]);
+    } finally {
+      setLoadingInventory(false);
+    }
+  };
+
+  // Fetch purchased eSIMs from backend
+  const fetchPurchasedEsims = async () => {
+    if (!user || isDemoMode()) {
+      console.log('🔒 Cannot fetch purchased eSIMs in demo mode');
+      return;
+    }
+
+    try {
+      setLoadingInventory(true);
+      const token = localStorage.getItem('token');
+      
+      console.log('🌐 Fetching purchased eSIMs...');
+      const response = await fetch(`${API_BASE_URL}/retailer/purchased-esims`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Purchased eSIMs response:', data);
+        setPurchasedEsims(data.data || []);
+        console.log('✅ Purchased eSIMs loaded:', data.data?.length || 0);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Failed to fetch purchased eSIMs:', response.status, errorData);
+        console.log('⚠️ Error details:', errorData.message || 'No error message');
+        setPurchasedEsims([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching purchased eSIMs:', error);
+      console.error('❌ Error details:', error.message, error.stack);
+      setPurchasedEsims([]);
+    } finally {
+      setLoadingInventory(false);
+    }
+  };
+
+  // View encrypted PINs for selected item
+  const viewEncryptedPins = (item) => {
+    console.log('👁️ Viewing encrypted PINs for:', item);
+    setSelectedInventoryItem(item);
+  };
+
+  // Copy to clipboard utility
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      console.log('✅ Copied to clipboard');
+      // Optional: Show toast notification
+    } catch (error) {
+      console.error('❌ Failed to copy to clipboard:', error);
+    }
+  };
+
+  // Handle password change
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    
+    // Clear previous messages
+    setPasswordChangeMessage({ type: '', text: '' });
+    
+    // Validation
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      setPasswordChangeMessage({ type: 'error', text: 'All fields are required' });
+      return;
+    }
+    
+    if (newPassword.length < 6) {
+      setPasswordChangeMessage({ type: 'error', text: 'New password must be at least 6 characters long' });
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeMessage({ type: 'error', text: 'New password and confirm password do not match' });
+      return;
+    }
+    
+    if (oldPassword === newPassword) {
+      setPasswordChangeMessage({ type: 'error', text: 'New password must be different from old password' });
+      return;
+    }
+    
+    try {
+      setPasswordChangeLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          oldPassword,
+          newPassword
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setPasswordChangeMessage({ type: 'success', text: 'Password changed successfully!' });
+        // Clear form
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setPasswordChangeMessage({ type: 'error', text: data.message || 'Failed to change password' });
+      }
+    } catch (error) {
+      console.error('❌ Error changing password:', error);
+      setPasswordChangeMessage({ type: 'error', text: 'An error occurred while changing password' });
+    } finally {
+      setPasswordChangeLoading(false);
+    }
+  };
+
 
 
   const fetchInventoryBundles = async (signal = null) => {
-    // Always return empty inventory - no demo data
-    console.log('📦 Inventory fetching disabled - returning empty');
-    setInventoryBundles([]);
-    return;
+    if (isDemoMode()) {
+      console.log('📦 Demo mode - skipping inventory fetch');
+      setInventoryBundles([]);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('📦 No token - cannot fetch inventory');
+        setInventoryBundles([]);
+        return;
+      }
+
+      console.log('📦 Fetching inventory bundles from API...');
+      const response = await fetch(`${API_BASE_URL}/retailer/purchased-bundles`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        },
+        signal
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Inventory bundles response:', data);
+        console.log('📦 Raw bundle data:', JSON.stringify(data.data, null, 2));
+        
+        const bundles = (data.data || []).map(bundle => {
+          console.log('🔍 Processing bundle:', bundle);
+          const processed = {
+            id: bundle.orderNumber || bundle.id,
+            bundleId: bundle.bundleId || bundle.id,
+            bundleName: bundle.bundleName,
+            bundlePrice: bundle.bundlePrice || bundle.totalPrice || bundle.pricePerUnit || 0,
+            purchasePrice: bundle.purchasePrice || bundle.pricePerUnit || 0,
+            availableQuantity: bundle.encryptedPins?.length || bundle.availablePins || 0,
+            availablePins: bundle.encryptedPins?.length || bundle.availablePins || 0,
+            totalPins: bundle.quantity || bundle.unitCount || 0,
+            encryptedPins: bundle.encryptedPins || [],
+            poolName: bundle.poolName || 'Standard Pool',
+            status: 'ACTIVE',
+            productType: 'EPIN'
+          };
+          console.log('✅ Processed bundle:', processed);
+          return processed;
+        });
+        
+        console.log('📦 Final processed inventory bundles:', bundles);
+        setInventoryBundles(bundles);
+      } else {
+        console.error('❌ Failed to fetch inventory:', response.status);
+        setInventoryBundles([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching inventory:', error);
+      setInventoryBundles([]);
+    }
   };
 
   const fetchRetailerData = async () => {
@@ -2039,6 +2273,13 @@ const RetailerDashboard = () => {
                 onClick={handleTabChange}
               />
               <SidebarNavItem
+                id="inventory"
+                label="My Inventory"
+                icon={Box}
+                active={activeTab === 'inventory'}
+                onClick={handleTabChange}
+              />
+              <SidebarNavItem
                 id="offers"
                 label="Offers"
                 icon={Tag}
@@ -2060,6 +2301,13 @@ const RetailerDashboard = () => {
                 active={activeTab === 'analytics'}
                 onClick={handleTabChange}
               />
+              <SidebarNavItem
+                id="privacy"
+                label="Privacy Settings"
+                icon={AlertCircle}
+                active={activeTab === 'privacy'}
+                onClick={handleTabChange}
+              />
             </>
           ) : (
             <>
@@ -2074,6 +2322,9 @@ const RetailerDashboard = () => {
               </button>
               <button onClick={() => handleTabChange('esim')} className={`w-full p-3 rounded-xl ${activeTab === 'esim' ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <Globe2 size={20} />
+              </button>
+              <button onClick={() => handleTabChange('inventory')} className={`w-full p-3 rounded-xl ${activeTab === 'inventory' ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                <Box size={20} />
               </button>
               <button onClick={() => setActiveTab('offers')} className={`w-full p-3 rounded-xl relative ${activeTab === 'offers' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <Tag size={20} />
@@ -2117,9 +2368,11 @@ const RetailerDashboard = () => {
                 {activeTab === 'pos' && 'Point of Sale'}
                 {activeTab === 'bundles' && 'Buy Bundles'}
                 {activeTab === 'esim' && 'Buy eSIMs'}
+                {activeTab === 'inventory' && 'My Inventory'}
                 {activeTab === 'offers' && 'Offers'}
                 {activeTab === 'margin' && 'Margin Rate'}
                 {activeTab === 'analytics' && 'Analytics'}
+                {activeTab === 'privacy' && 'Privacy Settings'}
               </h2>
             </div>
             
@@ -2163,8 +2416,8 @@ const RetailerDashboard = () => {
             {/* Content */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            {/* NEW: Beautiful Animated Promotional Banner */}
-            <RetailerPromotionalBanner onClose={() => setShowPromoBanner(false)} />
+            {/* Promotional Banner temporarily disabled for debugging */}
+            {/* <RetailerPromotionalBanner onClose={() => setShowPromoBanner(false)} /> */}
 
             {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -2408,36 +2661,35 @@ const RetailerDashboard = () => {
                             : 'border-gray-200 hover:border-green-300 hover:bg-gray-50'
                         }`}
                       >
-                        <div className="flex justify-between items-center">
+                        <div className="flex justify-between items-start gap-3">
                           <div className="flex-1">
-                            <h5 className="font-semibold text-gray-900 text-lg">{bundle.bundleName}</h5>
-                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <div className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
-                                📱 {bundle.availableQuantity} PINs Available
+                            <div className="flex items-center gap-2 mb-1">
+                              <h5 className="font-bold text-gray-900 text-lg">{bundle.bundleName}</h5>
+                              <span className="text-xl font-bold text-green-600">NOK {bundle.bundlePrice}</span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              <div className="bg-purple-100 text-purple-800 px-3 py-1 rounded-lg text-sm font-semibold">
+                                🏷️ {bundle.poolName}
                               </div>
-                              <div className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs font-medium">
-                                Cost: {retailerMarginRate ? 
-                                  `NOK ${(bundle.purchasePrice || (bundle.bundlePrice * (1 - retailerMarginRate / 100))).toFixed(2)}` :
+                              <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-lg text-sm font-bold">
+                                📦 {bundle.availableQuantity} Units in Stock
+                              </div>
+                              <div className="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg text-xs font-medium">
+                                Cost: NOK {(bundle.purchasePrice || 0).toFixed(2)}
+                              </div>
+                              <div className={`px-3 py-1 rounded-lg text-xs font-medium ${retailerMarginRate ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                Profit: {retailerMarginRate ? 
+                                  `+NOK ${(bundle.bundlePrice - (bundle.purchasePrice || 0)).toFixed(2)}` :
                                   'Calculating...'
                                 }
                               </div>
-                              <div className={`px-2 py-1 rounded-full text-xs font-medium ${retailerMarginRate ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                Margin: {retailerMarginRate ? `${retailerMarginRate}%` : 'Loading...'}
-                              </div>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-2xl font-bold text-green-600">NOK {bundle.bundlePrice}</p>
-                            <p className="text-sm text-blue-600 font-medium">
-                              Profit: {retailerMarginRate ? 
-                                `+NOK ${(bundle.bundlePrice - (bundle.purchasePrice || (bundle.bundlePrice * (1 - retailerMarginRate / 100)))).toFixed(2)}` :
-                                'Calculating...'
-                              }
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {retailerMarginRate ? `${retailerMarginRate}% margin` : 'Waiting for admin margin rate'}
-                            </p>
-                          </div>
+                          {selectedBundle?.id === bundle.id && (
+                            <div className="flex-shrink-0">
+                              <CheckCircle className="text-green-600" size={24} />
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))
@@ -2640,6 +2892,195 @@ const RetailerDashboard = () => {
 
         {activeTab === 'esim' && (
           <RetailerEsimPurchase />
+        )}
+
+        {activeTab === 'inventory' && (
+          <div className="space-y-6">
+            {/* Inventory Header */}
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl shadow-xl p-6 text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold mb-2">My Inventory</h2>
+                  <p className="text-purple-100">View all purchased bundles and eSIMs with encrypted PINs</p>
+                </div>
+                <Box size={48} className="opacity-20" />
+              </div>
+            </div>
+
+            {/* Purchased Bundles Section */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <Package className="text-purple-600" size={24} />
+                  Purchased Bundles
+                </h3>
+                <button
+                  onClick={() => fetchPurchasedBundles()}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors flex items-center gap-2"
+                >
+                  <RefreshCw size={16} />
+                  Refresh
+                </button>
+              </div>
+
+              {loadingInventory ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+                </div>
+              ) : purchasedBundles.length === 0 ? (
+                <div className="text-center py-12">
+                  <Package size={48} className="text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg mb-2">No purchased bundles yet</p>
+                  <p className="text-gray-500">Purchase bundles from the "Buy Bundles" section to see them here</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Bundle Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Pool Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Units</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Price per Unit</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Purchase Date</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchasedBundles.map((bundle, index) => (
+                        <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-4 text-sm text-gray-900">{bundle.bundleName || 'N/A'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700">{bundle.poolName || 'N/A'}</td>
+                          <td className="px-4 py-4 text-sm font-semibold text-purple-600">{bundle.unitCount || 0}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700">NOK {bundle.pricePerUnit?.toFixed(2) || '0.00'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700">{new Date(bundle.purchaseDate).toLocaleDateString()}</td>
+                          <td className="px-4 py-4">
+                            <button
+                              onClick={() => viewEncryptedPins(bundle)}
+                              className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors flex items-center gap-1 text-sm"
+                            >
+                              <Eye size={14} />
+                              View PINs
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Purchased eSIMs Section */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <Globe2 className="text-green-600" size={24} />
+                  Purchased eSIMs
+                </h3>
+                <button
+                  onClick={() => fetchPurchasedEsims()}
+                  className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors flex items-center gap-2"
+                >
+                  <RefreshCw size={16} />
+                  Refresh
+                </button>
+              </div>
+
+              {loadingInventory ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+                </div>
+              ) : purchasedEsims.length === 0 ? (
+                <div className="text-center py-12">
+                  <Globe2 size={48} className="text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg mb-2">No purchased eSIMs yet</p>
+                  <p className="text-gray-500">Purchase eSIMs from the "Buy eSIMs" section to see them here</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Product Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Pool Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Units</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Price per Unit</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Purchase Date</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchasedEsims.map((esim, index) => (
+                        <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-4 text-sm text-gray-900">{esim.productName || 'N/A'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700">{esim.poolName || 'N/A'}</td>
+                          <td className="px-4 py-4 text-sm font-semibold text-green-600">{esim.unitCount || 0}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700">NOK {esim.pricePerUnit?.toFixed(2) || '0.00'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700">{new Date(esim.purchaseDate).toLocaleDateString()}</td>
+                          <td className="px-4 py-4">
+                            <button
+                              onClick={() => viewEncryptedPins(esim)}
+                              className="px-3 py-1 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1 text-sm"
+                            >
+                              <Eye size={14} />
+                              View PINs
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* PIN Viewer Modal */}
+            {selectedInventoryItem && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                  <div className="p-6 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xl font-semibold text-gray-900">Encrypted PINs</h3>
+                      <button
+                        onClick={() => setSelectedInventoryItem(null)}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <p className="text-gray-600 mt-2">{selectedInventoryItem.bundleName || selectedInventoryItem.productName}</p>
+                  </div>
+                  <div className="p-6">
+                    {selectedInventoryItem.encryptedPins && selectedInventoryItem.encryptedPins.length > 0 ? (
+                      <div className="space-y-3">
+                        {selectedInventoryItem.encryptedPins.map((pin, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="flex-1">
+                              <p className="text-xs text-gray-500 mb-1">PIN #{index + 1}</p>
+                              <p className="text-sm font-mono text-gray-900 break-all">{pin}</p>
+                            </div>
+                            <button
+                              onClick={() => copyToClipboard(pin)}
+                              className="ml-3 p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                              title="Copy PIN"
+                            >
+                              <Copy size={16} className="text-gray-600" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <AlertCircle size={48} className="text-gray-400 mx-auto mb-3" />
+                        <p className="text-gray-600">No PINs available</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {activeTab === 'analytics' && (
@@ -2919,6 +3360,147 @@ const RetailerDashboard = () => {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Privacy Settings Tab */}
+        {activeTab === 'privacy' && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl shadow-xl p-6 text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold mb-2 flex items-center gap-3">
+                    <AlertCircle size={28} />
+                    Privacy & Security Settings
+                  </h2>
+                  <p className="text-indigo-100">Manage your account security and password</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Password Change Section */}
+            <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+              <div className="max-w-2xl mx-auto">
+                <div className="mb-6">
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Change Password</h3>
+                  <p className="text-gray-600 text-sm">Update your password to keep your account secure</p>
+                </div>
+
+                {/* Password Change Form */}
+                <form onSubmit={handlePasswordChange} className="space-y-6">
+                  {/* Alert Messages */}
+                  {passwordChangeMessage.text && (
+                    <div className={`p-4 rounded-xl border ${
+                      passwordChangeMessage.type === 'success' 
+                        ? 'bg-green-50 border-green-200 text-green-700' 
+                        : 'bg-red-50 border-red-200 text-red-700'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        {passwordChangeMessage.type === 'success' ? (
+                          <CheckCircle size={20} />
+                        ) : (
+                          <AlertCircle size={20} />
+                        )}
+                        <p className="font-medium">{passwordChangeMessage.text}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Old Password Field */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Current Password
+                    </label>
+                    <input
+                      type="password"
+                      value={oldPassword}
+                      onChange={(e) => setOldPassword(e.target.value)}
+                      placeholder="Enter your current password"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                      disabled={passwordChangeLoading}
+                    />
+                  </div>
+
+                  {/* New Password Field */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      New Password
+                    </label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter your new password"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                      disabled={passwordChangeLoading}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Must be at least 6 characters long</p>
+                  </div>
+
+                  {/* Confirm Password Field */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Confirm New Password
+                    </label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm your new password"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                      disabled={passwordChangeLoading}
+                    />
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="flex gap-3">
+                    <button
+                      type="submit"
+                      disabled={passwordChangeLoading}
+                      className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 px-6 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
+                    >
+                      {passwordChangeLoading ? (
+                        <>
+                          <RefreshCw size={18} className="animate-spin" />
+                          Changing Password...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={18} />
+                          Change Password
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOldPassword('');
+                        setNewPassword('');
+                        setConfirmPassword('');
+                        setPasswordChangeMessage({ type: '', text: '' });
+                      }}
+                      disabled={passwordChangeLoading}
+                      className="px-6 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-gray-700"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </form>
+
+                {/* Security Tips */}
+                <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-200">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-2">Password Security Tips:</h4>
+                  <ul className="text-xs text-blue-700 space-y-1">
+                    <li>• Use a combination of letters, numbers, and special characters</li>
+                    <li>• Avoid using easily guessable information like birthdays or names</li>
+                    <li>• Don't reuse passwords across different accounts</li>
+                    <li>• Change your password regularly (every 3-6 months)</li>
+                    <li>• Never share your password with anyone</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
