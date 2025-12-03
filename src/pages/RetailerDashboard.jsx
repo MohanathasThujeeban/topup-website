@@ -67,7 +67,7 @@ const RetailerDashboard = () => {
   // Point of Sale state
   const [inventoryBundles, setInventoryBundles] = useState([]);
   const [selectedBundle, setSelectedBundle] = useState(null);
-  const [saleQuantity] = useState(1); // Fixed at 1 PIN per sale
+  const [saleQuantity, setSaleQuantity] = useState(1);
   const [saleLoading, setSaleLoading] = useState(false);
   const [receiptData, setReceiptData] = useState(null);
   const [generatedPins, setGeneratedPins] = useState([]);
@@ -1594,8 +1594,8 @@ const RetailerDashboard = () => {
   };
 
   const handleDirectSale = async () => {
-    if (!selectedBundle || selectedBundle.availableQuantity < 1) {
-      alert('Please select a valid bundle. No PINs available for this bundle.');
+    if (!selectedBundle || selectedBundle.availableQuantity < saleQuantity) {
+      alert(`Please select a valid bundle. Only ${selectedBundle?.availableQuantity || 0} PINs available.`);
       return;
     }
 
@@ -1614,66 +1614,70 @@ const RetailerDashboard = () => {
       // Use purchase price or calculate from admin margin rate
       const costPrice = selectedBundle.purchasePrice || (selectedBundle.bundlePrice * (1 - marginDecimal));
       const salePrice = selectedBundle.bundlePrice;
-      const profitAmount = salePrice - costPrice;
+      const profitPerUnit = salePrice - costPrice;
+      const totalProfit = profitPerUnit * saleQuantity;
+      const totalAmount = salePrice * saleQuantity;
       
       console.log('💰 POS Sale Calculation:');
+      console.log(`  Quantity: ${saleQuantity}`);
       console.log(`  Margin Rate: ${realMarginRate}%`);
-      console.log(`  Sale Price: NOK ${salePrice}`);
-      console.log(`  Cost Price: NOK ${costPrice.toFixed(2)}`);
-      console.log(`  Profit: NOK ${profitAmount.toFixed(2)}`);
+      console.log(`  Sale Price per unit: NOK ${salePrice}`);
+      console.log(`  Cost Price per unit: NOK ${costPrice.toFixed(2)}`);
+      console.log(`  Profit per unit: NOK ${profitPerUnit.toFixed(2)}`);
+      console.log(`  Total Profit: NOK ${totalProfit.toFixed(2)}`);
       
       // Check if this is a demo/fallback bundle
       const isDemo = selectedBundle.id.includes('demo') || selectedBundle.id.includes('fallback') || selectedBundle.id.includes('local') || selectedBundle.id.includes('emergency') || selectedBundle.id.includes('offline');
       
       if (isDemo) {
-        console.log('🎯 Processing demo/offline sale...');
+        console.log(`🎯 Processing demo/offline sale for ${saleQuantity} PINs...`);
         
-        // Generate demo PINs
-        const demoPins = [{
+        // Generate multiple demo PINs based on quantity
+        const demoPins = Array.from({ length: saleQuantity }, (_, index) => ({
           pin: `${Math.random().toString().substr(2, 4)}-${Math.random().toString().substr(2, 4)}-${Math.random().toString().substr(2, 4)}-${Math.random().toString().substr(2, 4)}`,
-          serialNumber: `SN${Date.now()}${Math.random().toString().substr(2, 3)}`,
+          serialNumber: `SN${Date.now()}${Math.random().toString().substr(2, 3)}-${index + 1}`,
           value: selectedBundle.bundlePrice,
           expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
           bundleName: selectedBundle.bundleName,
           status: 'ACTIVE'
-        }];
+        }));
         
-        // Update local inventory - reduce quantity by 1
+        // Update local inventory - reduce quantity by saleQuantity
         setInventoryBundles(prev => {
           const updatedBundles = prev.map(bundle => 
             bundle.id === selectedBundle.id 
-              ? { ...bundle, availableQuantity: Math.max(0, bundle.availableQuantity - 1) }
+              ? { ...bundle, availableQuantity: Math.max(0, bundle.availableQuantity - saleQuantity) }
               : bundle
           );
           
           // Calculate new total units
           const newTotalUnits = updatedBundles.reduce((sum, b) => sum + (b.availableQuantity || 0), 0);
-          console.log(`📦 Inventory reduced: ${selectedBundle.bundleName} (${selectedBundle.availableQuantity} → ${Math.max(0, selectedBundle.availableQuantity - 1)}), Total: ${newTotalUnits}`);
+          console.log(`📦 Inventory reduced: ${selectedBundle.bundleName} (${selectedBundle.availableQuantity} → ${Math.max(0, selectedBundle.availableQuantity - saleQuantity)}), Total: ${newTotalUnits}`);
           
           // Update analytics with new inventory count and increased customer sales
           setTimeout(() => {
             setAnalytics(prev => ({
               ...prev,
               bundleInventory: newTotalUnits,
-              customerSales: prev.customerSales + 1,
+              customerSales: prev.customerSales + saleQuantity,
               totalOrders: prev.totalOrders + 1,
-              totalRevenue: prev.totalRevenue + salePrice
+              totalRevenue: prev.totalRevenue + totalAmount
             }));
-            console.log(`📈 Analytics updated: +1 customer sale, inventory: ${newTotalUnits}`);
+            console.log(`📈 Analytics updated: +${saleQuantity} customer sales, inventory: ${newTotalUnits}`);
           }, 100);
           
           return updatedBundles;
         });
         
         // Update profit and activity
-        updateProfit(salePrice, costPrice, selectedBundle.bundleName);
+        updateProfit(totalAmount, costPrice * saleQuantity, selectedBundle.bundleName);
         addActivity(
           'pos_sale',
-          `Sold 1x ${selectedBundle.bundleName} - Profit: NOK ${profitAmount.toFixed(2)} (Demo)`,
+          `Sold ${saleQuantity}x ${selectedBundle.bundleName} - Profit: NOK ${totalProfit.toFixed(2)} (Demo)`,
           {
             bundleName: selectedBundle.bundleName,
-            quantity: 1,
-            saleAmount: salePrice,
+            quantity: saleQuantity,
+            saleAmount: totalAmount,
             costPrice: costPrice,
             profitAmount: profitAmount,
             pins: 1,
@@ -1686,11 +1690,11 @@ const RetailerDashboard = () => {
         const receipt = {
           saleId: `DEMO-${Date.now()}`,
           bundleName: selectedBundle.bundleName,
-          quantity: 1,
+          quantity: saleQuantity,
           unitPrice: selectedBundle.bundlePrice,
-          totalAmount: selectedBundle.bundlePrice,
-          costPrice: costPrice,
-          profitAmount: profitAmount,
+          totalAmount: totalAmount,
+          costPrice: costPrice * saleQuantity,
+          profitAmount: totalProfit,
           saleDate: new Date().toLocaleString(),
           pins: demoPins,
           retailerName: 'EasyTopup.no',
@@ -1701,6 +1705,7 @@ const RetailerDashboard = () => {
         setGeneratedPins(demoPins);
         setShowPinModal(true);
         setSelectedBundle(null);
+        setSaleQuantity(1);
         
         console.log('✅ Demo sale completed successfully');
         return;
@@ -1719,53 +1724,59 @@ const RetailerDashboard = () => {
 
           console.log('🛒 Attempting real API sale:', {
             bundle: selectedBundle.bundleName,
-            quantity: 1,
-            customer: 'Walk-in Customer'
+            quantity: saleQuantity,
+            customer: 'Walk-in Customer',
+            apiUrl: `${API_BASE_URL}/retailer/direct-sale`
           });
 
           const saleData = {
-            bundleId: selectedBundle.bundleId,
+            bundleId: selectedBundle.bundleId || selectedBundle.id || 'BUNDLE-' + Date.now(),
             bundleName: selectedBundle.bundleName,
-            quantity: 1,
+            quantity: saleQuantity,
             unitPrice: selectedBundle.bundlePrice,
-            totalAmount: selectedBundle.bundlePrice,
-            costPrice: costPrice,
-            profitAmount: profitAmount,
-            marginRate: realMarginRate,
-            customerName: `Walk-in Customer`,
+            totalAmount: totalAmount,
+            customerName: 'Walk-in Customer',
             customerPhone: '',
             customerEmail: '',
-            saleType: 'DIRECT_SALE',
-            retailerId: user?.id,
-            saleDate: new Date().toISOString()
+            saleType: 'DIRECT_SALE'
           };
+
+          console.log('📤 Sending sale data:', saleData);
 
           // Add timeout to API call
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
           const response = await fetch(`${API_BASE_URL}/retailer/direct-sale`, {
             method: 'POST',
             headers,
             body: JSON.stringify(saleData),
-            signal: controller.signal
+            signal: controller.signal,
+            credentials: 'include'
           });
 
           clearTimeout(timeoutId);
-          console.log('📡 Sale response status:', response.status);
+          console.log('📡 Sale response status:', response.status, response.statusText);
 
           if (response.ok) {
             const result = await response.json();
             console.log('✅ Direct sale successful via API:', result);
             
             // Extract generated PINs from response
-            const pins = result.data?.pins || result.pins || [];
+            const pins = result.data?.pins || result.pins || result.allocatedPins || [];
+            
+            console.log('📌 Received PINs from API:', pins);
+            
+            if (!pins || pins.length === 0) {
+              console.error('❌ No PINs received from API, falling back to offline mode');
+              throw new Error('No PINs in API response');
+            }
             
             // Update local inventory after successful API sale
             setInventoryBundles(prev => {
               const updatedBundles = prev.map(bundle => 
                 bundle.id === selectedBundle.id 
-                  ? { ...bundle, availableQuantity: Math.max(0, bundle.availableQuantity - 1) }
+                  ? { ...bundle, availableQuantity: Math.max(0, bundle.availableQuantity - saleQuantity) }
                   : bundle
               );
               
@@ -1778,27 +1789,27 @@ const RetailerDashboard = () => {
                 setAnalytics(prev => ({
                   ...prev,
                   bundleInventory: newTotalUnits,
-                  customerSales: prev.customerSales + 1,
+                  customerSales: prev.customerSales + saleQuantity,
                   totalOrders: prev.totalOrders + 1,
-                  totalRevenue: prev.totalRevenue + salePrice
+                  totalRevenue: prev.totalRevenue + totalAmount
                 }));
-                console.log(`📈 API Sale - Analytics updated: +1 customer sale, inventory: ${newTotalUnits}`);
+                console.log(`📈 API Sale - Analytics updated: +${saleQuantity} customer sales, inventory: ${newTotalUnits}`);
               }, 100);
               
               return updatedBundles;
             });
             
             // Update profit and activity
-            updateProfit(salePrice, costPrice, selectedBundle.bundleName);
+            updateProfit(totalAmount, costPrice * saleQuantity, selectedBundle.bundleName);
             addActivity(
               'pos_sale',
-              `Sold 1x ${selectedBundle.bundleName} - Profit: NOK ${profitAmount.toFixed(2)} (API)`,
+              `Sold ${saleQuantity}x ${selectedBundle.bundleName} - Profit: NOK ${totalProfit.toFixed(2)} (API)`,
               {
                 bundleName: selectedBundle.bundleName,
-                quantity: 1,
-                saleAmount: salePrice,
-                costPrice: costPrice,
-                profitAmount: profitAmount,
+                quantity: saleQuantity,
+                saleAmount: totalAmount,
+                costPrice: costPrice * saleQuantity,
+                profitAmount: totalProfit,
                 pins: pins.length || 0,
                 customerType: 'walk-in',
                 method: 'api'
@@ -1809,11 +1820,11 @@ const RetailerDashboard = () => {
             const receipt = {
               saleId: result.data?.saleId || `API-${Date.now()}`,
               bundleName: selectedBundle.bundleName,
-              quantity: 1,
+              quantity: saleQuantity,
               unitPrice: selectedBundle.bundlePrice,
-              totalAmount: selectedBundle.bundlePrice,
-              costPrice: costPrice,
-              profitAmount: profitAmount,
+              totalAmount: totalAmount,
+              costPrice: costPrice * saleQuantity,
+              profitAmount: totalProfit,
               saleDate: new Date().toLocaleString(),
               pins: pins,
               retailerName: 'EasyTopup.no',
@@ -1824,17 +1835,34 @@ const RetailerDashboard = () => {
             setGeneratedPins(pins);
             setShowPinModal(true);
             setSelectedBundle(null);
+            setSaleQuantity(1);
             
             console.log('🎯 API PIN allocation completed successfully');
             return; // Success - exit function
           } else {
             // API failed, fall through to offline mode
-            console.log('⚠️ API sale failed, falling back to offline mode');
+            const errorData = await response.json().catch(() => ({}));
+            console.error('❌ API sale failed:', {
+              status: response.status,
+              statusText: response.statusText,
+              error: errorData,
+              message: errorData.message,
+              details: errorData.details
+            });
+            console.log('⚠️ Error details:', JSON.stringify(errorData, null, 2));
+            console.log('⚠️ Falling back to offline mode');
           }
         } catch (apiError) {
-          console.log('⚠️ API error, falling back to offline mode:', apiError.message);
+          console.error('❌ API error:', {
+            name: apiError.name,
+            message: apiError.message,
+            stack: apiError.stack
+          });
+          console.log('⚠️ API error, falling back to offline mode');
           // Fall through to offline mode
         }
+      } else {
+        console.log('⚠️ No token found, using offline mode');
       }
       
       // Offline mode - generate local PINs
@@ -2427,15 +2455,15 @@ const RetailerDashboard = () => {
                 change={analytics.orderGrowth || 0}
                 icon={ShoppingCart}
                 color="bg-gradient-to-br from-blue-600 to-blue-700"
-                description="Bundles sold to customers"
+                description="Total sales"
               />
               <StatCard
-                title="Total Profit"
+                title="Total Earnings"
                 value={`NOK ${totalProfit.toLocaleString('no-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 change={dailyProfit > 0 ? ((dailyProfit / Math.max(totalProfit - dailyProfit, 1)) * 100).toFixed(1) : 0}
                 icon={DollarSign}
                 color="bg-gradient-to-br from-green-600 to-green-700"
-                description={`Daily: NOK ${dailyProfit.toFixed(2)}`}
+                description={`daily, weekly, monthly`}
               />
               <StatCard
                 title="Bundle Inventory"
@@ -2454,49 +2482,46 @@ const RetailerDashboard = () => {
               />
             </div>
 
-            {/* Quick Actions & Recent Activity */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <Plus className="text-blue-600" size={20} />
-                  Quick Actions
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <button 
-                    onClick={() => handleTabChange('pos')}
-                    className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50 transition-colors"
-                  >
-                    <ShoppingCart className="text-emerald-600 mb-2" size={24} />
-                    <span className="text-sm font-medium">Point of Sale</span>
-                  </button>
-                  <button 
-                    onClick={() => {
-                      handleTabChange('bundles');
-                      fetchAvailableBundles();
-                    }}
-                    className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-colors"
-                  >
-                    <Package className="text-green-600 mb-2" size={24} />
-                    <span className="text-sm font-medium">Buy Bundles</span>
-                  </button>
-                  <button 
-                    onClick={() => handleTabChange('esim')}
-                    className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors"
-                  >
-                    <Globe2 className="text-blue-600 mb-2" size={24} />
-                    <span className="text-sm font-medium">Buy eSIMs</span>
-                  </button>
-                  <button 
-                    onClick={() => handleTabChange('inventory')}
-                    className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors"
-                  >
-                    <DollarSign className="text-purple-600 mb-2" size={24} />
-                    <span className="text-sm font-medium">My Inventory</span>
-                  </button>
-                </div>
+            {/* Quick Actions */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Plus className="text-blue-600" size={20} />
+                Quick Actions
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <button
+                  onClick={() => handleTabChange('pos')}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 transition-all group border border-blue-200"
+                >
+                  <ShoppingCart className="text-blue-600 mb-2 group-hover:scale-110 transition-transform" size={32} />
+                  <span className="text-sm font-medium text-gray-900">Point of Sale</span>
+                </button>
+                <button
+                  onClick={() => handleTabChange('bundles')}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-br from-green-50 to-green-100 hover:from-green-100 hover:to-green-200 transition-all group border border-green-200"
+                >
+                  <Package className="text-green-600 mb-2 group-hover:scale-110 transition-transform" size={32} />
+                  <span className="text-sm font-medium text-gray-900">Buy Bundles</span>
+                </button>
+                <button
+                  onClick={() => handleTabChange('esim')}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 transition-all group border border-purple-200"
+                >
+                  <Globe2 className="text-purple-600 mb-2 group-hover:scale-110 transition-transform" size={32} />
+                  <span className="text-sm font-medium text-gray-900">Buy eSIMs</span>
+                </button>
+                <button
+                  onClick={() => handleTabChange('inventory')}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100 hover:from-orange-100 hover:to-orange-200 transition-all group border border-orange-200"
+                >
+                  <Box className="text-orange-600 mb-2 group-hover:scale-110 transition-transform" size={32} />
+                  <span className="text-sm font-medium text-gray-900">My Inventory</span>
+                </button>
               </div>
+            </div>
 
-              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+            {/* Recent Activity */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <Activity className="text-green-600" size={20} />
                   Recent Activity
@@ -2569,7 +2594,6 @@ const RetailerDashboard = () => {
                   )}
                 </div>
               </div>
-            </div>
           </div>
         )}
 
@@ -2627,74 +2651,47 @@ const RetailerDashboard = () => {
                     <Package className="text-blue-600" size={20} />
                     Select Bundle
                   </h4>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        const total = getTotalInventoryUnits();
-                        console.log(`🔧 DEBUG: Manual inventory check - Total units: ${total}`);
-                        setAnalytics(prev => ({ ...prev, bundleInventory: total }));
-                      }}
-                      className="text-green-600 hover:text-green-800 p-1 rounded transition-colors"
-                      title="Debug Inventory Count"
-                    >
-                      📊
+                </div>
+
+                {/* Product Type Tabs */}
+                <div className="mb-4 border-b border-gray-200">
+                  <div className="flex gap-4">
+                    <button className="pb-3 px-1 border-b-2 border-green-500 text-green-600 font-medium text-sm">
+                      Bundle Plans
                     </button>
-                    <button
-                      onClick={() => fetchInventoryBundles()}
-                      className="text-blue-600 hover:text-blue-800 p-1 rounded transition-colors"
-                      title="Refresh Inventory"
-                    >
-                      <RefreshCw size={16} />
+                    <button className="pb-3 px-1 border-b-2 border-transparent text-gray-600 font-medium text-sm hover:text-gray-900">
+                      Topup
                     </button>
                   </div>
                 </div>
                 
-                <div className="space-y-3 max-h-80 overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
                   {inventoryBundles.length > 0 ? (
                     inventoryBundles.map((bundle) => (
                       <div
                         key={bundle.id}
                         onClick={() => setSelectedBundle(bundle)}
-                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                        className={`p-5 rounded-xl border-2 cursor-pointer transition-all duration-200 relative ${
                           selectedBundle?.id === bundle.id
                             ? 'border-green-500 bg-green-50 shadow-lg'
-                            : 'border-gray-200 hover:border-green-300 hover:bg-gray-50'
+                            : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
                         }`}
                       >
-                        <div className="flex justify-between items-start gap-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h5 className="font-bold text-gray-900 text-lg">{bundle.bundleName}</h5>
-                              <span className="text-xl font-bold text-green-600">NOK {bundle.bundlePrice}</span>
-                            </div>
-                            <div className="flex items-center gap-2 mt-2 flex-wrap">
-                              <div className="bg-purple-100 text-purple-800 px-3 py-1 rounded-lg text-sm font-semibold">
-                                🏷️ {bundle.poolName}
-                              </div>
-                              <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-lg text-sm font-bold">
-                                📦 {bundle.availableQuantity} Units in Stock
-                              </div>
-                              <div className="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg text-xs font-medium">
-                                Cost: NOK {(bundle.purchasePrice || 0).toFixed(2)}
-                              </div>
-                              <div className={`px-3 py-1 rounded-lg text-xs font-medium ${retailerMarginRate ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                Profit: {retailerMarginRate ? 
-                                  `+NOK ${(bundle.bundlePrice - (bundle.purchasePrice || 0)).toFixed(2)}` :
-                                  'Calculating...'
-                                }
-                              </div>
-                            </div>
+                        <div className="text-left">
+                          <div className="text-3xl font-bold text-gray-900 mb-2">
+                            NOK{bundle.bundlePrice.toFixed(2)}
                           </div>
-                          {selectedBundle?.id === bundle.id && (
-                            <div className="flex-shrink-0">
-                              <CheckCircle className="text-green-600" size={24} />
-                            </div>
-                          )}
+                          <div className="text-sm font-semibold text-gray-900 mb-1">
+                            {bundle.bundleName}
+                          </div>
+                          <div className="text-xs text-gray-500 mb-3">
+                            With {bundle.poolName} • 1mo/Plan
+                          </div>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-8">
+                    <div className="col-span-2 text-center py-8">
                       <Package size={32} className="text-gray-400 mx-auto mb-2" />
                       <p className="text-gray-500">No bundles in inventory</p>
                       <p className="text-sm text-gray-400 mb-4">Purchase bundles from the admin to sell to customers</p>
@@ -2703,116 +2700,122 @@ const RetailerDashboard = () => {
                 </div>
               </div>
 
-              {/* Sale Details */}
+              {/* Sale Details - Cart Style */}
               <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-                <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <Users className="text-purple-600" size={20} />
-                  Customer & Sale Details
-                </h4>
+                <div className="flex items-center gap-2 mb-6">
+                  <ShoppingCart className="text-gray-600" size={20} />
+                  <h4 className="text-lg font-semibold text-gray-900">Your Cart</h4>
+                </div>
                 
-                <form className="space-y-4">
-                  {/* Quick Sale Information */}
-                  <div className="space-y-3">
-                    <h5 className="font-medium text-gray-700">Quick Sale</h5>
-                    <div className="bg-blue-50 rounded-lg p-3">
-                      <p className="text-sm text-blue-800">
-                        💡 <strong>Simple Process:</strong> Select bundle → Generate 1 PIN for customer
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Sale Details */}
-                  {selectedBundle && (
-                    <div className="border-t pt-4">
-                      <h5 className="font-medium text-gray-700 mb-3">Sale Details</h5>
-                      {!retailerMarginRate && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3">
-                          <p className="text-sm text-yellow-800">
-                            ⚠️ Waiting for admin margin rate settings...
+                {selectedBundle ? (
+                  <div className="space-y-4">
+                    {/* Cart Item */}
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-gray-900 mb-1">
+                            NOK{selectedBundle.bundlePrice.toFixed(2)} 1 mo with {selectedBundle.poolName || '2GB'} Plan
                           </p>
                         </div>
-                      )}
-                      <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Bundle:</span>
-                          <span className="font-medium">{selectedBundle.bundleName}</span>
+                        <button
+                          onClick={() => {
+                            setSelectedBundle(null);
+                            setSaleQuantity(1);
+                          }}
+                          className="text-gray-400 hover:text-gray-600 ml-2"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => setSaleQuantity(Math.max(1, saleQuantity - 1))}
+                            disabled={saleQuantity <= 1}
+                            className="w-7 h-7 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-700 font-bold transition-colors"
+                          >
+                            -
+                          </button>
+                          <span className="text-sm font-medium w-8 text-center">{saleQuantity}</span>
+                          <button
+                            onClick={() => setSaleQuantity(Math.min(selectedBundle.availableQuantity, saleQuantity + 1))}
+                            disabled={saleQuantity >= selectedBundle.availableQuantity}
+                            className="w-7 h-7 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-gray-700 font-bold transition-colors"
+                          >
+                            +
+                          </button>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Unit Price:</span>
-                          <span className="font-medium">NOK {selectedBundle.bundlePrice}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600">Quantity:</span>
-                          <span className="font-medium">1 PIN</span>
-                        </div>
-                        <div className="border-t pt-2">
-                          <div className="flex justify-between text-lg font-semibold">
-                            <span>Total Amount:</span>
-                            <span className="text-green-600">NOK {selectedBundle.bundlePrice.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm text-gray-600">
-                            <span>Cost Price:</span>
-                            <span className="text-gray-600">
-                              {retailerMarginRate ? 
-                                `NOK ${(selectedBundle.purchasePrice || (selectedBundle.bundlePrice * (1 - retailerMarginRate / 100))).toFixed(2)}` :
-                                'Calculating...'
-                              }
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm font-semibold border-t pt-1">
-                            <span className="text-gray-700">Your Profit:</span>
-                            <span className="text-blue-600">
-                              {retailerMarginRate ? 
-                                `NOK ${(selectedBundle.bundlePrice - (selectedBundle.purchasePrice || (selectedBundle.bundlePrice * (1 - retailerMarginRate / 100)))).toFixed(2)}` :
-                                'Calculating...'
-                              }
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-xs text-gray-500">
-                            <span>Your Margin:</span>
-                            <span className="text-purple-600 font-medium">
-                              {retailerMarginRate ? `${retailerMarginRate}%` : 'Loading...'}
-                            </span>
-                          </div>
-                        </div>
+                        <span className="text-base font-bold text-gray-900">
+                          NOK{(selectedBundle.bundlePrice * saleQuantity).toFixed(2)}
+                        </span>
                       </div>
                     </div>
-                  )}
 
-                  {/* Action Buttons */}
-                  <div className="pt-4 space-y-3">
-                    <button
-                      type="button"
-                      onClick={handleDirectSale}
-                      disabled={!selectedBundle || saleLoading || !retailerMarginRate}
-                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 px-4 rounded-lg font-semibold hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                      title={!retailerMarginRate ? 'Waiting for admin margin rate settings' : ''}
-                    >
-                      {saleLoading ? (
-                        <>
-                          <RefreshCw size={18} className="animate-spin" />
-                          Processing Sale...
-                        </>
-                      ) : (
-                        <>
-                          <ShoppingCart size={18} />
-                          Allocate PINs & Print Receipt
-                        </>
-                      )}
-                    </button>
-                    
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedBundle(null);
-                        // Quantity is fixed at 1
-                      }}
-                      className="w-full bg-gray-200 text-gray-700 py-2 px-4 rounded-lg font-medium hover:bg-gray-300"
-                    >
-                      Clear Selection
-                    </button>
+                    {/* Subtotal */}
+                    <div className="border-t border-gray-200 pt-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600 font-medium">SUBTOTAL</span>
+                        <span className="text-2xl font-bold text-gray-900">
+                          NOK{(selectedBundle.bundlePrice * saleQuantity).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="space-y-3 pt-4">
+                      {/* Print Button - Working */}
+                      <button
+                        type="button"
+                        onClick={handleDirectSale}
+                        disabled={saleLoading || !retailerMarginRate}
+                        className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3.5 px-4 rounded-lg font-bold text-base hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md"
+                      >
+                        {saleLoading ? (
+                          <>
+                            <RefreshCw size={18} className="animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            Print NOK{(selectedBundle.bundlePrice * saleQuantity).toFixed(2)}
+                          </>
+                        )}
+                      </button>
+
+                      {/* Direct Topup Button - Disabled */}
+                      <button
+                        type="button"
+                        disabled
+                        className="w-full bg-red-500 text-white py-3.5 px-4 rounded-lg font-bold text-base opacity-50 cursor-not-allowed"
+                      >
+                        Direct Topup
+                      </button>
+
+                      {/* SMS Button - Disabled */}
+                      <button
+                        type="button"
+                        disabled
+                        className="w-full bg-gray-300 text-gray-700 py-3.5 px-4 rounded-lg font-bold text-base opacity-50 cursor-not-allowed"
+                      >
+                        SMS
+                      </button>
+                    </div>
+
+                    {!retailerMarginRate && (
+                      <div className="mt-3">
+                        <p className="text-xs text-amber-600 text-center">
+                          ⚠️ Waiting for admin margin rate settings...
+                        </p>
+                      </div>
+                    )}
                   </div>
-                </form>
+                ) : (
+                  <div className="text-center py-12">
+                    <ShoppingCart size={48} className="text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-500 font-medium">Your cart is empty</p>
+                    <p className="text-sm text-gray-400 mt-2">Select a bundle to add to cart</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -3505,9 +3508,9 @@ const RetailerDashboard = () => {
             </div>
           </div>
         )}
-          </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

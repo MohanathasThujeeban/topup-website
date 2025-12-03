@@ -259,33 +259,12 @@ const BundlesPage = () => {
       </div>
 
       {/* Page Header */}
-      <section className="py-16 bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 text-gray-900 relative overflow-hidden">
-        {/* Background Elements */}
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-10 left-10 w-64 h-64 bg-teal-200 rounded-full blur-3xl animate-float-slow"></div>
-          <div className="absolute bottom-10 right-10 w-80 h-80 bg-cyan-200 rounded-full blur-3xl animate-float"></div>
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-200 rounded-full blur-3xl animate-float-reverse"></div>
-        </div>
-
-        <div className="container-custom px-4 relative z-10">
-          <div className="text-center mb-12">
+      <section className="py-12 bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 text-gray-900">
+        <div className="container-custom px-4">
+          <div className="text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-4 font-display text-gray-800">
-              Choose Your Perfect<br />
-              <span className="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">Lycamobile Bundle</span>
+              <span className="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">Prepaid Bundles</span>
             </h1>
-            <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto font-body leading-relaxed">
-              Instant activation • Secure payments • Best rates for Norway
-            </p>
-            
-            {/* Search Bar */}
-            <div className="max-w-xl mx-auto relative">
-              <input 
-                type="text" 
-                placeholder="Search for data plans, eSIM bundles..." 
-                className="w-full px-6 py-5 rounded-2xl bg-white border-2 border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100 transition-all duration-300 font-body shadow-lg"
-              />
-              <Search className="absolute right-5 top-1/2 transform -translate-y-1/2 text-gray-400" size={22} />
-            </div>
           </div>
         </div>
       </section>
@@ -413,33 +392,6 @@ const BundlesPage = () => {
                     </div>
                   </div>
 
-                  {/* Features List */}
-                  <div className="space-y-2 mb-6">
-                    {bundle.features.map((feature, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm text-gray-700">
-                        <CheckCircle className="text-green-500 flex-shrink-0" size={16} />
-                        <span>{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Stock Availability for eSIM */}
-                  {bundle.type === 'esim' && (
-                    <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-200">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Database size={16} className="text-blue-600" />
-                          <span className="text-sm font-semibold text-blue-900">
-                            {bundle.stockQuantity > 0 
-                              ? '1 eSIM available' 
-                              : 'Out of stock'}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-blue-700 mt-1">One eSIM per purchase</p>
-                    </div>
-                  )}
-
                   {/* View More Link */}
                   <div className="text-center mb-4">
                     <Link 
@@ -452,21 +404,6 @@ const BundlesPage = () => {
 
                   {/* Action Buttons */}
                   <div className="flex gap-2">
-                    <button 
-                      className={`flex-1 py-2 border rounded-2xl font-medium text-sm transition-colors ${
-                        bundle.hasStock 
-                          ? 'border-gray-300 text-gray-700 hover:bg-gray-50' 
-                          : 'border-gray-200 text-gray-400 cursor-not-allowed'
-                      }`}
-                      onClick={() => {
-                        if (bundle.hasStock) {
-                          alert(`Added ${bundle.name} to basket!`);
-                        }
-                      }}
-                      disabled={!bundle.hasStock}
-                    >
-                      Add to basket
-                    </button>
                     {bundle.hasStock ? (
                       <Link
                         to={`/product/${bundle.id}`}
@@ -483,13 +420,6 @@ const BundlesPage = () => {
                       </button>
                     )}
                   </div>
-
-                  {/* Delivery Info */}
-                  {bundle.note && (
-                    <div className="mt-4 text-center">
-                      <p className="text-xs text-gray-500">{bundle.note}</p>
-                    </div>
-                  )}
                 </div>
               </div>
             ))}

@@ -228,63 +228,15 @@ const ESIMPage = () => {
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50">
       
       {/* Hero Section */}
-      <section className="relative overflow-hidden py-20 lg:py-32">
-        {/* Animated Background */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-teal-300/30 rounded-full blur-3xl animate-float"></div>
-          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-300/30 rounded-full blur-3xl animate-float" style={{ animationDelay: '1s' }}></div>
-          <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-blue-300/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }}></div>
-        </div>
-
+      <section className="relative overflow-hidden py-12">
         <div className="container mx-auto px-4 relative z-10">
           <div className="max-w-5xl mx-auto text-center">
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-6 py-3 rounded-full shadow-lg mb-8 border border-teal-200">
-              <Smartphone className="w-5 h-5 text-teal-600" />
-              <span className="text-sm font-semibold text-gray-700 font-accent">Digital SIM Technology</span>
-            </div>
-
             {/* Main Heading */}
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 font-display">
               <span className="bg-gradient-to-r from-teal-600 via-cyan-500 to-blue-600 bg-clip-text text-transparent">
-                eSIM Plans
+                eSIM
               </span>
-              <br />
-              <span className="text-blue-900">Delivered Instantly</span>
             </h1>
-
-            <p className="text-xl md:text-2xl text-gray-700 mb-10 font-body leading-relaxed max-w-3xl mx-auto">
-              Get your <span className="font-semibold text-teal-600">Lycamobile eSIM</span> via email in seconds. 
-              No physical SIM needed. Just scan, activate, and stay connected!
-            </p>
-
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-              <Link 
-                to="/esim/dashboard" 
-                className="group px-8 py-4 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 hover:from-teal-600 hover:via-cyan-600 hover:to-blue-600 text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 font-heading flex items-center gap-2 text-lg"
-              >
-                <QrCode size={24} />
-                Manage My eSIM
-                <ArrowRight className="group-hover:translate-x-1 transition-transform" size={20} />
-              </Link>
-            </div>
-
-            {/* Payment Methods */}
-            <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-600 font-body">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-teal-500" />
-                <span>Secure Payments</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-cyan-500" />
-                <span>Instant Delivery</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <MessageCircle className="w-5 h-5 text-blue-500" />
-                <span>24/7 WhatsApp Support</span>
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -294,9 +246,8 @@ const ESIMPage = () => {
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4 font-display text-gray-900">
-              Choose Your <span className="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">eSIM Plan</span>
+              <span className="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">eSIM Plans</span>
             </h2>
-            <p className="text-xl text-gray-600 font-body">Instant delivery, no physical SIM required</p>
           </div>
 
           {/* Loading State */}

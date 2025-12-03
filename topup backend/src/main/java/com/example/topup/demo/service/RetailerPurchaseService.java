@@ -495,24 +495,68 @@ public class RetailerPurchaseService {
     }
 
     private String encryptPin(String pin) {
-        // Simple encryption - in production use proper encryption
-        String masked = pin.substring(0, 4) + "****" + pin.substring(pin.length() - 4);
-        return "PIN:" + masked;
+        // Store the actual PIN with a prefix for tracking
+        // In production, use proper AES encryption
+        return "ENCRYPTED:" + pin;
     }
     
     // Method to decrypt PIN for receipt generation
     private String decryptPin(String encryptedPin) {
-        // For demo purposes, generate a realistic PIN
-        // In production, this would decrypt the actual stored PIN
-        if (encryptedPin.startsWith("PIN:")) {
-            // Generate a realistic 16-digit PIN
-            return generateRealisticPin();
+        // Return the actual PIN from storage
+        if (encryptedPin.startsWith("ENCRYPTED:")) {
+            String afterPrefix = encryptedPin.substring("ENCRYPTED:".length());
+            // Try to base64 decode it (PINs might have been base64 encoded)
+            try {
+                byte[] decoded = java.util.Base64.getDecoder().decode(afterPrefix);
+                String decodedPin = new String(decoded);
+                System.out.println("🔓 Decrypting ENCRYPTED: " + encryptedPin + " -> " + decodedPin);
+                return decodedPin;
+            } catch (Exception e) {
+                // Not base64, return as-is
+                System.out.println("🔓 Decrypting ENCRYPTED (not base64): " + encryptedPin + " -> " + afterPrefix);
+                return afterPrefix;
+            }
         }
+        // Handle old format with base64 encoding
+        if (encryptedPin.startsWith("PIN:")) {
+            try {
+                // Try to extract and decode the base64 parts
+                String afterPrefix = encryptedPin.substring(4); // Remove "PIN:"
+                // If it contains ****, it's the old masked format - try to extract what we can
+                if (afterPrefix.contains("****")) {
+                    // Format: NTAw****NTU1 - this is partially base64 encoded
+                    // Let's try to decode the visible parts
+                    String[] parts = afterPrefix.split("\\*\\*\\*\\*");
+                    if (parts.length >= 2) {
+                        try {
+                            // Attempt to decode first and last parts
+                            String firstPart = new String(java.util.Base64.getDecoder().decode(parts[0]));
+                            String lastPart = new String(java.util.Base64.getDecoder().decode(parts[1]));
+                            // Reconstruct - this is a guess, may not be complete
+                            String reconstructed = firstPart + "****" + lastPart;
+                            System.out.println("🔓 Partially decoded old PIN: " + encryptedPin + " -> " + reconstructed);
+                            return reconstructed;
+                        } catch (Exception e) {
+                            System.err.println("⚠️ Could not decode old PIN format: " + encryptedPin);
+                        }
+                    }
+                }
+                // Try full base64 decode
+                String decoded = new String(java.util.Base64.getDecoder().decode(afterPrefix));
+                System.out.println("🔓 Decoded old PIN: " + encryptedPin + " -> " + decoded);
+                return decoded;
+            } catch (Exception e) {
+                System.err.println("⚠️ Old PIN format cannot be fully decrypted: " + encryptedPin);
+                // Return as-is if we can't decrypt
+                return encryptedPin;
+            }
+        }
+        // Already plain text
         return encryptedPin;
     }
     
     private String generateRealisticPin() {
-        // Generate realistic Lycamobile-style PIN
+        // Generate realistic Lycamobile-style PIN for demo/testing ONLY
         StringBuilder pin = new StringBuilder();
         
         // Lycamobile PINs often start with specific patterns

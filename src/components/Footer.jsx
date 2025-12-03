@@ -55,28 +55,28 @@ const Footer = () => {
             <h3 className="text-white font-semibold mb-4 font-heading">Services</h3>
             <ul className="space-y-2">
               <li>
-                <Link to="/bundles" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
-                  <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
+                <span className="inline-flex items-center gap-2 text-gray-600 cursor-not-allowed font-body">
+                  <span className="w-0 h-0.5"></span>
                   Prepaid Bundles
-                </Link>
+                </span>
               </li>
               <li>
-                <Link to="/esim" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
-                  <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
+                <span className="inline-flex items-center gap-2 text-gray-600 cursor-not-allowed font-body">
+                  <span className="w-0 h-0.5"></span>
                   eSIM Solutions
-                </Link>
+                </span>
               </li>
               <li>
-                <Link to="/offers" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
-                  <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
+                <span className="inline-flex items-center gap-2 text-gray-600 cursor-not-allowed font-body">
+                  <span className="w-0 h-0.5"></span>
                   Special Offers
-                </Link>
+                </span>
               </li>
               <li>
-                <Link to="/support" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
-                  <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
+                <span className="inline-flex items-center gap-2 text-gray-600 cursor-not-allowed font-body">
+                  <span className="w-0 h-0.5"></span>
                   Customer Support
-                </Link>
+                </span>
               </li>
             </ul>
           </div>
@@ -92,22 +92,22 @@ const Footer = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/privacy" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
-                  <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
+                <span className="inline-flex items-center gap-2 text-gray-600 cursor-not-allowed font-body">
+                  <span className="w-0 h-0.5"></span>
                   Privacy Policy & GDPR
-                </Link>
+                </span>
               </li>
               <li>
-                <Link to="/refund" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
-                  <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
+                <span className="inline-flex items-center gap-2 text-gray-600 cursor-not-allowed font-body">
+                  <span className="w-0 h-0.5"></span>
                   Refund Policy
-                </Link>
+                </span>
               </li>
               <li>
-                <Link to="/cookies" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body">
-                  <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
+                <span className="inline-flex items-center gap-2 text-gray-600 cursor-not-allowed font-body">
+                  <span className="w-0 h-0.5"></span>
                   Cookie Policy
-                </Link>
+                </span>
               </li>
             </ul>
           </div>
@@ -149,16 +149,16 @@ const Footer = () => {
             <div className="mt-6 pt-4 border-t border-gray-800">
               <ul className="space-y-2">
                 <li>
-                  <Link to="/contact" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body text-sm">
-                    <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
+                  <span className="inline-flex items-center gap-2 text-gray-600 cursor-not-allowed font-body text-sm">
+                    <span className="w-0 h-0.5"></span>
                     Contact Form
-                  </Link>
+                  </span>
                 </li>
                 <li>
-                  <Link to="/faq" className="group inline-flex items-center gap-2 hover:text-cyan-400 transition-all duration-300 font-body text-sm">
-                    <span className="w-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-500 group-hover:w-4 transition-all duration-300"></span>
+                  <span className="inline-flex items-center gap-2 text-gray-600 cursor-not-allowed font-body text-sm">
+                    <span className="w-0 h-0.5"></span>
                     FAQ & Help
-                  </Link>
+                  </span>
                 </li>
               </ul>
             </div>

@@ -15,6 +15,7 @@ import FAQPage from './pages/FAQPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ContactPage from './pages/ContactPage';
+import AboutUsPage from './pages/AboutUsPage';
 import ProductPage from './pages/ProductPage';
 import CheckoutPage from './pages/CheckoutPage';
 import ConfirmationPage from './pages/ConfirmationPage';
@@ -55,6 +56,7 @@ function AppLayout() {
           <Route path="/esim/activate" element={<ESIMActivationPage />} />
           <Route path="/offers" element={<OffersPage />} />
           <Route path="/support" element={<SupportPage />} />
+          <Route path="/about" element={<AboutUsPage />} />
           <Route path="/faq" element={<FAQPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
