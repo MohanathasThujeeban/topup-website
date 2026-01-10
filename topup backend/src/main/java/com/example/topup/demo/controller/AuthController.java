@@ -102,9 +102,12 @@ public class AuthController {
             return ResponseEntity.ok(res);
 
         } catch (Exception e) {
+            System.err.println("Login error: " + e.getMessage());
+            e.printStackTrace();
             Map<String, Object> res = new HashMap<>();
             res.put("success", false);
             res.put("message", "Login failed. Please try again.");
+            res.put("error", e.getMessage()); // Add detailed error for debugging
             return ResponseEntity.internalServerError().body(res);
         }
     }
