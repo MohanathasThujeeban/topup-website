@@ -7,6 +7,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.*;
 
@@ -33,6 +35,43 @@ public class GlobalExceptionHandler {
         System.out.println("Validation errors: " + errors);
         
         return ResponseEntity.badRequest().body(response);
+    }
+    
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<Map<String, Object>> handleMultipartException(MultipartException ex) {
+        System.err.println("❌ Multipart parsing error: " + ex.getMessage());
+        ex.printStackTrace();
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", false);
+        response.put("message", "File upload error");
+        response.put("error", ex.getMessage());
+        response.put("hint", "Check file size limits and ensure Content-Type is multipart/form-data");
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+    
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<Map<String, Object>> handleMissingServletRequestPart(MissingServletRequestPartException ex) {
+        System.err.println("❌ Missing file parameter: " + ex.getMessage());
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", false);
+        response.put("message", "Missing required file upload");
+        response.put("error", "No file was uploaded");
+        response.put("missingPart", ex.getRequestPartName());
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+    
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", false);
+        response.put("message", "Invalid request");
+        response.put("error", ex.getMessage());
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
     
     @ExceptionHandler(Exception.class)

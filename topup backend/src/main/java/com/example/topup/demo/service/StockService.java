@@ -35,7 +35,7 @@ public class StockService {
      * Upload PIN stock from CSV file
      * Expected CSV format: PIN ID, PINS
      */
-    public Map<String, Object> uploadPinStock(MultipartFile file, String adminUser, String poolName, String productId, String price, String notes) throws Exception {
+    public Map<String, Object> uploadPinStock(MultipartFile file, String adminUser, String poolName, String productId, String price, String notes, String productType, String networkProvider) throws Exception {
         System.out.println("\n🚀 Starting PIN stock upload process...");
         
         // Use provided pool name or fallback to CSV filename
@@ -46,6 +46,8 @@ public class StockService {
         System.out.println("👤 Admin User: " + adminUser);
         System.out.println("🆔 Product ID: " + productId);
         System.out.println("💰 Price: " + price);
+        System.out.println("📦 Product Type: " + productType);
+        System.out.println("📱 Network Provider: " + networkProvider);
         System.out.println("📝 Notes: " + notes);
         
         List<StockItemDTO> items = parseCSV(file);
@@ -80,9 +82,24 @@ public class StockService {
                 // Set the pool name and metadata
                 pool.setName(finalPoolName);
                 pool.setBatchNumber(finalPoolName); // Also set as batch number for tracking
+                
+                System.out.println("🔧 Setting networkProvider: " + networkProvider);
+                pool.setNetworkProvider(networkProvider);
+                
+                System.out.println("🔧 Setting productType: " + productType);
+                pool.setProductType(productType);
+                
+                System.out.println("🔧 Setting price: " + price);
+                pool.setPrice(price);
+                
                 if (notes != null && !notes.trim().isEmpty()) {
                     pool.setDescription(notes);
                 }
+                
+                System.out.println("📋 Pool metadata after setting:");
+                System.out.println("   - networkProvider: " + pool.getNetworkProvider());
+                System.out.println("   - productType: " + pool.getProductType());
+                System.out.println("   - price: " + pool.getPrice());
                 
                 System.out.println("🔐 Encrypting and adding " + productItems.size() + " items to pool...");
                 
@@ -110,6 +127,9 @@ public class StockService {
                 System.out.println("✅ Pool saved successfully! ID: " + savedPool.getId());
                 System.out.println("   Total Quantity: " + savedPool.getTotalQuantity());
                 System.out.println("   Available: " + savedPool.getAvailableQuantity());
+                System.out.println("   Network Provider: " + savedPool.getNetworkProvider());
+                System.out.println("   Product Type: " + savedPool.getProductType());
+                System.out.println("   Price: " + savedPool.getPrice());
                 
                 createdPools.add(savedPool);
                 
@@ -159,7 +179,7 @@ public class StockService {
      * Upload eSIM stock from CSV file
      * Expected CSV format: iccid, serialNumber, activationUrl, qrCodeUrl, productId, notes, poolName, type, price
      */
-    public Map<String, Object> uploadEsimStock(MultipartFile file, String adminUser, String poolName, String productId, String notes) throws Exception {
+    public Map<String, Object> uploadEsimStock(MultipartFile file, String adminUser, String poolName, String productId, String price, String notes, String productType, String networkProvider) throws Exception {
         // Use provided pool name or fallback to CSV filename
         String finalPoolName = (poolName != null && !poolName.trim().isEmpty()) ? poolName : 
             (file.getOriginalFilename() != null ? file.getOriginalFilename().replaceFirst("[.][^.]+$", "") : "ESIM_BUNDLE_" + System.currentTimeMillis());
@@ -186,6 +206,9 @@ public class StockService {
                 // Set the pool name and metadata
                 pool.setName(finalPoolName);
                 pool.setBatchNumber(finalPoolName);
+                pool.setNetworkProvider(networkProvider);
+                pool.setProductType(productType);
+                pool.setPrice(price);
                 if (notes != null && !notes.trim().isEmpty()) {
                     pool.setDescription(notes);
                 }
@@ -415,9 +438,11 @@ public class StockService {
         Optional<StockPool> existingPool = stockPoolRepository.findByProductIdAndStockType(productId, stockType);
         
         if (existingPool.isPresent()) {
+            System.out.println("⚠️ FOUND EXISTING POOL - will update its metadata");
             return existingPool.get();
         }
         
+        System.out.println("✅ CREATING NEW POOL - no existing pool found");
         // Create new pool
         StockPool newPool = new StockPool();
         

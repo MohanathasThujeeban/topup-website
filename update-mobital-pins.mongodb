@@ -1,0 +1,34 @@
+// MongoDB Script to Update MOBITAL Order PINs with Full Encryption
+// This will replace the partially masked PINs with properly encrypted full PINs
+
+use('topupdb');
+
+// Encrypted PINs from servicepin.csv (properly encoded) - ALL 10 PINs
+const encryptedPinString = 'ENCRYPTED:MTIzNDU3MDAwMDAwMDAwMA==,ENCRYPTED:MjM0NTY4MDAwMDAwMDAwMA==,ENCRYPTED:MzQ1Njc5MDAwMDAwMDAwMA==,ENCRYPTED:NDU2Nzg5MDAwMDAwMDAwMA==,ENCRYPTED:NTY3ODkwMDAwMDAwMDAwMA==,ENCRYPTED:Njc4OTAxMDAwMDAwMDAwMA==,ENCRYPTED:Nzg5MDEyMDAwMDAwMDAwMA==,ENCRYPTED:ODkwMTIzMDAwMDAwMDAwMA==,ENCRYPTED:OTAxMjM1MDAwMDAwMDAwMA==,ENCRYPTED:MTIzNDU3MDAwMDAwMDAw';
+
+print('Encrypted PINs to upload:');
+print(encryptedPinString);
+
+// Find MOBITAL orders
+const orders = db.orders.find({
+    'items.productName': 'MOBITAL',
+    status: { $nin: ['CANCELLED', 'REFUNDED'] }
+}).toArray();
+
+print(`\nFound ${orders.length} MOBITAL orders`);
+
+// Show first order details
+if (orders.length > 0) {
+    print('\nFirst order details:');
+    print('Order ID:', orders[0]._id);
+    print('Product:', orders[0].items[0].productName);
+    print('Current PINs:', orders[0].metadata?.allocatedItems);
+    print('\nTo update this order, uncomment lines below');
+}
+
+// UPDATE THE FIRST MOBITAL ORDER WITH REAL ENCRYPTED PINS
+db.orders.updateOne(
+    { _id: orders[0]._id },
+    { $set: { 'metadata.allocatedItems': encryptedPinString } }
+);
+print('✅ Order updated successfully with real encrypted PINs!');

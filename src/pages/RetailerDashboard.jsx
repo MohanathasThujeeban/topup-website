@@ -8,9 +8,6 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import FeaturedPromotions from '../components/FeaturedPromotions';
-import RetailerBundlePurchaseDashboard from '../components/RetailerBundlePurchaseDashboard';
-import RetailerEsimPurchase from '../components/RetailerEsimPurchase';
-import RetailerInventoryDisplay from '../components/RetailerInventoryDisplay';
 import RetailerPromotionalBanner from '../components/RetailerPromotionalBanner';
 import StockManagement from '../components/StockManagement';
 import RetailerCreditManagement from '../components/RetailerCreditManagement';
@@ -42,14 +39,8 @@ const RetailerDashboard = () => {
     setActiveTab(tab);
     
     // Add activity for key section visits
-    if (tab === 'bundles') {
-      addActivity('bundle_purchase', 'Viewed bundle catalog', { action: 'navigation' });
-    } else if (tab === 'esim') {
-      addActivity('esim_purchase', 'Accessed eSIM products', { action: 'navigation' });
-    } else if (tab === 'pos') {
+    if (tab === 'pos') {
       addActivity('navigation', 'Opened Point of Sale', { action: 'navigation', section: 'pos' });
-    } else if (tab === 'inventory') {
-      addActivity('inventory_update', 'Checked inventory status', { action: 'navigation' });
     }
   };
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -74,12 +65,8 @@ const RetailerDashboard = () => {
   const [showPinModal, setShowPinModal] = useState(false);
   const [fetchingPromotions, setFetchingPromotions] = useState(false);
   const [fetchingMarginRate, setFetchingMarginRate] = useState(false);
-  
-  // Inventory state
-  const [purchasedBundles, setPurchasedBundles] = useState([]);
-  const [purchasedEsims, setPurchasedEsims] = useState([]);
-  const [loadingInventory, setLoadingInventory] = useState(false);
-  const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
+  const [selectedOperator, setSelectedOperator] = useState('All Operators');
+  const [selectedProductCategory, setSelectedProductCategory] = useState('Bundle plans');
   
   // Privacy Settings state
   const [oldPassword, setOldPassword] = useState('');
@@ -360,6 +347,14 @@ const RetailerDashboard = () => {
     }
   }, [inventoryBundles]); // Trigger when inventory changes
   
+  // Refresh inventory when POS tab is opened
+  useEffect(() => {
+    if (activeTab === 'pos') {
+      console.log('🔄 POS tab opened - refreshing inventory...');
+      fetchInventoryBundles();
+    }
+  }, [activeTab]);
+  
   // Fetch real data on component mount or when user changes
   useEffect(() => {
     const loadRealData = async () => {
@@ -582,15 +577,6 @@ const RetailerDashboard = () => {
       isMounted = false;
     };
   }, []);  // Remove dependencies to prevent constant re-fetching that causes lag
-
-  // Fetch inventory when inventory tab is opened
-  useEffect(() => {
-    if (activeTab === 'inventory' && !isDemoMode() && user) {
-      console.log('📦 Inventory tab opened - fetching purchased items...');
-      fetchPurchasedBundles();
-      fetchPurchasedEsims();
-    }
-  }, [activeTab]);
 
   const fetchRetailerMarginRate = async () => {
     // Prevent multiple concurrent calls
@@ -1109,8 +1095,8 @@ const RetailerDashboard = () => {
         return;
       }
 
-      console.log('📦 Fetching inventory bundles from API...');
-      const response = await fetch(`${API_BASE_URL}/retailer/purchased-bundles`, {
+      console.log('📦 Fetching products from admin stock pool...');
+      const response = await fetch(`${API_BASE_URL}/admin/stock/pools`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
@@ -1119,38 +1105,43 @@ const RetailerDashboard = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Inventory bundles response:', data);
-        console.log('📦 Raw bundle data:', JSON.stringify(data.data, null, 2));
+        const stockPools = await response.json();
+        console.log('✅ Stock pools response:', stockPools);
+        console.log('📦 Raw stock pool data:', JSON.stringify(stockPools, null, 2));
         
-        const bundles = (data.data || []).map(bundle => {
-          console.log('🔍 Processing bundle:', bundle);
+        // Transform stock pools into product bundles for POS
+        const bundles = (stockPools || [])
+          .filter(pool => pool.availableQuantity > 0) // Only show pools with available stock
+          .map(pool => {
+          console.log('🔍 Processing stock pool:', pool);
           const processed = {
-            id: bundle.orderNumber || bundle.id,
-            bundleId: bundle.bundleId || bundle.id,
-            bundleName: bundle.bundleName,
-            bundlePrice: bundle.bundlePrice || bundle.totalPrice || bundle.pricePerUnit || 0,
-            purchasePrice: bundle.purchasePrice || bundle.pricePerUnit || 0,
-            availableQuantity: bundle.encryptedPins?.length || bundle.availablePins || 0,
-            availablePins: bundle.encryptedPins?.length || bundle.availablePins || 0,
-            totalPins: bundle.quantity || bundle.unitCount || 0,
-            encryptedPins: bundle.encryptedPins || [],
-            poolName: bundle.poolName || 'Standard Pool',
-            status: 'ACTIVE',
-            productType: 'EPIN'
+            id: pool.id,
+            bundleId: pool.productId || pool.id,
+            bundleName: pool.name || 'Unknown Product',
+            bundlePrice: parseFloat(pool.price) || 0,
+            purchasePrice: parseFloat(pool.price) || 0, // Admin sets the price
+            availableQuantity: pool.availableQuantity || 0,
+            availablePins: pool.availableQuantity || 0,
+            totalPins: pool.totalQuantity || 0,
+            encryptedPins: [], // Not needed for POS display
+            poolName: pool.name || 'Standard Pool',
+            networkProvider: pool.networkProvider || 'Unknown',
+            productType: pool.productType || 'Bundle plans',
+            stockType: pool.stockType || 'EPIN',
+            status: 'ACTIVE'
           };
-          console.log('✅ Processed bundle:', processed);
+          console.log('✅ Processed stock pool as bundle:', processed);
           return processed;
         });
         
-        console.log('📦 Final processed inventory bundles:', bundles);
+        console.log('📦 Final processed inventory bundles from stock pool:', bundles);
         setInventoryBundles(bundles);
       } else {
-        console.error('❌ Failed to fetch inventory:', response.status);
+        console.error('❌ Failed to fetch stock pools:', response.status);
         setInventoryBundles([]);
       }
     } catch (error) {
-      console.error('❌ Error fetching inventory:', error);
+      console.error('❌ Error fetching stock pools:', error);
       setInventoryBundles([]);
     }
   };
@@ -1626,92 +1617,7 @@ const RetailerDashboard = () => {
       console.log(`  Profit per unit: NOK ${profitPerUnit.toFixed(2)}`);
       console.log(`  Total Profit: NOK ${totalProfit.toFixed(2)}`);
       
-      // Check if this is a demo/fallback bundle
-      const isDemo = selectedBundle.id.includes('demo') || selectedBundle.id.includes('fallback') || selectedBundle.id.includes('local') || selectedBundle.id.includes('emergency') || selectedBundle.id.includes('offline');
-      
-      if (isDemo) {
-        console.log(`🎯 Processing demo/offline sale for ${saleQuantity} PINs...`);
-        
-        // Generate multiple demo PINs based on quantity
-        const demoPins = Array.from({ length: saleQuantity }, (_, index) => ({
-          pin: `${Math.random().toString().substr(2, 4)}-${Math.random().toString().substr(2, 4)}-${Math.random().toString().substr(2, 4)}-${Math.random().toString().substr(2, 4)}`,
-          serialNumber: `SN${Date.now()}${Math.random().toString().substr(2, 3)}-${index + 1}`,
-          value: selectedBundle.bundlePrice,
-          expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-          bundleName: selectedBundle.bundleName,
-          status: 'ACTIVE'
-        }));
-        
-        // Update local inventory - reduce quantity by saleQuantity
-        setInventoryBundles(prev => {
-          const updatedBundles = prev.map(bundle => 
-            bundle.id === selectedBundle.id 
-              ? { ...bundle, availableQuantity: Math.max(0, bundle.availableQuantity - saleQuantity) }
-              : bundle
-          );
-          
-          // Calculate new total units
-          const newTotalUnits = updatedBundles.reduce((sum, b) => sum + (b.availableQuantity || 0), 0);
-          console.log(`📦 Inventory reduced: ${selectedBundle.bundleName} (${selectedBundle.availableQuantity} → ${Math.max(0, selectedBundle.availableQuantity - saleQuantity)}), Total: ${newTotalUnits}`);
-          
-          // Update analytics with new inventory count and increased customer sales
-          setTimeout(() => {
-            setAnalytics(prev => ({
-              ...prev,
-              bundleInventory: newTotalUnits,
-              customerSales: prev.customerSales + saleQuantity,
-              totalOrders: prev.totalOrders + 1,
-              totalRevenue: prev.totalRevenue + totalAmount
-            }));
-            console.log(`📈 Analytics updated: +${saleQuantity} customer sales, inventory: ${newTotalUnits}`);
-          }, 100);
-          
-          return updatedBundles;
-        });
-        
-        // Update profit and activity
-        updateProfit(totalAmount, costPrice * saleQuantity, selectedBundle.bundleName);
-        addActivity(
-          'pos_sale',
-          `Sold ${saleQuantity}x ${selectedBundle.bundleName} - Profit: NOK ${totalProfit.toFixed(2)} (Demo)`,
-          {
-            bundleName: selectedBundle.bundleName,
-            quantity: saleQuantity,
-            saleAmount: totalAmount,
-            costPrice: costPrice,
-            profitAmount: profitAmount,
-            pins: 1,
-            customerType: 'walk-in',
-            isDemoMode: true
-          }
-        );
-        
-        // Prepare receipt
-        const receipt = {
-          saleId: `DEMO-${Date.now()}`,
-          bundleName: selectedBundle.bundleName,
-          quantity: saleQuantity,
-          unitPrice: selectedBundle.bundlePrice,
-          totalAmount: totalAmount,
-          costPrice: costPrice * saleQuantity,
-          profitAmount: totalProfit,
-          saleDate: new Date().toLocaleString(),
-          pins: demoPins,
-          retailerName: 'EasyTopup.no',
-          isDemoMode: true
-        };
-        
-        setReceiptData(receipt);
-        setGeneratedPins(demoPins);
-        setShowPinModal(true);
-        setSelectedBundle(null);
-        setSaleQuantity(1);
-        
-        console.log('✅ Demo sale completed successfully');
-        return;
-      }
-      
-      // Real API sale - but fallback to offline mode if backend is unavailable
+      // Real API sale - with offline fallback if backend is unavailable
       const token = localStorage.getItem('token');
       
       // Try API first, but fallback to offline mode if it fails
@@ -1868,22 +1774,22 @@ const RetailerDashboard = () => {
       // Offline mode - generate local PINs
       console.log('🔄 Processing sale in offline mode...');
       
-      // Generate offline PINs
-      const offlinePins = [{
+      // Generate offline PINs based on quantity
+      const offlinePins = Array.from({ length: saleQuantity }, (_, index) => ({
         pin: `OFF-${Math.random().toString(36).substr(2, 4).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
-        serialNumber: `OFF${Date.now()}${Math.random().toString().substr(2, 3)}`,
+        serialNumber: `OFF${Date.now()}${Math.random().toString().substr(2, 3)}-${index + 1}`,
         value: selectedBundle.bundlePrice,
         expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
         bundleName: selectedBundle.bundleName,
         status: 'ACTIVE',
         isOffline: true
-      }];
+      }));
       
       // Update local inventory for offline sale
       setInventoryBundles(prev => {
         const updatedBundles = prev.map(bundle => 
           bundle.id === selectedBundle.id 
-            ? { ...bundle, availableQuantity: Math.max(0, bundle.availableQuantity - 1) }
+            ? { ...bundle, availableQuantity: Math.max(0, bundle.availableQuantity - saleQuantity) }
             : bundle
         );
         
@@ -1896,28 +1802,31 @@ const RetailerDashboard = () => {
           setAnalytics(prev => ({
             ...prev,
             bundleInventory: newTotalUnits,
-            customerSales: prev.customerSales + 1,
+            customerSales: prev.customerSales + saleQuantity,
             totalOrders: prev.totalOrders + 1,
-            totalRevenue: prev.totalRevenue + salePrice
+            totalRevenue: prev.totalRevenue + totalAmount
           }));
-          console.log(`📈 Offline Sale - Analytics updated: +1 customer sale, inventory: ${newTotalUnits}`);
+          console.log(`📈 Offline Sale - Analytics updated: +${saleQuantity} customer sales, inventory: ${newTotalUnits}`);
         }, 100);
         
         return updatedBundles;
       });
       
+      // Calculate profit amount
+      const profitAmount = totalAmount - (costPrice * saleQuantity);
+      
       // Update profit and activity
-      updateProfit(salePrice, costPrice, selectedBundle.bundleName);
+      updateProfit(totalAmount, costPrice * saleQuantity, selectedBundle.bundleName);
       addActivity(
         'pos_sale',
-        `Sold 1x ${selectedBundle.bundleName} - Profit: NOK ${profitAmount.toFixed(2)} (Offline)`,
+        `Sold ${saleQuantity}x ${selectedBundle.bundleName} - Profit: NOK ${profitAmount.toFixed(2)} (Offline)`,
         {
           bundleName: selectedBundle.bundleName,
-          quantity: 1,
-          saleAmount: salePrice,
-          costPrice: costPrice,
+          quantity: saleQuantity,
+          saleAmount: totalAmount,
+          costPrice: costPrice * saleQuantity,
           profitAmount: profitAmount,
-          pins: 1,
+          pins: saleQuantity,
           customerType: 'walk-in',
           method: 'offline'
         }
@@ -1927,10 +1836,10 @@ const RetailerDashboard = () => {
       const offlineReceipt = {
         saleId: `OFFLINE-${Date.now()}`,
         bundleName: selectedBundle.bundleName,
-        quantity: 1,
+        quantity: saleQuantity,
         unitPrice: selectedBundle.bundlePrice,
-        totalAmount: selectedBundle.bundlePrice,
-        costPrice: costPrice,
+        totalAmount: totalAmount,
+        costPrice: costPrice * saleQuantity,
         profitAmount: profitAmount,
         saleDate: new Date().toLocaleString(),
         pins: offlinePins,
@@ -2174,7 +2083,14 @@ const RetailerDashboard = () => {
     );
   }
 
-  // Print receipt function
+  // Helper function to mask PIN for UI display only
+  const maskPin = (pin) => {
+    if (!pin || pin.length < 8) return pin;
+    // Show first 3 and last 3 characters, mask the middle
+    return pin.substring(0, 3) + '****' + pin.substring(pin.length - 3);
+  };
+
+  // Print receipt function - shows FULL unmasked PINs
   const printReceipt = () => {
     if (!receiptData) return;
     
@@ -2287,27 +2203,6 @@ const RetailerDashboard = () => {
                 onClick={handleTabChange}
               />
               <SidebarNavItem
-                id="bundles"
-                label="Buy Bundles"
-                icon={Package}
-                active={activeTab === 'bundles'}
-                onClick={handleTabChange}
-              />
-              <SidebarNavItem
-                id="esim"
-                label="Buy eSIMs"
-                icon={Globe2}
-                active={activeTab === 'esim'}
-                onClick={handleTabChange}
-              />
-              <SidebarNavItem
-                id="inventory"
-                label="My Inventory"
-                icon={Box}
-                active={activeTab === 'inventory'}
-                onClick={handleTabChange}
-              />
-              <SidebarNavItem
                 id="offers"
                 label="Offers"
                 icon={Tag}
@@ -2344,15 +2239,6 @@ const RetailerDashboard = () => {
               </button>
               <button onClick={() => handleTabChange('pos')} className={`w-full p-3 rounded-xl ${activeTab === 'pos' ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <ShoppingCart size={20} />
-              </button>
-              <button onClick={() => setActiveTab('bundles')} className={`w-full p-3 rounded-xl ${activeTab === 'bundles' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
-                <Package size={20} />
-              </button>
-              <button onClick={() => handleTabChange('esim')} className={`w-full p-3 rounded-xl ${activeTab === 'esim' ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
-                <Globe2 size={20} />
-              </button>
-              <button onClick={() => handleTabChange('inventory')} className={`w-full p-3 rounded-xl ${activeTab === 'inventory' ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
-                <Box size={20} />
               </button>
               <button onClick={() => setActiveTab('offers')} className={`w-full p-3 rounded-xl relative ${activeTab === 'offers' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <Tag size={20} />
@@ -2394,9 +2280,6 @@ const RetailerDashboard = () => {
               <h2 className="text-xl font-bold text-gray-900">
                 {activeTab === 'overview' && 'Dashboard'}
                 {activeTab === 'pos' && 'Point of Sale'}
-                {activeTab === 'bundles' && 'Buy Bundles'}
-                {activeTab === 'esim' && 'Buy eSIMs'}
-                {activeTab === 'inventory' && 'My Inventory'}
                 {activeTab === 'offers' && 'Offers'}
                 {activeTab === 'margin' && 'Margin Rate'}
                 {activeTab === 'analytics' && 'Analytics'}
@@ -2495,27 +2378,7 @@ const RetailerDashboard = () => {
                 >
                   <ShoppingCart className="text-blue-600 mb-2 group-hover:scale-110 transition-transform" size={32} />
                   <span className="text-sm font-medium text-gray-900">Point of Sale</span>
-                </button>
-                <button
-                  onClick={() => handleTabChange('bundles')}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-br from-green-50 to-green-100 hover:from-green-100 hover:to-green-200 transition-all group border border-green-200"
-                >
-                  <Package className="text-green-600 mb-2 group-hover:scale-110 transition-transform" size={32} />
-                  <span className="text-sm font-medium text-gray-900">Buy Bundles</span>
-                </button>
-                <button
-                  onClick={() => handleTabChange('esim')}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 transition-all group border border-purple-200"
-                >
-                  <Globe2 className="text-purple-600 mb-2 group-hover:scale-110 transition-transform" size={32} />
-                  <span className="text-sm font-medium text-gray-900">Buy eSIMs</span>
-                </button>
-                <button
-                  onClick={() => handleTabChange('inventory')}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100 hover:from-orange-100 hover:to-orange-200 transition-all group border border-orange-200"
-                >
-                  <Box className="text-orange-600 mb-2 group-hover:scale-110 transition-transform" size={32} />
-                  <span className="text-sm font-medium text-gray-900">My Inventory</span>
+                  <span className="text-xs text-gray-500 mt-1">Sell directly from stock</span>
                 </button>
               </div>
             </div>
@@ -2585,10 +2448,9 @@ const RetailerDashboard = () => {
                         Activity will appear here when you:
                       </p>
                       <div className="text-xs text-gray-400 mt-2 space-y-1">
-                        <p>• Purchase bundles for resale</p>
-                        <p>• Buy eSIM products</p>
                         <p>• Make Point of Sale transactions</p>
-                        <p>• Update your inventory</p>
+                        <p>• Sell products to customers</p>
+                        <p>• Navigate between sections</p>
                       </div>
                     </div>
                   )}
@@ -2607,7 +2469,7 @@ const RetailerDashboard = () => {
                     Point of Sale System
                   </h3>
                   <p className="text-green-100">
-                    Sell bundles directly to walk-in customers and generate ePINs instantly
+                    Sell products directly from admin stock pool - sales automatically reduce inventory
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2643,31 +2505,122 @@ const RetailerDashboard = () => {
               </div>
             )}
 
+            {/* Operator Selection */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100 mb-6">
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Globe2 className="text-blue-600" size={20} />
+                Select Operator
+              </h4>
+              <div className="flex gap-4 flex-wrap">
+                {[
+                  { name: 'All Operators', icon: '🌐', color: 'from-blue-500 to-indigo-600' },
+                  { name: 'Lycamobile', icon: 'https://www.lycamobile.no/wp-content/uploads/2023/06/lyca-logo.svg', color: 'from-red-500 to-pink-600' },
+                  { name: 'Mycall', icon: 'https://mycall.no/wp-content/themes/mycall/images/logo.svg', color: 'from-orange-500 to-amber-600' },
+                  { name: 'Telia', icon: 'https://www.telia.no/magento_no/static/version1234567890/frontend/Telia/responsive/nb_NO/images/telia-logo.svg', color: 'from-purple-500 to-violet-600' }
+                ].map((operator) => (
+                  <button
+                    key={operator.name}
+                    onClick={() => {
+                      setSelectedOperator(operator.name);
+                      setSelectedBundle(null);
+                    }}
+                    className={`group relative px-8 py-4 rounded-xl font-semibold text-sm transition-all duration-300 transform hover:scale-105 ${
+                      selectedOperator === operator.name
+                        ? `bg-gradient-to-r ${operator.color} text-white shadow-xl shadow-${operator.color.split('-')[1]}-500/50`
+                        : 'bg-white border-2 border-gray-200 text-gray-700 hover:border-gray-300 hover:shadow-lg'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      {operator.name === 'All Operators' ? (
+                        <span className="text-3xl">{operator.icon}</span>
+                      ) : (
+                        <img 
+                          src={operator.icon} 
+                          alt={operator.name}
+                          className={`h-8 w-auto ${selectedOperator === operator.name ? 'brightness-0 invert' : 'opacity-80 group-hover:opacity-100'}`}
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.nextSibling.style.display = 'block';
+                          }}
+                        />
+                      )}
+                      <span className="hidden text-2xl font-bold" style={{display: 'none'}}>
+                        {operator.name === 'Lycamobile' ? '📱' : operator.name === 'Mycall' ? '📞' : '📶'}
+                      </span>
+                      <span className={`text-sm font-medium ${selectedOperator === operator.name ? 'text-white' : 'text-gray-700 group-hover:text-gray-900'}`}>
+                        {operator.name}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Product Category Selection */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100 mb-6">
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Package className="text-blue-600" size={20} />
+                Select Product Category
+              </h4>
+              <div className="flex gap-3 flex-wrap">
+                {['Topups', 'Bundle plans', 'Data plans', 'Esims'].map((category) => (
+                  <button
+                    key={category}
+                    onClick={() => {
+                      setSelectedProductCategory(category);
+                      setSelectedBundle(null);
+                    }}
+                    className={`px-6 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
+                      selectedProductCategory === category
+                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Bundle Selection */}
+              {/* Product Selection */}
               <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <Package className="text-blue-600" size={20} />
-                    Select Bundle
+                    <Tag className="text-blue-600" size={20} />
+                    {selectedOperator} - {selectedProductCategory}
                   </h4>
-                </div>
-
-                {/* Product Type Tabs */}
-                <div className="mb-4 border-b border-gray-200">
-                  <div className="flex gap-4">
-                    <button className="pb-3 px-1 border-b-2 border-green-500 text-green-600 font-medium text-sm">
-                      Bundle Plans
-                    </button>
-                    <button className="pb-3 px-1 border-b-2 border-transparent text-gray-600 font-medium text-sm hover:text-gray-900">
-                      Topup
-                    </button>
-                  </div>
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
                   {inventoryBundles.length > 0 ? (
-                    inventoryBundles.map((bundle) => (
+                    (() => {
+                      console.log('🔍 Filtering inventory bundles for POS:');
+                      console.log(`   - Selected Operator: "${selectedOperator}"`);
+                      console.log(`   - Selected Category: "${selectedProductCategory}"`);
+                      console.log(`   - Total bundles: ${inventoryBundles.length}`);
+                      
+                      const filtered = inventoryBundles.filter((bundle) => {
+                        // Filter by network provider
+                        const matchesOperator = selectedOperator === 'All Operators' 
+                          ? true 
+                          : bundle.networkProvider === selectedOperator;
+                        
+                        // Filter by product type
+                        const matchesCategory = bundle.productType === selectedProductCategory;
+                        
+                        console.log(`   📦 Bundle: ${bundle.bundleName}`);
+                        console.log(`      - Provider: "${bundle.networkProvider}" (matches: ${matchesOperator})`);
+                        console.log(`      - Type: "${bundle.productType}" (matches: ${matchesCategory})`);
+                        console.log(`      - Show: ${matchesOperator && matchesCategory}`);
+                        
+                        // Must match both operator and category
+                        return matchesOperator && matchesCategory;
+                      });
+                      
+                      console.log(`   ✅ Filtered results: ${filtered.length} bundles match`);
+                      
+                      return filtered.map((bundle) => (
                       <div
                         key={bundle.id}
                         onClick={() => setSelectedBundle(bundle)}
@@ -2684,17 +2637,31 @@ const RetailerDashboard = () => {
                           <div className="text-sm font-semibold text-gray-900 mb-1">
                             {bundle.bundleName}
                           </div>
-                          <div className="text-xs text-gray-500 mb-3">
-                            With {bundle.poolName} • 1mo/Plan
+                          <div className="text-xs text-gray-500 mb-2">
+                            {bundle.poolName}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                              {bundle.networkProvider}
+                            </span>
+                            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded">
+                              {bundle.productType}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-400 mt-2">
+                            Available: {bundle.availableQuantity}
                           </div>
                         </div>
                       </div>
-                    ))
+                    ));
+                    })()
                   ) : (
                     <div className="col-span-2 text-center py-8">
                       <Package size={32} className="text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-500">No bundles in inventory</p>
-                      <p className="text-sm text-gray-400 mb-4">Purchase bundles from the admin to sell to customers</p>
+                      <p className="text-gray-500">No {selectedProductCategory.toLowerCase()} available</p>
+                      <p className="text-sm text-gray-400 mb-4">
+                        No {selectedOperator} {selectedProductCategory.toLowerCase()} in admin stock pool
+                      </p>
                     </div>
                   )}
                 </div>
@@ -2841,8 +2808,9 @@ const RetailerDashboard = () => {
                           <span className="text-sm text-gray-500">NOK {pin.value}</span>
                         </div>
                         <div className="bg-white rounded border-2 border-dashed border-gray-400 p-3 text-center">
-                          <p className="text-xs text-gray-600 mb-1">PIN Code</p>
-                          <p className="text-xl font-mono font-bold text-green-600">{pin.pin}</p>
+                          <p className="text-xs text-gray-600 mb-1">PIN Code (Masked for Security)</p>
+                          <p className="text-xl font-mono font-bold text-green-600">{maskPin(pin.pin)}</p>
+                          <p className="text-xs text-gray-500 mt-1">Full PIN will be shown on printed receipt</p>
                         </div>
                         <div className="mt-2 text-xs text-gray-600">
                           <p>Serial: {pin.serialNumber}</p>
@@ -2882,203 +2850,6 @@ const RetailerDashboard = () => {
                     >
                       Close
                     </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'bundles' && (
-          <RetailerBundlePurchaseDashboard />
-        )}
-
-        {activeTab === 'esim' && (
-          <RetailerEsimPurchase />
-        )}
-
-        {activeTab === 'inventory' && (
-          <div className="space-y-6">
-            {/* Inventory Header */}
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl shadow-xl p-6 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold mb-2">My Inventory</h2>
-                  <p className="text-purple-100">View all purchased bundles and eSIMs with encrypted PINs</p>
-                </div>
-                <Box size={48} className="opacity-20" />
-              </div>
-            </div>
-
-            {/* Purchased Bundles Section */}
-            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                  <Package className="text-purple-600" size={24} />
-                  Purchased Bundles
-                </h3>
-                <button
-                  onClick={() => fetchPurchasedBundles()}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors flex items-center gap-2"
-                >
-                  <RefreshCw size={16} />
-                  Refresh
-                </button>
-              </div>
-
-              {loadingInventory ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
-                </div>
-              ) : purchasedBundles.length === 0 ? (
-                <div className="text-center py-12">
-                  <Package size={48} className="text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 text-lg mb-2">No purchased bundles yet</p>
-                  <p className="text-gray-500">Purchase bundles from the "Buy Bundles" section to see them here</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Bundle Name</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Pool Name</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Units</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Price per Unit</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Purchase Date</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {purchasedBundles.map((bundle, index) => (
-                        <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-4 text-sm text-gray-900">{bundle.bundleName || 'N/A'}</td>
-                          <td className="px-4 py-4 text-sm text-gray-700">{bundle.poolName || 'N/A'}</td>
-                          <td className="px-4 py-4 text-sm font-semibold text-purple-600">{bundle.unitCount || 0}</td>
-                          <td className="px-4 py-4 text-sm text-gray-700">NOK {bundle.pricePerUnit?.toFixed(2) || '0.00'}</td>
-                          <td className="px-4 py-4 text-sm text-gray-700">{new Date(bundle.purchaseDate).toLocaleDateString()}</td>
-                          <td className="px-4 py-4">
-                            <button
-                              onClick={() => viewEncryptedPins(bundle)}
-                              className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors flex items-center gap-1 text-sm"
-                            >
-                              <Eye size={14} />
-                              View PINs
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Purchased eSIMs Section */}
-            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                  <Globe2 className="text-green-600" size={24} />
-                  Purchased eSIMs
-                </h3>
-                <button
-                  onClick={() => fetchPurchasedEsims()}
-                  className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors flex items-center gap-2"
-                >
-                  <RefreshCw size={16} />
-                  Refresh
-                </button>
-              </div>
-
-              {loadingInventory ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
-                </div>
-              ) : purchasedEsims.length === 0 ? (
-                <div className="text-center py-12">
-                  <Globe2 size={48} className="text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 text-lg mb-2">No purchased eSIMs yet</p>
-                  <p className="text-gray-500">Purchase eSIMs from the "Buy eSIMs" section to see them here</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Product Name</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Pool Name</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Units</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Price per Unit</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Purchase Date</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {purchasedEsims.map((esim, index) => (
-                        <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-4 text-sm text-gray-900">{esim.productName || 'N/A'}</td>
-                          <td className="px-4 py-4 text-sm text-gray-700">{esim.poolName || 'N/A'}</td>
-                          <td className="px-4 py-4 text-sm font-semibold text-green-600">{esim.unitCount || 0}</td>
-                          <td className="px-4 py-4 text-sm text-gray-700">NOK {esim.pricePerUnit?.toFixed(2) || '0.00'}</td>
-                          <td className="px-4 py-4 text-sm text-gray-700">{new Date(esim.purchaseDate).toLocaleDateString()}</td>
-                          <td className="px-4 py-4">
-                            <button
-                              onClick={() => viewEncryptedPins(esim)}
-                              className="px-3 py-1 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1 text-sm"
-                            >
-                              <Eye size={14} />
-                              View PINs
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* PIN Viewer Modal */}
-            {selectedInventoryItem && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-                  <div className="p-6 border-b border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xl font-semibold text-gray-900">Encrypted PINs</h3>
-                      <button
-                        onClick={() => setSelectedInventoryItem(null)}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <X size={20} />
-                      </button>
-                    </div>
-                    <p className="text-gray-600 mt-2">{selectedInventoryItem.bundleName || selectedInventoryItem.productName}</p>
-                  </div>
-                  <div className="p-6">
-                    {selectedInventoryItem.encryptedPins && selectedInventoryItem.encryptedPins.length > 0 ? (
-                      <div className="space-y-3">
-                        {selectedInventoryItem.encryptedPins.map((pin, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                            <div className="flex-1">
-                              <p className="text-xs text-gray-500 mb-1">PIN #{index + 1}</p>
-                              <p className="text-sm font-mono text-gray-900 break-all">{pin}</p>
-                            </div>
-                            <button
-                              onClick={() => copyToClipboard(pin)}
-                              className="ml-3 p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                              title="Copy PIN"
-                            >
-                              <Copy size={16} className="text-gray-600" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8">
-                        <AlertCircle size={48} className="text-gray-400 mx-auto mb-3" />
-                        <p className="text-gray-600">No PINs available</p>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>

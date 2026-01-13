@@ -69,6 +69,9 @@ public class StockController {
                 poolMap.put("usedQuantity", pool.getUsedQuantity());
                 poolMap.put("reservedQuantity", pool.getReservedQuantity());
                 poolMap.put("status", pool.getStatus());
+                poolMap.put("networkProvider", pool.getNetworkProvider());
+                poolMap.put("productType", pool.getProductType());
+                poolMap.put("price", pool.getPrice());
                 poolMap.put("description", pool.getDescription());
                 poolMap.put("supplier", pool.getSupplier());
                 poolMap.put("createdDate", pool.getCreatedDate());
@@ -154,36 +157,42 @@ public class StockController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> bulkUploadPins(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(required = false) String poolName,
-            @RequestParam(required = false) String type,
-            @RequestParam(required = false) String totalStock,
-            @RequestParam(required = false) String available,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String productId,
-            @RequestParam(required = false) String price,
-            @RequestParam(required = false) String notes,
+            @RequestParam("metadata") String metadataJson,
             @RequestParam(required = false, defaultValue = "admin") String uploadedBy) {
         try {
+            // Parse metadata JSON
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Map<String, String> metadata = mapper.readValue(metadataJson, Map.class);
+            
+            String poolName = metadata.get("poolName");
+            String productType = metadata.get("productType");
+            String networkProvider = metadata.get("networkProvider");
+            String productId = metadata.get("productId");
+            String price = metadata.get("price");
+            String notes = metadata.get("notes");
+            
             // Log received parameters
             System.out.println("===============================================");
             System.out.println("📥 Received PIN upload request:");
-            System.out.println("File: " + file.getOriginalFilename() + " (" + file.getSize() + " bytes)");
+            System.out.println("File: " + (file != null ? file.getOriginalFilename() + " (" + file.getSize() + " bytes)" : "NULL"));
             System.out.println("Pool Name: " + poolName);
-            System.out.println("Type: " + type);
-            System.out.println("Total Stock: " + totalStock);
-            System.out.println("Available: " + available);
-            System.out.println("Status: " + status);
+            System.out.println("Product Type: " + productType);
+            System.out.println("Network Provider: " + networkProvider);
             System.out.println("Product ID: " + productId);
             System.out.println("Price: " + price);
             System.out.println("Notes: " + notes);
             System.out.println("Uploaded By: " + uploadedBy);
             System.out.println("===============================================");
             
+            if (file == null) {
+                throw new IllegalArgumentException("No file uploaded");
+            }
+            
             if (file.isEmpty()) {
                 throw new IllegalArgumentException("Uploaded file is empty");
             }
             
-            Map<String, Object> result = stockService.uploadPinStock(file, uploadedBy, poolName, productId, price, notes);
+            Map<String, Object> result = stockService.uploadPinStock(file, uploadedBy, poolName, productId, price, notes, productType, networkProvider);
             
             System.out.println("✅ Upload successful!");
             System.out.println("Result: " + result);
@@ -208,26 +217,29 @@ public class StockController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> bulkUploadEsims(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(required = false) String poolName,
-            @RequestParam(required = false) String type,
-            @RequestParam(required = false) String totalStock,
-            @RequestParam(required = false) String available,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String productId,
-            @RequestParam(required = false) String notes,
+            @RequestParam("metadata") String metadataJson,
             @RequestParam(required = false, defaultValue = "admin") String uploadedBy) {
         try {
-            // Log received parameters
+            // Parse metadata JSON
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Map<String, String> metadata = mapper.readValue(metadataJson, Map.class);
+            
+            String poolName = metadata.get("poolName");
+            String productType = metadata.get("productType");
+            String networkProvider = metadata.get("networkProvider");
+            String productId = metadata.get("productId");
+            String price = metadata.get("price");
+            String notes = metadata.get("notes");
+            
             System.out.println("Received eSIM upload request:");
             System.out.println("Pool Name: " + poolName);
-            System.out.println("Type: " + type);
-            System.out.println("Total Stock: " + totalStock);
-            System.out.println("Available: " + available);
-            System.out.println("Status: " + status);
+            System.out.println("Product Type: " + productType);
+            System.out.println("Network Provider: " + networkProvider);
             System.out.println("Product ID: " + productId);
+            System.out.println("Price: " + price);
             System.out.println("Notes: " + notes);
             
-            Map<String, Object> result = stockService.uploadEsimStock(file, uploadedBy, poolName, productId, notes);
+            Map<String, Object> result = stockService.uploadEsimStock(file, uploadedBy, poolName, productId, price, notes, productType, networkProvider);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             e.printStackTrace();

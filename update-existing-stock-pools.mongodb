@@ -1,0 +1,26 @@
+// Update existing stock pools to add missing networkProvider and productType fields
+// Run this in MongoDB Compass or mongosh
+
+use('topupdb');
+
+// Update all stock pools that don't have networkProvider or productType
+db.stock_pools.updateMany(
+  {
+    $or: [
+      { networkProvider: { $exists: false } },
+      { networkProvider: null },
+      { networkProvider: "Unknown" },
+      { productType: { $exists: false } },
+      { productType: null }
+    ]
+  },
+  {
+    $set: {
+      networkProvider: "Lycamobile",  // Default to Lycamobile, change as needed
+      productType: "Bundle plans"      // Default to Bundle plans, change as needed
+    }
+  }
+);
+
+// View the results
+db.stock_pools.find({}, { name: 1, networkProvider: 1, productType: 1, price: 1 }).pretty();

@@ -742,11 +742,13 @@ public class RetailerPurchaseService {
             }
         
         // Find the retailer's orders that contain the specific bundle
+        // Accept all non-cancelled orders with available PINs
         List<Order> retailerOrders = orderRepository.findByRetailer_Id(retailerId).stream()
-            .filter(order -> order.getStatus() == Order.OrderStatus.COMPLETED)
+            .filter(order -> order.getStatus() != Order.OrderStatus.CANCELLED && 
+                           order.getStatus() != Order.OrderStatus.REFUNDED)
             .collect(Collectors.toList());
             
-        System.out.println("📦 Found " + retailerOrders.size() + " completed orders for retailer");
+        System.out.println("📦 Found " + retailerOrders.size() + " orders for retailer (excluding cancelled/refunded)");
         
         if (retailerOrders.isEmpty()) {
             throw new RuntimeException("No inventory found. Please purchase bundles from admin first to build your inventory before making direct sales to customers.");
@@ -763,10 +765,15 @@ public class RetailerPurchaseService {
             BigDecimal orderUnitPrice = order.getAmount().divide(BigDecimal.valueOf(order.getQuantity()), 2, java.math.RoundingMode.HALF_UP);
             
             System.out.println("🔍 Checking order " + order.getId() + " - Product: '" + productName + "', Price: " + orderUnitPrice + ", Looking for: '" + bundleName + "', " + unitPrice);
-            System.out.println("    - Product name match: " + productName.equals(bundleName));
-            System.out.println("    - Price match: " + (orderUnitPrice.compareTo(unitPrice) == 0));
             
-            if (productName.equals(bundleName) && orderUnitPrice.compareTo(unitPrice) == 0) {
+            // Case-insensitive and trim comparison for product name
+            boolean nameMatches = productName.trim().equalsIgnoreCase(bundleName.trim());
+            boolean priceMatches = orderUnitPrice.compareTo(unitPrice) == 0;
+            
+            System.out.println("    - Product name match (case-insensitive): " + nameMatches + " ('" + productName.trim() + "' vs '" + bundleName.trim() + "')");
+            System.out.println("    - Price match: " + priceMatches + " (" + orderUnitPrice + " vs " + unitPrice + ")");
+            
+            if (nameMatches && priceMatches) {
                 System.out.println("✅ Order " + order.getId() + " matches!");
                 // Get PINs from this order
                 if (order.getMetadata() != null && order.getMetadata().containsKey("allocatedItems")) {
@@ -817,7 +824,12 @@ public class RetailerPurchaseService {
                 if (pin.trim().length() > 0) {
                     if (pinsToSell > 0) {
                         // This PIN is being sold
-                        String decryptedPin = decryptPinForReceipt(pin.trim());
+                        String rawPin = pin.trim();
+                        System.out.println("🔍 RAW PIN from database: '" + rawPin + "' (length: " + rawPin.length() + ")");
+                        
+                        String decryptedPin = decryptPinForReceipt(rawPin);
+                        System.out.println("🔓 DECRYPTED PIN: '" + decryptedPin + "' (length: " + decryptedPin.length() + ")");
+                        
                         Map<String, Object> soldPin = new HashMap<>();
                         soldPin.put("pin", decryptedPin);
                         soldPin.put("bundleName", bundleName);
@@ -828,7 +840,7 @@ public class RetailerPurchaseService {
                         soldPins.add(soldPin);
                         pinsToSell--;
                         
-                        System.out.println("📤 Selling PIN from inventory: " + pin.trim() + " -> " + decryptedPin);
+                        System.out.println("📤 Selling PIN from inventory: " + rawPin + " -> " + decryptedPin);
                     } else {
                         // This PIN remains in inventory
                         remainingPins.add(pin.trim());

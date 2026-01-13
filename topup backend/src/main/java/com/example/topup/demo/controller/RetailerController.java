@@ -8,6 +8,8 @@ import com.example.topup.demo.entity.Order.OrderStatus;
 import com.example.topup.demo.service.RetailerService;
 import com.example.topup.demo.service.UserService;
 import com.example.topup.demo.service.BundleService;
+import com.example.topup.demo.service.StockService;
+import com.example.topup.demo.entity.StockPool;
 import com.example.topup.demo.repository.RetailerOrderRepository;
 import com.example.topup.demo.repository.OrderRepository;
 
@@ -42,6 +44,9 @@ public class RetailerController {
     
     @Autowired
     private UserService userService;
+    
+    @Autowired
+    private StockService stockService;
     
     @Autowired
     private RetailerOrderRepository retailerOrderRepository;
@@ -793,6 +798,108 @@ public class RetailerController {
             
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(errorResponse);
+        }
+    }
+
+    // Direct sale from admin stock pool (POS)
+    @PostMapping("/direct-sale")
+    public ResponseEntity<?> directSale(@RequestBody Map<String, Object> saleRequest, Authentication authentication) {
+        try {
+            System.out.println("📥 Received direct sale request: " + saleRequest);
+            
+            User retailer = getUserFromAuthentication(authentication);
+            
+            String bundleId = (String) saleRequest.get("bundleId");
+            String bundleName = (String) saleRequest.get("bundleName");
+            Integer quantity = (Integer) saleRequest.get("quantity");
+            Object unitPriceObj = saleRequest.get("unitPrice");
+            Object totalAmountObj = saleRequest.get("totalAmount");
+            String customerName = (String) saleRequest.getOrDefault("customerName", "Walk-in Customer");
+            String customerPhone = (String) saleRequest.getOrDefault("customerPhone", "");
+            String customerEmail = (String) saleRequest.getOrDefault("customerEmail", "");
+            
+            // Handle numeric values that might come as Double or Integer
+            double unitPrice = 0;
+            if (unitPriceObj instanceof Number) {
+                unitPrice = ((Number) unitPriceObj).doubleValue();
+            }
+            
+            double totalAmount = 0;
+            if (totalAmountObj instanceof Number) {
+                totalAmount = ((Number) totalAmountObj).doubleValue();
+            }
+            
+            if (bundleId == null || quantity == null || quantity <= 0) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("message", "Invalid sale request. bundleId and quantity are required.");
+                return ResponseEntity.badRequest().body(error);
+            }
+            
+            System.out.println("🛒 Processing sale: " + quantity + "x " + bundleName + " (" + bundleId + ")");
+            
+            // Assign stock items from admin pool
+            List<Map<String, String>> assignedPins = new ArrayList<>();
+            String orderId = "POS-" + System.currentTimeMillis();
+            
+            for (int i = 0; i < quantity; i++) {
+                try {
+                    // Assign stock from admin pool
+                    StockPool.StockItem item = stockService.assignStockToOrder(
+                        bundleId, 
+                        StockPool.StockType.EPIN, 
+                        orderId,
+                        retailer.getId(),
+                        retailer.getEmail()
+                    );
+                    
+                    // Decrypt the PIN for customer
+                    String decryptedPin = stockService.decryptData(item.getItemData());
+                    
+                    // Create PIN object with details
+                    Map<String, String> pinData = new HashMap<>();
+                    pinData.put("pin", decryptedPin);
+                    pinData.put("serialNumber", item.getSerialNumber() != null ? item.getSerialNumber() : "N/A");
+                    pinData.put("expiryDate", item.getExpiryDate() != null ? item.getExpiryDate().toString() : null);
+                    
+                    assignedPins.add(pinData);
+                    
+                    System.out.println("✅ Assigned PIN " + (i + 1) + "/" + quantity + ": " + decryptedPin);
+                } catch (Exception e) {
+                    System.err.println("❌ Failed to assign PIN " + (i + 1) + ": " + e.getMessage());
+                    // Rollback would happen here in a transactional context
+                    throw new RuntimeException("Failed to allocate stock: " + e.getMessage());
+                }
+            }
+            
+            System.out.println("✅ Sale completed - " + assignedPins.size() + " PINs assigned");
+            
+            // Prepare response
+            Map<String, Object> saleData = new HashMap<>();
+            saleData.put("saleId", orderId);
+            saleData.put("pins", assignedPins);
+            saleData.put("bundleName", bundleName);
+            saleData.put("quantity", quantity);
+            saleData.put("totalAmount", totalAmount);
+            saleData.put("customerName", customerName);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Sale completed successfully");
+            response.put("data", saleData);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            System.err.println("❌ Direct sale failed: " + e.getMessage());
+            e.printStackTrace();
+            
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "Sale failed: " + e.getMessage());
+            error.put("details", e.getClass().getSimpleName());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
 

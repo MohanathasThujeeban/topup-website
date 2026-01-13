@@ -45,6 +45,11 @@ public class StockPool {
     private String description;
     private String supplier;
     private String batchNumber;
+    
+    // New fields for enhanced categorization
+    private String networkProvider; // Lycamobile, Mycall, Telia
+    private String productType; // Topups, Bundle plans, Data plans
+    private String price; // Price in NOK
 
     @CreatedDate
     private LocalDateTime createdDate;
@@ -212,6 +217,15 @@ public class StockPool {
 
     public String getBatchNumber() { return batchNumber; }
     public void setBatchNumber(String batchNumber) { this.batchNumber = batchNumber; }
+
+    public String getNetworkProvider() { return networkProvider; }
+    public void setNetworkProvider(String networkProvider) { this.networkProvider = networkProvider; }
+
+    public String getProductType() { return productType; }
+    public void setProductType(String productType) { this.productType = productType; }
+
+    public String getPrice() { return price; }
+    public void setPrice(String price) { this.price = price; }
 
     public LocalDateTime getCreatedDate() { return createdDate; }
     public void setCreatedDate(LocalDateTime createdDate) { this.createdDate = createdDate; }

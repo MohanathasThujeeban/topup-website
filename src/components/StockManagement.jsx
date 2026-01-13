@@ -28,6 +28,8 @@ export default function StockManagement() {
   const [poolMetadata, setPoolMetadata] = useState({
     poolName: '',
     type: 'EPIN',
+    productType: 'Bundle plans',
+    networkProvider: 'Lycamobile',
     totalStock: '',
     available: '',
     status: 'ACTIVE',
@@ -169,16 +171,28 @@ export default function StockManagement() {
       return;
     }
     
+    // Auto-generate productId if not provided
+    const productId = poolMetadata.productId || `PROD-${Date.now()}`;
+    
+    // Encode all metadata as a single JSON string to reduce multipart form field count
+    const metadata = JSON.stringify({
+      poolName: poolMetadata.poolName,
+      productType: poolMetadata.productType,
+      networkProvider: poolMetadata.networkProvider,
+      productId: productId,
+      price: poolMetadata.price,
+      notes: poolMetadata.notes || ''
+    });
+    
     const formData = new FormData();
     formData.append('file', selectedFile);
-    formData.append('poolName', poolMetadata.poolName);
-    formData.append('type', poolMetadata.type);
-    formData.append('totalStock', poolMetadata.totalStock);
-    formData.append('available', poolMetadata.available || poolMetadata.totalStock);
-    formData.append('status', poolMetadata.status);
-    formData.append('productId', poolMetadata.productId);
-    formData.append('notes', poolMetadata.notes);
-    formData.append('price', poolMetadata.price);
+    formData.append('metadata', metadata);
+    
+    console.log('📤 Uploading PIN stock with parameters:', {
+      fileName: selectedFile.name,
+      fileSize: selectedFile.size,
+      metadata: JSON.parse(metadata)
+    });
 
     try {
       const token = localStorage.getItem('token');
@@ -223,6 +237,8 @@ export default function StockManagement() {
         setPoolMetadata({
           poolName: '',
           type: 'EPIN',
+          productType: 'Bundle plans',
+          networkProvider: 'Lycamobile',
           totalStock: '',
           available: '',
           status: 'ACTIVE',
@@ -234,12 +250,32 @@ export default function StockManagement() {
         fetchStockData();
         fetchStatistics();
       } else {
-        const error = await response.json();
-        alert(`Upload failed: ${error.error}`);
+        const error = await response.json().catch(() => ({ error: 'Unknown error', message: response.statusText }));
+        console.error('❌ Upload failed:', error);
+        console.error('❌ Full error object:', JSON.stringify(error, null, 2));
+        const errorMsg = error.message || error.error || error.hint || 'Upload failed';
+        const details = [];
+        if (error.error) details.push(`Error: ${error.error}`);
+        if (error.message) details.push(`Message: ${error.message}`);
+        if (error.hint) details.push(`Hint: ${error.hint}`);
+        if (error.missingPart) details.push(`Missing: ${error.missingPart}`);
+        
+        alert(`Upload failed!\n\n${details.join('\n')}`);
+        
+        // Also log to console for debugging
+        console.table({
+          'File Name': selectedFile.name,
+          'File Size': selectedFile.size,
+          'Pool Name': poolMetadata.poolName,
+          'Product Type': poolMetadata.productType,
+          'Network Provider': poolMetadata.networkProvider,
+          'Product ID': productId,
+          'Price': poolMetadata.price
+        });
       }
     } catch (error) {
       console.error('Error uploading file:', error);
-      alert('Failed to upload file. Please try again.');
+      alert(`Failed to upload file: ${error.message}\n\nPlease check:\n- File is not empty\n- File format is correct CSV\n- All required fields are filled`);
     } finally {
       setUploadingPins(false);
       setUploadingEsims(false);
@@ -593,6 +629,105 @@ export default function StockManagement() {
           </table>
         </div>
       </div>
+
+      {/* Stock Pools as Cards - New View */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+        {!loading && stockPools && stockPools.length > 0 && stockPools
+          .filter(pool => 
+            searchQuery === '' || 
+            pool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            pool.productId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            pool.networkProvider?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            pool.productType?.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+          .map((pool) => (
+            <div key={`card-${pool.id}`} className="bg-white rounded-xl shadow-lg border-2 border-gray-200 hover:border-indigo-400 transition-all overflow-hidden">
+              {/* Card Header */}
+              <div className={`p-4 ${
+                pool.productType === 'Topups' ? 'bg-gradient-to-r from-green-500 to-emerald-500' :
+                pool.productType === 'Bundle plans' ? 'bg-gradient-to-r from-blue-500 to-indigo-500' :
+                pool.productType === 'Data plans' ? 'bg-gradient-to-r from-purple-500 to-pink-500' :
+                'bg-gradient-to-r from-gray-500 to-gray-600'
+              }`}>
+                <div className="flex items-center justify-between text-white">
+                  <div>
+                    <p className="text-xs font-medium opacity-90">{pool.networkProvider || 'Network'}</p>
+                    <h3 className="text-lg font-bold">{pool.name}</h3>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs opacity-90">Price</p>
+                    <p className="text-xl font-bold">{pool.price ? `${pool.price} NOK` : 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card Body */}
+              <div className="p-4 space-y-3">
+                {/* Product Type Badge */}
+                <div className="flex items-center justify-between">
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${
+                    pool.productType === 'Topups' ? 'bg-green-100 text-green-800' :
+                    pool.productType === 'Bundle plans' ? 'bg-blue-100 text-blue-800' :
+                    pool.productType === 'Data plans' ? 'bg-purple-100 text-purple-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {pool.productType || 'Bundle plans'}
+                  </span>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    pool.stockType === 'EPIN' ? 'bg-blue-100 text-blue-800' :
+                    pool.stockType === 'ESIM' ? 'bg-purple-100 text-purple-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {pool.stockType}
+                  </span>
+                </div>
+
+                {/* Stock Information */}
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-gray-50 rounded-lg p-2">
+                    <p className="text-xs text-gray-500">Total</p>
+                    <p className="text-lg font-bold text-gray-900">{pool.totalQuantity || 0}</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-2">
+                    <p className="text-xs text-green-600">Available</p>
+                    <p className="text-lg font-bold text-green-600">{pool.availableQuantity || 0}</p>
+                  </div>
+                  <div className="bg-red-50 rounded-lg p-2">
+                    <p className="text-xs text-red-600">Used</p>
+                    <p className="text-lg font-bold text-red-600">{pool.usedQuantity || 0}</p>
+                  </div>
+                </div>
+
+                {/* Product ID */}
+                <div className="border-t pt-2">
+                  <p className="text-xs text-gray-500">Product ID</p>
+                  <p className="text-sm font-mono text-gray-700 truncate">{pool.productId || pool.id}</p>
+                </div>
+
+                {/* Status */}
+                <div className="flex items-center justify-between">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                    pool.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
+                    pool.status === 'DEPLETED' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {pool.status === 'ACTIVE' && <CheckCircle size={12} className="mr-1" />}
+                    {pool.status === 'DEPLETED' && <XCircle size={12} className="mr-1" />}
+                    {pool.status}
+                  </span>
+                  <button
+                    onClick={() => alert(`Pool Details:\nName: ${pool.name}\nNetwork: ${pool.networkProvider}\nProduct Type: ${pool.productType}\nType: ${pool.stockType}\nPrice: ${pool.price} NOK\nTotal: ${pool.totalQuantity}\nAvailable: ${pool.availableQuantity}\nProduct ID: ${pool.productId}`)}
+                    className="text-indigo-600 hover:text-indigo-900 p-2 hover:bg-indigo-50 rounded-lg transition-colors"
+                    title="View Details"
+                  >
+                    <Eye size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        }
+      </div>
     </div>
   );
 
@@ -647,6 +782,11 @@ export default function StockManagement() {
                     setPoolMetadata({
                       poolName: '',
                       type: 'EPIN',
+                      productType: 'Bundle plans',
+                      networkProvider: 'Lycamobile',
+                      totalStock: '',
+                      available: '',
+                      status: 'ACTIVE',
                       productId: '',
                       notes: '',
                       price: ''
@@ -706,6 +846,36 @@ export default function StockManagement() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Network Provider <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={poolMetadata.networkProvider}
+                    onChange={(e) => setPoolMetadata({...poolMetadata, networkProvider: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                  >
+                    <option value="Lycamobile">📱 Lycamobile</option>
+                    <option value="Mycall">📞 Mycall</option>
+                    <option value="Telia">📶 Telia</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Product Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={poolMetadata.productType}
+                    onChange={(e) => setPoolMetadata({...poolMetadata, productType: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                  >
+                    <option value="Topups">💳 Topups</option>
+                    <option value="Bundle plans">📦 Bundle plans</option>
+                    <option value="Data plans">📊 Data plans</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Type <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -715,7 +885,6 @@ export default function StockManagement() {
                   >
                     <option value="EPIN">🔢 ePIN</option>
                     <option value="ESIM">📶 eSIM</option>
-                    <option value="Data bundle">📦 Data Bundle</option>
                   </select>
                 </div>
 
