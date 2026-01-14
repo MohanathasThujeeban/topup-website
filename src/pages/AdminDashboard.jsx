@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import AdminLoadingScreen from '../components/AdminLoadingScreen';
 import StockManagement from '../components/StockManagement';
+import EsimStockManagement from '../components/EsimStockManagement';
 import PromotionCampaignManager from '../components/PromotionCampaignManager';
 import RetailerCreditManagement from '../components/RetailerCreditManagement';
 import EsimApprovals from '../components/EsimApprovals';
@@ -1751,12 +1752,12 @@ export default function AdminDashboard() {
                   <td colSpan={8} className="px-6 py-12 text-center">
                     <Globe2 size={32} className="text-gray-400 mx-auto mb-2" />
                     <p className="text-gray-500">No eSIM data found</p>
-                    <p className="text-sm text-gray-400">Upload eSIM CSV files in Stock Management to create eSIM inventory</p>
+                    <p className="text-sm text-gray-400">Upload eSIM CSV files in eSIM Stock Management to create eSIM inventory</p>
                     <button 
-                      onClick={() => setActiveTab('stock')}
+                      onClick={() => setActiveTab('esim-stock')}
                       className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                     >
-                      Go to Stock Management
+                      Go to eSIM Stock
                     </button>
                   </td>
                 </tr>
@@ -2508,9 +2509,16 @@ export default function AdminDashboard() {
               />
               <SidebarNavItem
                 id="stock"
-                label="Stock"
+                label="ePIN Stock"
                 icon={Box}
                 active={activeTab === 'stock'}
+                onClick={setActiveTab}
+              />
+              <SidebarNavItem
+                id="esim-stock"
+                label="eSIM Stock"
+                icon={QrCode}
+                active={activeTab === 'esim-stock'}
                 onClick={setActiveTab}
               />
               <SidebarNavItem
@@ -2579,6 +2587,9 @@ export default function AdminDashboard() {
               <button onClick={() => { setActiveTab('stock'); }} className={`w-full p-3 rounded-xl ${activeTab === 'stock' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
                 <Box size={20} className="mx-auto" />
               </button>
+              <button onClick={() => { setActiveTab('esim-stock'); }} className={`w-full p-3 rounded-xl ${activeTab === 'esim-stock' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
+                <QrCode size={20} className="mx-auto" />
+              </button>
               <button onClick={() => { setActiveTab('retailer-credit'); }} className={`w-full p-3 rounded-xl ${activeTab === 'retailer-credit' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}`}>
                 <CreditCard size={20} className="mx-auto" />
               </button>
@@ -2615,7 +2626,8 @@ export default function AdminDashboard() {
                  activeTab === 'bundles' ? 'Bundle Management' :
                  activeTab === 'esim' ? 'eSIM Management' :
                  activeTab === 'esim-approvals' ? 'eSIM Approvals' :
-                 activeTab === 'stock' ? 'Stock Management' :
+                 activeTab === 'stock' ? 'ePIN Stock Management' :
+                 activeTab === 'esim-stock' ? 'eSIM Stock Management' :
                  activeTab === 'retailer-credit' ? 'Retailer Credit Management' :
                  activeTab === 'business-approvals' ? 'Business Approvals' :
                  activeTab === 'enquiries' ? 'Customer Support' :
@@ -2672,6 +2684,7 @@ export default function AdminDashboard() {
             {activeTab === 'esim' && renderEsimManagement()}
             {activeTab === 'esim-approvals' && <EsimApprovals />}
             {activeTab === 'stock' && <StockManagement />}
+            {activeTab === 'esim-stock' && <EsimStockManagement />}
             {activeTab === 'retailer-credit' && <RetailerCreditManagement />}
             {activeTab === 'invoices' && <InvoiceAndSales />}
             {activeTab === 'business-approvals' && renderBusinessApprovals()}

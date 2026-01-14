@@ -180,6 +180,15 @@ public class StockService {
      * Expected CSV format: iccid, serialNumber, activationUrl, qrCodeUrl, productId, notes, poolName, type, price
      */
     public Map<String, Object> uploadEsimStock(MultipartFile file, String adminUser, String poolName, String productId, String price, String notes, String productType, String networkProvider) throws Exception {
+        return uploadEsimStockWithQR(file, new HashMap<>(), adminUser, poolName, productId, price, notes, productType, networkProvider);
+    }
+
+    /**
+     * Upload eSIM stock from CSV file with QR code images matched by filename (ICCID)
+     * Expected CSV format: iccid, activation_code, pin_1, puk_1, pin_2, puk_2
+     * QR code images should be named with ICCID (e.g., 8947230000000000001.png)
+     */
+    public Map<String, Object> uploadEsimStockWithQRByFilename(MultipartFile file, Map<String, String> qrCodeByFilename, String adminUser, String poolName, String productId, String price, String notes, String productType, String networkProvider) throws Exception {
         // Use provided pool name or fallback to CSV filename
         String finalPoolName = (poolName != null && !poolName.trim().isEmpty()) ? poolName : 
             (file.getOriginalFilename() != null ? file.getOriginalFilename().replaceFirst("[.][^.]+$", "") : "ESIM_BUNDLE_" + System.currentTimeMillis());
@@ -190,12 +199,52 @@ public class StockService {
             throw new IllegalArgumentException("CSV file is empty or invalid");
         }
 
+        // Match QR codes to items by ICCID (filename)
+        if (qrCodeByFilename != null && !qrCodeByFilename.isEmpty()) {
+            System.out.println("📸 Matching QR codes to eSIMs by ICCID filename...");
+            int matchedCount = 0;
+            
+            for (StockItemDTO item : items) {
+                String iccid = item.getItemData();
+                if (iccid != null) {
+                    // Convert scientific notation to full number
+                    String fullIccid = convertScientificNotation(iccid);
+                    
+                    // Try to find matching QR code by filename
+                    // Try exact match first
+                    if (qrCodeByFilename.containsKey(fullIccid)) {
+                        item.setQrCodeImage(qrCodeByFilename.get(fullIccid));
+                        matchedCount++;
+                        System.out.println("   ✓ Matched QR for ICCID: " + fullIccid);
+                    } else {
+                        // Try to find partial match (in case filename has different format)
+                        boolean found = false;
+                        for (Map.Entry<String, String> qrEntry : qrCodeByFilename.entrySet()) {
+                            String qrFilename = qrEntry.getKey();
+                            // Check if filename contains the ICCID or vice versa
+                            if (qrFilename.contains(fullIccid) || fullIccid.contains(qrFilename)) {
+                                item.setQrCodeImage(qrEntry.getValue());
+                                matchedCount++;
+                                found = true;
+                                System.out.println("   ✓ Matched QR for ICCID: " + fullIccid + " (partial match with: " + qrFilename + ")");
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            System.out.println("   ⚠️ No QR code found for ICCID: " + fullIccid);
+                        }
+                    }
+                }
+            }
+            System.out.println("✅ Matched " + matchedCount + " out of " + items.size() + " QR codes");
+        }
+        
         Map<String, List<StockItemDTO>> itemsByProduct = groupByProduct(items, productId);
         
         int totalImported = 0;
         List<String> errors = new ArrayList<>();
         List<StockPool> createdPools = new ArrayList<>();
-
+        
         for (Map.Entry<String, List<StockItemDTO>> entry : itemsByProduct.entrySet()) {
             String poolProductId = entry.getKey();
             List<StockItemDTO> productItems = entry.getValue();
@@ -220,9 +269,145 @@ public class StockService {
                     StockItem item = new StockItem(encryptedIccid, dto.getSerialNumber());
                     item.setItemId(UUID.randomUUID().toString());
                     item.setActivationUrl(dto.getActivationUrl());
+                    
+                    // Encrypt and store activation code
+                    if (dto.getActivationCode() != null) {
+                        item.setActivationCode(encryptData(dto.getActivationCode()));
+                    }
+                    
+                    // Encrypt and store PIN/PUK codes
+                    if (dto.getPin1() != null) {
+                        item.setPin1(encryptData(dto.getPin1()));
+                    }
+                    if (dto.getPuk1() != null) {
+                        item.setPuk1(encryptData(dto.getPuk1()));
+                    }
+                    if (dto.getPin2() != null) {
+                        item.setPin2(encryptData(dto.getPin2()));
+                    }
+                    if (dto.getPuk2() != null) {
+                        item.setPuk2(encryptData(dto.getPuk2()));
+                    }
+                    
+                    // Handle QR code
                     item.setQrCodeUrl(dto.getQrCodeUrl());
-                    item.setQrCodeImage(dto.getQrCodeImage());
+                    if (dto.getQrCodeImage() != null) {
+                        // Encrypt QR code image if provided
+                        item.setQrCodeImage(encryptData(dto.getQrCodeImage()));
+                    }
+                    
                     item.setNotes(dto.getNotes());
+                    item.setType("ESIM");
+                    pool.addItem(item);
+                    totalImported++;
+                }
+                
+                pool.setLastModifiedBy(adminUser);
+                pool.setLastModifiedDate(LocalDateTime.now());
+                stockPoolRepository.save(pool);
+                createdPools.add(pool);
+                
+            } catch (Exception e) {
+                errors.add("Error processing product " + poolProductId + ": " + e.getMessage());
+            }
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("totalImported", totalImported);
+        result.put("poolsUpdated", createdPools.size());
+        result.put("bundleName", finalPoolName);
+        result.put("errors", errors);
+        result.put("stockPools", createdPools);
+
+        return result;
+    }
+
+    /**
+     * Upload eSIM stock from CSV file with QR code images
+     * Expected CSV format: iccid, activation_code, pin_1, puk_1, pin_2, puk_2
+     */
+    public Map<String, Object> uploadEsimStockWithQR(MultipartFile file, Map<Integer, String> qrCodeMap, String adminUser, String poolName, String productId, String price, String notes, String productType, String networkProvider) throws Exception {
+        // Use provided pool name or fallback to CSV filename
+        String finalPoolName = (poolName != null && !poolName.trim().isEmpty()) ? poolName : 
+            (file.getOriginalFilename() != null ? file.getOriginalFilename().replaceFirst("[.][^.]+$", "") : "ESIM_BUNDLE_" + System.currentTimeMillis());
+        
+        List<StockItemDTO> items = parseEsimCSV(file);
+        
+        if (items.isEmpty()) {
+            throw new IllegalArgumentException("CSV file is empty or invalid");
+        }
+
+        // Assign QR codes to items if provided
+        if (qrCodeMap != null && !qrCodeMap.isEmpty()) {
+            System.out.println("📸 Assigning " + qrCodeMap.size() + " QR codes to eSIM items...");
+            for (int i = 0; i < Math.min(items.size(), qrCodeMap.size()); i++) {
+                if (qrCodeMap.containsKey(i)) {
+                    items.get(i).setQrCodeImage(qrCodeMap.get(i));
+                    System.out.println("   ✓ Assigned QR code " + (i + 1) + " to eSIM " + (i + 1));
+                }
+            }
+        }
+        
+        Map<String, List<StockItemDTO>> itemsByProduct = groupByProduct(items, productId);
+        
+        int totalImported = 0;
+        List<String> errors = new ArrayList<>();
+        List<StockPool> createdPools = new ArrayList<>();
+        
+        for (Map.Entry<String, List<StockItemDTO>> entry : itemsByProduct.entrySet()) {
+            String poolProductId = entry.getKey();
+            List<StockItemDTO> productItems = entry.getValue();
+
+            try {
+                StockPool pool = getOrCreateStockPool(poolProductId, StockPool.StockType.ESIM, adminUser);
+                
+                // Set the pool name and metadata
+                pool.setName(finalPoolName);
+                pool.setBatchNumber(finalPoolName);
+                pool.setNetworkProvider(networkProvider);
+                pool.setProductType(productType);
+                pool.setPrice(price);
+                if (notes != null && !notes.trim().isEmpty()) {
+                    pool.setDescription(notes);
+                }
+                
+                for (StockItemDTO dto : productItems) {
+                    // Encrypt the ICCID before storing
+                    String encryptedIccid = encryptData(dto.getItemData());
+                    
+                    StockItem item = new StockItem(encryptedIccid, dto.getSerialNumber());
+                    item.setItemId(UUID.randomUUID().toString());
+                    item.setActivationUrl(dto.getActivationUrl());
+                    
+                    // Encrypt and store activation code
+                    if (dto.getActivationCode() != null) {
+                        item.setActivationCode(encryptData(dto.getActivationCode()));
+                    }
+                    
+                    // Encrypt and store PIN/PUK codes
+                    if (dto.getPin1() != null) {
+                        item.setPin1(encryptData(dto.getPin1()));
+                    }
+                    if (dto.getPuk1() != null) {
+                        item.setPuk1(encryptData(dto.getPuk1()));
+                    }
+                    if (dto.getPin2() != null) {
+                        item.setPin2(encryptData(dto.getPin2()));
+                    }
+                    if (dto.getPuk2() != null) {
+                        item.setPuk2(encryptData(dto.getPuk2()));
+                    }
+                    
+                    // Handle QR code
+                    item.setQrCodeUrl(dto.getQrCodeUrl());
+                    if (dto.getQrCodeImage() != null) {
+                        // Encrypt QR code image if provided
+                        item.setQrCodeImage(encryptData(dto.getQrCodeImage()));
+                    }
+                    
+                    item.setNotes(dto.getNotes());
+                    item.setType("ESIM");
                     pool.addItem(item);
                     totalImported++;
                 }
@@ -600,6 +785,10 @@ public class StockService {
     private List<StockItemDTO> parseEsimCSV(MultipartFile file) throws Exception {
         List<StockItemDTO> items = new ArrayList<>();
         
+        System.out.println("📄 Starting eSIM CSV parsing...");
+        System.out.println("File name: " + file.getOriginalFilename());
+        System.out.println("File size: " + file.getSize() + " bytes");
+        
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
             
@@ -608,13 +797,51 @@ public class StockService {
                 .withIgnoreHeaderCase()
                 .withTrim());
             
+            // Log the actual headers found in the CSV
+            Map<String, Integer> headerMap = csvParser.getHeaderMap();
+            System.out.println("📋 CSV Headers found: " + headerMap.keySet());
+            
             for (CSVRecord record : csvParser) {
                 StockItemDTO item = new StockItemDTO();
-                item.setItemData(record.get("iccid"));
-                item.setSerialNumber(record.get("serialNumber"));
-                item.setActivationUrl(record.get("activationUrl"));
-                item.setQrCodeUrl(record.get("qrCodeUrl"));
                 
+                // Required: ICCID
+                if (record.isMapped("iccid")) {
+                    item.setItemData(record.get("iccid"));
+                } else {
+                    throw new IllegalArgumentException("CSV must contain 'iccid' column. Found columns: " + headerMap.keySet());
+                }
+                
+                // Required: Activation Code
+                if (record.isMapped("activation_code")) {
+                    item.setActivationCode(record.get("activation_code"));
+                } else {
+                    throw new IllegalArgumentException("CSV must contain 'activation_code' column. Found columns: " + headerMap.keySet());
+                }
+                
+                // PIN and PUK codes
+                if (record.isMapped("pin_1")) {
+                    item.setPin1(record.get("pin_1"));
+                }
+                if (record.isMapped("puk_1")) {
+                    item.setPuk1(record.get("puk_1"));
+                }
+                if (record.isMapped("pin_2")) {
+                    item.setPin2(record.get("pin_2"));
+                }
+                if (record.isMapped("puk_2")) {
+                    item.setPuk2(record.get("puk_2"));
+                }
+                
+                // Optional fields
+                if (record.isMapped("serialNumber")) {
+                    item.setSerialNumber(record.get("serialNumber"));
+                }
+                if (record.isMapped("activationUrl")) {
+                    item.setActivationUrl(record.get("activationUrl"));
+                }
+                if (record.isMapped("qrCodeUrl")) {
+                    item.setQrCodeUrl(record.get("qrCodeUrl"));
+                }
                 if (record.isMapped("qrCodeImage")) {
                     item.setQrCodeImage(record.get("qrCodeImage"));
                 }
@@ -626,6 +853,8 @@ public class StockService {
                 
                 items.add(item);
             }
+            
+            System.out.println("✅ Parsed " + items.size() + " eSIM records from CSV");
         }
         
         return items;

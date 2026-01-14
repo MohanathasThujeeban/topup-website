@@ -381,7 +381,7 @@ export default function StockManagement() {
           <Zap className="text-indigo-600" size={20} />
           Quick Actions
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <button
             onClick={handlePinUpload}
             disabled={uploadingPins}
@@ -390,17 +390,6 @@ export default function StockManagement() {
             <Upload className="text-indigo-600 mb-2" size={24} />
             <span className="text-sm font-medium text-center">
               {uploadingPins ? 'Uploading...' : 'Upload PINs CSV'}
-            </span>
-          </button>
-
-          <button
-            onClick={handleEsimUpload}
-            disabled={uploadingEsims}
-            className="flex flex-col items-center p-4 border-2 border-dashed border-purple-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Upload className="text-purple-600 mb-2" size={24} />
-            <span className="text-sm font-medium text-center">
-              {uploadingEsims ? 'Uploading...' : 'Upload eSIMs CSV'}
             </span>
           </button>
 

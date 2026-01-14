@@ -1251,4 +1251,144 @@ public class EmailService {
             throw new RuntimeException("Failed to send activation email", e);
         }
     }
+
+    /**
+     * Send eSIM QR Code to customer
+     */
+    public void sendEsimQRCode(String toEmail, String customerName, String passportId,
+                               String qrCodeBase64, String iccid, String activationCode,
+                               String pin1, String puk1, String networkProvider, String price) {
+        try {
+            log.info("Sending eSIM QR code email to: {}", toEmail);
+            
+            MimeMessage message = javaMailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Your eSIM QR Code - " + networkProvider);
+            
+            // Decode base64 QR code to bytes
+            byte[] qrCodeBytes = java.util.Base64.getDecoder().decode(qrCodeBase64);
+            
+            // Create HTML email with CID reference for QR code
+            String htmlContent = String.format("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+                        .qr-container { text-align: center; background: white; padding: 20px; margin: 20px 0; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                        .qr-code { max-width: 300px; width: 100%%; height: auto; }
+                        .info-box { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #667eea; }
+                        .info-label { font-weight: bold; color: #667eea; font-size: 12px; text-transform: uppercase; }
+                        .info-value { font-family: 'Courier New', monospace; font-size: 14px; color: #333; margin-top: 5px; word-break: break-all; }
+                        .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 8px; }
+                        .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+                        .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>Your eSIM is Ready!</h1>
+                            <p>Thank you for your purchase</p>
+                        </div>
+                        <div class="content">
+                            <h2>Hello %s,</h2>
+                            <p>Your eSIM has been successfully activated. Below you'll find your QR code and activation details.</p>
+                            
+                            <div class="qr-container">
+                                <h3>Scan this QR Code</h3>
+                                <img src="cid:qrCodeImage" alt="eSIM QR Code" class="qr-code" />
+                                <p style="color: #666; font-size: 12px; margin-top: 10px;">
+                                    Scan this code with your device camera to install the eSIM
+                                </p>
+                            </div>
+
+                            <h3>eSIM Details</h3>
+                            
+                            <div class="info-box">
+                                <div class="info-label">ICCID Number</div>
+                                <div class="info-value">%s</div>
+                            </div>
+
+                            <div class="info-box">
+                                <div class="info-label">Activation Code</div>
+                                <div class="info-value">%s</div>
+                            </div>
+
+                            %s
+
+                            %s
+
+                            <div class="info-box">
+                                <div class="info-label">Network Provider</div>
+                                <div class="info-value">%s</div>
+                            </div>
+
+                            <div class="info-box">
+                                <div class="info-label">Customer ID</div>
+                                <div class="info-value">%s</div>
+                            </div>
+
+                            <div class="warning">
+                                <strong>⚠️ Important:</strong>
+                                <ul>
+                                    <li>Keep this QR code secure and do not share it with anyone</li>
+                                    <li>You can only install this eSIM once</li>
+                                    <li>Make sure you have a stable internet connection when installing</li>
+                                    <li>Contact support if you encounter any issues</li>
+                                </ul>
+                            </div>
+
+                            <h3>How to Install Your eSIM</h3>
+                            <ol>
+                                <li>Go to Settings on your device</li>
+                                <li>Select Cellular or Mobile Data</li>
+                                <li>Tap "Add Cellular Plan" or "Add eSIM"</li>
+                                <li>Scan the QR code above</li>
+                                <li>Follow the on-screen instructions</li>
+                            </ol>
+                        </div>
+                        <div class="footer">
+                            <p>Need help? Contact us at <a href="mailto:%s">%s</a></p>
+                            <p>&copy; 2026 %s. All rights reserved.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """,
+                customerName,
+                iccid,
+                activationCode != null && !activationCode.isEmpty() ? activationCode : "N/A",
+                pin1 != null && !pin1.isEmpty() ? 
+                    String.format("<div class=\"info-box\"><div class=\"info-label\">PIN 1</div><div class=\"info-value\">%s</div></div>", pin1) : "",
+                puk1 != null && !puk1.isEmpty() ? 
+                    String.format("<div class=\"info-box\"><div class=\"info-label\">PUK 1</div><div class=\"info-value\">%s</div></div>", puk1) : "",
+                networkProvider,
+                passportId,
+                supportEmail,
+                supportEmail,
+                appName
+            );
+            
+            helper.setText(htmlContent, true);
+            
+            // Add QR code as inline attachment with Content-ID
+            helper.addInline("qrCodeImage", new jakarta.mail.util.ByteArrayDataSource(qrCodeBytes, "image/png"));
+            
+            javaMailSender.send(message);
+            
+            log.info("✅ eSIM QR code email sent successfully to: {}", toEmail);
+        } catch (MessagingException e) {
+            log.error("❌ Failed to send eSIM QR code email to {}: {}", toEmail, e.getMessage());
+            throw new RuntimeException("Failed to send eSIM QR code email", e);
+        }
+    }
 }

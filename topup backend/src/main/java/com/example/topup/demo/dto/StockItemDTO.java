@@ -7,8 +7,13 @@ public class StockItemDTO {
     
     // eSIM specific
     private String activationUrl;
+    private String activationCode; // activation_code from CSV
+    private String pin1; // PIN 1
+    private String puk1; // PUK 1
+    private String pin2; // PIN 2
+    private String puk2; // PUK 2
     private String qrCodeUrl;
-    private String qrCodeImage;
+    private String qrCodeImage; // Base64 encoded QR code
     
     private String notes;
     private String price; // Price from CSV
@@ -33,6 +38,21 @@ public class StockItemDTO {
 
     public String getActivationUrl() { return activationUrl; }
     public void setActivationUrl(String activationUrl) { this.activationUrl = activationUrl; }
+
+    public String getActivationCode() { return activationCode; }
+    public void setActivationCode(String activationCode) { this.activationCode = activationCode; }
+
+    public String getPin1() { return pin1; }
+    public void setPin1(String pin1) { this.pin1 = pin1; }
+
+    public String getPuk1() { return puk1; }
+    public void setPuk1(String puk1) { this.puk1 = puk1; }
+
+    public String getPin2() { return pin2; }
+    public void setPin2(String pin2) { this.pin2 = pin2; }
+
+    public String getPuk2() { return puk2; }
+    public void setPuk2(String puk2) { this.puk2 = puk2; }
 
     public String getQrCodeUrl() { return qrCodeUrl; }
     public void setQrCodeUrl(String qrCodeUrl) { this.qrCodeUrl = qrCodeUrl; }

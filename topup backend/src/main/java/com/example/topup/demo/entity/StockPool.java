@@ -73,14 +73,19 @@ public class StockPool {
     // Nested class for Stock Items (PINs or eSIMs)
     public static class StockItem {
         private String itemId;
-        private String itemData; // PIN number or eSIM ICCID
+        private String itemData; // PIN number or eSIM ICCID (encrypted)
         private String serialNumber;
         private String productId; // Product ID from CSV
         
         // eSIM specific fields
         private String activationUrl;
+        private String activationCode; // activation_code from CSV (encrypted)
+        private String pin1; // PIN 1 (encrypted)
+        private String puk1; // PUK 1 (encrypted)
+        private String pin2; // PIN 2 (encrypted)
+        private String puk2; // PUK 2 (encrypted)
         private String qrCodeUrl;
-        private String qrCodeImage; // Base64 or URL
+        private String qrCodeImage; // Base64 encoded QR code (encrypted)
         
         private ItemStatus status = ItemStatus.AVAILABLE;
         private LocalDateTime assignedDate;
@@ -123,6 +128,21 @@ public class StockPool {
 
         public String getActivationUrl() { return activationUrl; }
         public void setActivationUrl(String activationUrl) { this.activationUrl = activationUrl; }
+
+        public String getActivationCode() { return activationCode; }
+        public void setActivationCode(String activationCode) { this.activationCode = activationCode; }
+
+        public String getPin1() { return pin1; }
+        public void setPin1(String pin1) { this.pin1 = pin1; }
+
+        public String getPuk1() { return puk1; }
+        public void setPuk1(String puk1) { this.puk1 = puk1; }
+
+        public String getPin2() { return pin2; }
+        public void setPin2(String pin2) { this.pin2 = pin2; }
+
+        public String getPuk2() { return puk2; }
+        public void setPuk2(String puk2) { this.puk2 = puk2; }
 
         public String getQrCodeUrl() { return qrCodeUrl; }
         public void setQrCodeUrl(String qrCodeUrl) { this.qrCodeUrl = qrCodeUrl; }

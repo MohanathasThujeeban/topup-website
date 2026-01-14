@@ -57,7 +57,9 @@ const RetailerDashboard = () => {
   
   // Point of Sale state
   const [inventoryBundles, setInventoryBundles] = useState([]);
+  const [availableEsims, setAvailableEsims] = useState([]); // eSIM products with QR codes
   const [selectedBundle, setSelectedBundle] = useState(null);
+  const [selectedEsim, setSelectedEsim] = useState(null); // Selected eSIM with QR code
   const [saleQuantity, setSaleQuantity] = useState(1);
   const [saleLoading, setSaleLoading] = useState(false);
   const [receiptData, setReceiptData] = useState(null);
@@ -67,6 +69,15 @@ const RetailerDashboard = () => {
   const [fetchingMarginRate, setFetchingMarginRate] = useState(false);
   const [selectedOperator, setSelectedOperator] = useState('All Operators');
   const [selectedProductCategory, setSelectedProductCategory] = useState('Bundle plans');
+  
+  // eSIM customer form state
+  const [showEsimCustomerForm, setShowEsimCustomerForm] = useState(false);
+  const [esimCustomerData, setEsimCustomerData] = useState({
+    email: '',
+    fullName: '',
+    passportId: ''
+  });
+  const [esimSaleLoading, setEsimSaleLoading] = useState(false);
   
   // Privacy Settings state
   const [oldPassword, setOldPassword] = useState('');
@@ -1143,6 +1154,51 @@ const RetailerDashboard = () => {
     } catch (error) {
       console.error('❌ Error fetching stock pools:', error);
       setInventoryBundles([]);
+    }
+  };
+
+  const fetchAvailableEsims = async (signal = null) => {
+    if (isDemoMode()) {
+      console.log('📱 Demo mode - skipping eSIM fetch');
+      setAvailableEsims([]);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('📱 No token - cannot fetch eSIMs');
+        setAvailableEsims([]);
+        return;
+      }
+
+      console.log('📱 Fetching available eSIMs from stock pool...');
+      console.log('   - Network Provider:', selectedOperator);
+      
+      const params = new URLSearchParams();
+      if (selectedOperator && selectedOperator !== 'All Operators') {
+        params.append('networkProvider', selectedOperator);
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/admin/stock/esims/available?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        },
+        signal
+      });
+
+      if (response.ok) {
+        const esimProducts = await response.json();
+        console.log('✅ eSIM products response:', esimProducts);
+        setAvailableEsims(esimProducts);
+      } else {
+        console.error('❌ Failed to fetch eSIMs:', response.status);
+        setAvailableEsims([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching eSIMs:', error);
+      setAvailableEsims([]);
     }
   };
 
@@ -2569,6 +2625,11 @@ const RetailerDashboard = () => {
                     onClick={() => {
                       setSelectedProductCategory(category);
                       setSelectedBundle(null);
+                      setSelectedEsim(null);
+                      // Fetch eSIMs if Esims category is selected
+                      if (category === 'Esims') {
+                        fetchAvailableEsims();
+                      }
                     }}
                     className={`px-6 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
                       selectedProductCategory === category
@@ -2593,7 +2654,78 @@ const RetailerDashboard = () => {
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
-                  {inventoryBundles.length > 0 ? (
+                  {/* Show eSIMs if Esims category is selected */}
+                  {selectedProductCategory === 'Esims' && availableEsims.length > 0 ? (
+                    (() => {
+                      // Filter eSIMs by selected network provider
+                      const filteredEsims = selectedOperator === 'All Operators' 
+                        ? availableEsims 
+                        : availableEsims.filter(esimProduct => esimProduct.networkProvider === selectedOperator);
+                      
+                      if (filteredEsims.length === 0) {
+                        return (
+                          <div className="col-span-2 text-center py-8">
+                            <Package size={32} className="text-gray-400 mx-auto mb-2" />
+                            <p className="text-gray-500">No {selectedOperator} eSIMs available</p>
+                          </div>
+                        );
+                      }
+                      
+                      return filteredEsims.map((esimProduct) => (
+                      <div key={esimProduct.id} className="col-span-2 space-y-3">
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
+                          <h5 className="font-bold text-gray-900 mb-1">{esimProduct.poolName}</h5>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                              {esimProduct.networkProvider}
+                            </span>
+                            <span className="text-lg font-bold text-green-600">
+                              NOK {esimProduct.price}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600">
+                            {esimProduct.availableCount} eSIMs available
+                          </p>
+                        </div>
+                        
+                        {/* Display individual eSIMs with QR codes */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {esimProduct.availableEsims && esimProduct.availableEsims.slice(0, 10).map((esim, idx) => (
+                            <div
+                              key={esim.itemId || idx}
+                              onClick={() => {
+                                setSelectedEsim({ ...esim, productInfo: esimProduct });
+                                setSelectedBundle(null);
+                              }}
+                              className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                                selectedEsim?.itemId === esim.itemId
+                                  ? 'border-green-500 bg-green-50 shadow-lg'
+                                  : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                              }`}
+                            >
+                              {/* eSIM Details - QR Code Hidden */}
+                              <div className="text-left space-y-1">
+                                <div className="text-xs font-mono text-gray-600 truncate">
+                                  ICCID: {esim.iccid ? esim.iccid.slice(0, 12) + '...' : 'N/A'}
+                                </div>
+                                {esim.activationCode && (
+                                  <div className="text-xs text-blue-600 font-medium truncate">
+                                    {esim.activationCode.slice(0, 20)}...
+                                  </div>
+                                )}
+                                <div className="pt-2 border-t border-gray-200">
+                                  <span className="text-lg font-bold text-gray-900">
+                                    NOK {esimProduct.price}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ));
+                    })()
+                  ) : selectedProductCategory !== 'Esims' && inventoryBundles.length > 0 ? (
                     (() => {
                       console.log('🔍 Filtering inventory bundles for POS:');
                       console.log(`   - Selected Operator: "${selectedOperator}"`);
@@ -2601,6 +2733,12 @@ const RetailerDashboard = () => {
                       console.log(`   - Total bundles: ${inventoryBundles.length}`);
                       
                       const filtered = inventoryBundles.filter((bundle) => {
+                        // EXCLUDE eSIM stock type from non-Esims categories
+                        if (bundle.stockType === 'ESIM') {
+                          console.log(`   🚫 Excluding eSIM: ${bundle.bundleName} (stockType: ESIM)`);
+                          return false; // Don't show eSIMs in Bundle plans, Topups, Data plans
+                        }
+                        
                         // Filter by network provider
                         const matchesOperator = selectedOperator === 'All Operators' 
                           ? true 
@@ -2674,9 +2812,80 @@ const RetailerDashboard = () => {
                   <h4 className="text-lg font-semibold text-gray-900">Your Cart</h4>
                 </div>
                 
-                {selectedBundle ? (
+                {/* eSIM Cart - Different UI without QR Code */}
+                {selectedEsim ? (
                   <div className="space-y-4">
-                    {/* Cart Item */}
+                    {/* eSIM Cart Item - QR Code Hidden */}
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border-2 border-blue-200">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-gray-900 mb-1">
+                            {selectedEsim.productInfo?.poolName || 'eSIM'}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {selectedEsim.productInfo?.networkProvider}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedEsim(null);
+                          }}
+                          className="text-gray-400 hover:text-gray-600 ml-2"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                      
+                      {/* eSIM Details - No QR Code Shown */}
+                      <div className="space-y-2 text-xs bg-white p-3 rounded-lg">
+                        <div className="flex justify-between items-center py-1 border-b border-blue-200">
+                          <span className="text-gray-600">ICCID:</span>
+                          <span className="font-mono text-gray-900">{selectedEsim.iccid?.slice(0, 15)}...</span>
+                        </div>
+                        {selectedEsim.activationCode && (
+                          <div className="flex justify-between items-center py-1 border-b border-blue-200">
+                            <span className="text-gray-600">Activation:</span>
+                            <span className="font-mono text-blue-600 text-[10px]">{selectedEsim.activationCode?.slice(0, 18)}...</span>
+                          </div>
+                        )}
+                        {selectedEsim.pin1 && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="text-gray-600">PIN 1:</span>
+                            <span className="font-mono text-gray-900">{selectedEsim.pin1}</span>
+                          </div>
+                        )}
+                        {selectedEsim.puk1 && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="text-gray-600">PUK 1:</span>
+                            <span className="font-mono text-gray-900">{selectedEsim.puk1}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="mt-4 pt-3 border-t border-blue-200">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-700 font-medium">Price:</span>
+                          <span className="text-2xl font-bold text-green-600">
+                            NOK {selectedEsim.productInfo?.price}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* eSIM Action Buttons */}
+                    <div className="space-y-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowEsimCustomerForm(true)}
+                        className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white py-3.5 px-4 rounded-lg font-bold text-base hover:from-blue-600 hover:to-indigo-600 flex items-center justify-center gap-2 shadow-md"
+                      >
+                        Sell eSIM - NOK {selectedEsim.productInfo?.price}
+                      </button>
+                    </div>
+                  </div>
+                ) : selectedBundle ? (
+                  <div className="space-y-4">
+                    {/* Regular Bundle Cart Item */}
                     <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
@@ -2851,6 +3060,145 @@ const RetailerDashboard = () => {
                       Close
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* eSIM Customer Information Form Modal */}
+            {showEsimCustomerForm && selectedEsim && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+                  <div className="p-6 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xl font-bold text-gray-900">Customer Information</h3>
+                      <button
+                        onClick={() => {
+                          setShowEsimCustomerForm(false);
+                          setEsimCustomerData({ email: '', fullName: '', passportId: '' });
+                        }}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <X size={24} />
+                      </button>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-2">
+                      Enter customer details to send eSIM QR code via email
+                    </p>
+                  </div>
+
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      setEsimSaleLoading(true);
+                      
+                      try {
+                        const token = localStorage.getItem('token');
+                        const response = await fetch(`${API_BASE_URL}/admin/stock/esims/send-qr`, {
+                          method: 'POST',
+                          headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify({
+                            itemId: selectedEsim.itemId,
+                            iccid: selectedEsim.iccid,
+                            customerEmail: esimCustomerData.email,
+                            customerName: esimCustomerData.fullName,
+                            passportId: esimCustomerData.passportId,
+                            poolId: selectedEsim.productInfo.id,
+                            price: selectedEsim.productInfo.price
+                          })
+                        });
+
+                        const result = await response.json();
+                        
+                        if (response.ok && result.success) {
+                          alert(`✅ eSIM QR code sent successfully to ${esimCustomerData.email}!`);
+                          setShowEsimCustomerForm(false);
+                          setSelectedEsim(null);
+                          setEsimCustomerData({ email: '', fullName: '', passportId: '' });
+                          // Refresh eSIM list
+                          fetchAvailableEsims();
+                        } else {
+                          alert('❌ Failed to send eSIM: ' + (result.error || 'Unknown error'));
+                        }
+                      } catch (error) {
+                        console.error('Error sending eSIM:', error);
+                        alert('❌ Error: ' + error.message);
+                      } finally {
+                        setEsimSaleLoading(false);
+                      }
+                    }}
+                    className="p-6 space-y-4"
+                  >
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={esimCustomerData.fullName}
+                        onChange={(e) => setEsimCustomerData({ ...esimCustomerData, fullName: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="John Doe"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Email Address <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={esimCustomerData.email}
+                        onChange={(e) => setEsimCustomerData({ ...esimCustomerData, email: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="customer@example.com"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Passport ID / Identity Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={esimCustomerData.passportId}
+                        onChange={(e) => setEsimCustomerData({ ...esimCustomerData, passportId: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="AB1234567"
+                      />
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-200">
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="text-sm text-gray-600">eSIM Price:</span>
+                        <span className="text-xl font-bold text-green-600">
+                          NOK {selectedEsim.productInfo?.price}
+                        </span>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={esimSaleLoading}
+                        className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white py-3 px-4 rounded-lg font-bold hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {esimSaleLoading ? (
+                          <>
+                            <RefreshCw size={18} className="animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            Send eSIM QR Code
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
             )}

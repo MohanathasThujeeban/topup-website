@@ -2,6 +2,8 @@ package com.example.topup.demo.controller;
 
 import com.example.topup.demo.entity.StockPool;
 import com.example.topup.demo.service.StockService;
+import com.example.topup.demo.service.EmailService;
+import com.example.topup.demo.repository.StockPoolRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
@@ -26,6 +28,12 @@ public class StockController {
 
     @Autowired
     private StockService stockService;
+
+    @Autowired
+    private StockPoolRepository stockPoolRepository;
+
+    @Autowired
+    private EmailService emailService;
 
     // Test endpoint to verify controller is loaded
     @GetMapping("/test")
@@ -212,12 +220,13 @@ public class StockController {
         }
     }
 
-    // 7. Bulk upload eSIM stock from CSV
+    // 7. Bulk upload eSIM stock from CSV with QR code images
     @PostMapping("/esims/bulk-upload")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> bulkUploadEsims(
             @RequestParam("file") MultipartFile file,
             @RequestParam("metadata") String metadataJson,
+            @RequestParam(value = "qrCodes", required = false) List<MultipartFile> qrCodeFiles,
             @RequestParam(required = false, defaultValue = "admin") String uploadedBy) {
         try {
             // Parse metadata JSON
@@ -231,16 +240,50 @@ public class StockController {
             String price = metadata.get("price");
             String notes = metadata.get("notes");
             
-            System.out.println("Received eSIM upload request:");
+            System.out.println("===============================================");
+            System.out.println("📥 Received eSIM upload request:");
+            System.out.println("File: " + (file != null ? file.getOriginalFilename() + " (" + file.getSize() + " bytes)" : "NULL"));
             System.out.println("Pool Name: " + poolName);
             System.out.println("Product Type: " + productType);
             System.out.println("Network Provider: " + networkProvider);
             System.out.println("Product ID: " + productId);
             System.out.println("Price: " + price);
             System.out.println("Notes: " + notes);
+            System.out.println("QR Code Files: " + (qrCodeFiles != null ? qrCodeFiles.size() : 0));
+            System.out.println("===============================================");
             
-            Map<String, Object> result = stockService.uploadEsimStock(file, uploadedBy, poolName, productId, price, notes, productType, networkProvider);
-            return ResponseEntity.ok(result);
+            // Convert QR code files to Base64 strings for storage
+            Map<Integer, String> qrCodeMap = new HashMap<>();
+            if (qrCodeFiles != null && !qrCodeFiles.isEmpty()) {
+                System.out.println("🔄 Processing " + qrCodeFiles.size() + " QR code images...");
+                
+                // Create a map of filename (without extension) to Base64 QR code
+                Map<String, String> qrCodeByFilename = new HashMap<>();
+                for (MultipartFile qrFile : qrCodeFiles) {
+                    String filename = qrFile.getOriginalFilename();
+                    if (filename != null) {
+                        // Remove file extension and clean the filename
+                        String filenameWithoutExt = filename.replaceFirst("[.][^.]+$", "").trim();
+                        
+                        byte[] qrBytes = qrFile.getBytes();
+                        String base64QR = java.util.Base64.getEncoder().encodeToString(qrBytes);
+                        qrCodeByFilename.put(filenameWithoutExt, base64QR);
+                        
+                        System.out.println("   📸 Loaded QR: " + filename + " (key: " + filenameWithoutExt + ")");
+                    }
+                }
+                System.out.println("✅ QR codes loaded successfully");
+                
+                // Pass the filename-based map instead of index-based map
+                Map<String, Object> result = stockService.uploadEsimStockWithQRByFilename(
+                    file, qrCodeByFilename, uploadedBy, poolName, productId, price, notes, productType, networkProvider);
+                return ResponseEntity.ok(result);
+            } else {
+                // No QR codes provided, use regular upload
+                Map<String, Object> result = stockService.uploadEsimStockWithQR(
+                    file, new HashMap<>(), uploadedBy, poolName, productId, price, notes, productType, networkProvider);
+                return ResponseEntity.ok(result);
+            }
         } catch (Exception e) {
             e.printStackTrace();
             Map<String, Object> error = new HashMap<>();
@@ -512,4 +555,203 @@ public class StockController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
+
+    // Get available eSIMs with decrypted QR codes for retailer Point of Sale
+    @GetMapping("/esims/available")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RETAILER')")
+    public ResponseEntity<List<Map<String, Object>>> getAvailableEsimsForSale(
+            @RequestParam(required = false) String networkProvider,
+            @RequestParam(required = false) String productId) {
+        try {
+            System.out.println("📱 Fetching available eSIMs for Point of Sale");
+            System.out.println("   - Network Provider: " + networkProvider);
+            System.out.println("   - Product ID: " + productId);
+            
+            // Get all eSIM stock pools
+            List<StockPool> pools = stockService.getStockPoolsByType(StockPool.StockType.ESIM);
+            
+            // Filter by network provider if specified
+            if (networkProvider != null && !networkProvider.equals("All Operators")) {
+                pools = pools.stream()
+                    .filter(pool -> networkProvider.equals(pool.getNetworkProvider()))
+                    .collect(java.util.stream.Collectors.toList());
+            }
+            
+            // Filter by product ID if specified
+            if (productId != null && !productId.isEmpty()) {
+                pools = pools.stream()
+                    .filter(pool -> productId.equals(pool.getProductId()))
+                    .collect(java.util.stream.Collectors.toList());
+            }
+            
+            List<Map<String, Object>> availableEsims = new ArrayList<>();
+            
+            for (StockPool pool : pools) {
+                // Only include pools with available stock
+                if (pool.getAvailableQuantity() <= 0) {
+                    continue;
+                }
+                
+                Map<String, Object> esimProduct = new HashMap<>();
+                esimProduct.put("id", pool.getId());
+                esimProduct.put("poolName", pool.getName());
+                esimProduct.put("productId", pool.getProductId());
+                esimProduct.put("networkProvider", pool.getNetworkProvider());
+                esimProduct.put("productType", pool.getProductType());
+                esimProduct.put("price", pool.getPrice());
+                esimProduct.put("totalQuantity", pool.getTotalQuantity());
+                esimProduct.put("availableQuantity", pool.getAvailableQuantity());
+                esimProduct.put("description", pool.getDescription());
+                
+                // Get available eSIM items with decrypted QR codes
+                List<Map<String, Object>> availableItems = new ArrayList<>();
+                for (StockPool.StockItem item : pool.getItems()) {
+                    if (item.getStatus() == StockPool.StockItem.ItemStatus.AVAILABLE) {
+                        Map<String, Object> itemData = new HashMap<>();
+                        
+                        // Decrypt sensitive data
+                        itemData.put("itemId", item.getItemId());
+                        itemData.put("iccid", stockService.decryptData(item.getItemData()));
+                        
+                        if (item.getActivationCode() != null) {
+                            itemData.put("activationCode", stockService.decryptData(item.getActivationCode()));
+                        }
+                        
+                        // Decrypt QR code image (Base64)
+                        if (item.getQrCodeImage() != null && !item.getQrCodeImage().isEmpty()) {
+                            itemData.put("qrCodeImage", stockService.decryptData(item.getQrCodeImage()));
+                        }
+                        
+                        // Include PIN/PUK if available (already encrypted)
+                        if (item.getPin1() != null) {
+                            itemData.put("pin1", stockService.decryptData(item.getPin1()));
+                        }
+                        if (item.getPuk1() != null) {
+                            itemData.put("puk1", stockService.decryptData(item.getPuk1()));
+                        }
+                        if (item.getPin2() != null) {
+                            itemData.put("pin2", stockService.decryptData(item.getPin2()));
+                        }
+                        if (item.getPuk2() != null) {
+                            itemData.put("puk2", stockService.decryptData(item.getPuk2()));
+                        }
+                        
+                        availableItems.add(itemData);
+                    }
+                }
+                
+                esimProduct.put("availableEsims", availableItems);
+                esimProduct.put("availableCount", availableItems.size());
+                
+                availableEsims.add(esimProduct);
+            }
+            
+            System.out.println("✅ Found " + availableEsims.size() + " eSIM products with available stock");
+            return ResponseEntity.ok(availableEsims);
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching available eSIMs: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // Send eSIM QR code to customer email
+    @PostMapping("/esims/send-qr")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RETAILER')")
+    public ResponseEntity<Map<String, Object>> sendEsimQRCode(@RequestBody Map<String, String> requestData) {
+        try {
+            String itemId = requestData.get("itemId");
+            String iccid = requestData.get("iccid");
+            String customerEmail = requestData.get("customerEmail");
+            String customerName = requestData.get("customerName");
+            String passportId = requestData.get("passportId");
+            String poolId = requestData.get("poolId");
+            String price = requestData.get("price");
+
+            System.out.println("📧 Sending eSIM QR code to customer:");
+            System.out.println("   - Customer: " + customerName);
+            System.out.println("   - Email: " + customerEmail);
+            System.out.println("   - Passport/ID: " + passportId);
+            System.out.println("   - ICCID: " + iccid);
+            System.out.println("   - Pool ID: " + poolId);
+
+            // Get the stock pool and find the item
+            StockPool pool = stockService.getStockPoolById(poolId);
+            if (pool == null) {
+                throw new IllegalArgumentException("Stock pool not found");
+            }
+
+            StockPool.StockItem esimItem = null;
+            for (StockPool.StockItem item : pool.getItems()) {
+                if (item.getItemId().equals(itemId)) {
+                    esimItem = item;
+                    break;
+                }
+            }
+
+            if (esimItem == null) {
+                throw new IllegalArgumentException("eSIM item not found");
+            }
+
+            if (esimItem.getStatus() != StockPool.StockItem.ItemStatus.AVAILABLE) {
+                throw new IllegalStateException("eSIM is not available for sale");
+            }
+
+            // Decrypt QR code for sending
+            String qrCodeBase64 = stockService.decryptData(esimItem.getQrCodeImage());
+            String activationCode = esimItem.getActivationCode() != null ? 
+                stockService.decryptData(esimItem.getActivationCode()) : "";
+            String pin1 = esimItem.getPin1() != null ? stockService.decryptData(esimItem.getPin1()) : "";
+            String puk1 = esimItem.getPuk1() != null ? stockService.decryptData(esimItem.getPuk1()) : "";
+
+            // Send email with QR code
+            System.out.println("📧 Sending eSIM QR code email to: " + customerEmail);
+            emailService.sendEsimQRCode(
+                customerEmail,
+                customerName,
+                passportId,
+                qrCodeBase64,
+                iccid,
+                activationCode,
+                pin1,
+                puk1,
+                pool.getNetworkProvider(),
+                price
+            );
+            System.out.println("✅ Email sent successfully!");
+
+            // Mark eSIM as used
+            esimItem.setStatus(StockPool.StockItem.ItemStatus.USED);
+            esimItem.setAssignedDate(java.time.LocalDateTime.now());
+            esimItem.setAssignedToUserEmail(customerEmail);
+            esimItem.setNotes("Sold to: " + customerName + " (Passport/ID: " + passportId + ")");
+
+            // Update pool quantities
+            pool.setAvailableQuantity(pool.getAvailableQuantity() - 1);
+            pool.setUsedQuantity(pool.getUsedQuantity() + 1);
+
+            // Save updated pool
+            stockPoolRepository.save(pool);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "eSIM QR code sent to " + customerEmail);
+            response.put("customerName", customerName);
+            response.put("customerEmail", customerEmail);
+            response.put("iccid", iccid);
+
+            System.out.println("✅ eSIM sold and marked as used");
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            System.err.println("❌ Error sending eSIM QR code: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
 }
+
