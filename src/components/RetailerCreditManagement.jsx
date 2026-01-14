@@ -25,6 +25,8 @@ const RetailerCreditManagement = () => {
   const [saving, setSaving] = useState(false);
   const [availableProducts, setAvailableProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [retailerProductMarginRates, setRetailerProductMarginRates] = useState({}); // Map of retailerEmail -> product margin rates
+  const [expandedRetailers, setExpandedRetailers] = useState(new Set()); // Track which retailers have expanded margin view
 
   useEffect(() => {
     fetchRetailers();
@@ -44,10 +46,13 @@ const RetailerCreditManagement = () => {
       const data = await response.json();
       
       if (data.success) {
-        // Fetch margin rate for each retailer
+        // Fetch margin rate and product-specific margin rates for each retailer
+        const productMarginRatesMap = {};
+        
         const retailersWithMarginRates = await Promise.all(
           data.data.map(async (retailer) => {
             try {
+              // Fetch single margin rate (legacy)
               const marginResponse = await fetch(`${API_BASE_URL}/admin/retailers/${retailer.retailerEmail}/margin-rate`, {
                 credentials: 'include',
                 headers: {
@@ -55,25 +60,45 @@ const RetailerCreditManagement = () => {
                 }
               });
               
+              // Fetch all product margin rates
+              const productMarginResponse = await fetch(`${API_BASE_URL}/admin/retailers/${retailer.retailerEmail}/margin-rates/all`, {
+                credentials: 'include',
+                headers: {
+                  'Content-Type': 'application/json'
+                }
+              });
+              
+              let marginRate = null;
               if (marginResponse.ok) {
                 const marginData = await marginResponse.json();
-                return {
-                  ...retailer,
-                  marginRate: marginData.marginRate || null
-                };
+                marginRate = marginData.marginRate || null;
               }
+              
+              // Store product margin rates in map
+              if (productMarginResponse.ok) {
+                const productMarginData = await productMarginResponse.json();
+                if (productMarginData.success && productMarginData.productMarginRates) {
+                  productMarginRatesMap[retailer.retailerEmail] = productMarginData.productMarginRates;
+                }
+              }
+              
+              return {
+                ...retailer,
+                marginRate: marginRate
+              };
             } catch (error) {
-              console.log(`Could not fetch margin rate for ${retailer.retailerEmail}:`, error);
+              console.log(`Could not fetch margin rates for ${retailer.retailerEmail}:`, error);
             }
             
             return {
               ...retailer,
-              marginRate: null // Admin hasn't set margin rate
+              marginRate: null
             };
           })
         );
         
         setRetailers(retailersWithMarginRates);
+        setRetailerProductMarginRates(productMarginRatesMap);
       } else {
         setError(data.error || 'Failed to fetch retailers');
       }
@@ -406,56 +431,65 @@ const RetailerCreditManagement = () => {
           <div className="text-sm text-gray-600 mb-1">Avg. Margin Rate</div>
           <div className="text-3xl font-bold text-green-600">
             {(() => {
-              const retailersWithMargin = retailers.filter(r => r.marginRate && r.marginRate > 0);
-              return retailersWithMargin.length > 0 
-                ? (retailersWithMargin.reduce((sum, r) => sum + r.marginRate, 0) / retailersWithMargin.length).toFixed(1)
-                : 'N/A'
-            })()} 
-            {retailers.some(r => r.marginRate && r.marginRate > 0) ? '%' : ''}
+              // Calculate average from all product margin rates
+              let totalMargin = 0;
+              let totalProducts = 0;
+              
+              Object.values(retailerProductMarginRates).forEach(productRates => {
+                productRates.forEach(product => {
+                  totalMargin += parseFloat(product.marginRate || 0);
+                  totalProducts++;
+                });
+              });
+              
+              if (totalProducts === 0) return 'N/A';
+              const avgMargin = totalMargin / totalProducts;
+              return `${avgMargin.toFixed(1)}%`;
+            })()}
           </div>
         </div>
       </div>
 
       {/* Retailers Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Retailer
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Level
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Credit Limit
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  Credit<br/>Limit
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Used
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Available
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Credit Usage
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  Credit<br/>Usage
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Unit Limit
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  Unit<br/>Limit
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Units Used
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  Units<br/>Used
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Unit Usage
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  Unit<br/>Usage
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[180px]">
                   Margin Rate
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Status
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap sticky right-0 bg-gray-50">
                   Actions
                 </th>
               </tr>
@@ -467,39 +501,39 @@ const RetailerCreditManagement = () => {
                 
                 return (
                   <tr key={retailer.retailerId} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center min-w-[200px]">
                         <div className="flex-shrink-0 h-10 w-10 bg-purple-100 rounded-full flex items-center justify-center">
                           <span className="text-purple-600 font-semibold">
                             {retailer.retailerName?.charAt(0) || 'R'}
                           </span>
                         </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
+                        <div className="ml-3">
+                          <div className="text-sm font-medium text-gray-900 truncate max-w-[140px]" title={retailer.retailerName}>
                             {retailer.retailerName}
                           </div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-xs text-gray-500 truncate max-w-[140px]" title={retailer.retailerEmail}>
                             {retailer.retailerEmail}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold text-white ${getLevelColor(retailer.level)}`}>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold text-white ${getLevelColor(retailer.level)}`}>
                         {retailer.level || 'NOT_SET'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                       NOK {(retailer.creditLimit || 0).toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-orange-600">
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-orange-600">
                       NOK {(retailer.usedCredit || 0).toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-green-600">
                       NOK {(retailer.availableCredit || 0).toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="w-full">
+                    <td className="px-3 py-3">
+                      <div className="w-24">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs text-gray-600">{usagePercentage.toFixed(1)}%</span>
                         </div>
@@ -511,14 +545,14 @@ const RetailerCreditManagement = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {(retailer.unitLimit || 0).toLocaleString()} Units
+                    <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {(retailer.unitLimit || 0).toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-orange-600">
-                      {(retailer.usedUnits || 0).toLocaleString()} Units
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-orange-600">
+                      {(retailer.usedUnits || 0).toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="w-full">
+                    <td className="px-3 py-3">
+                      <div className="w-24">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs text-gray-600">{unitUsagePercentage.toFixed(1)}%</span>
                         </div>
@@ -530,17 +564,64 @@ const RetailerCreditManagement = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-lg font-bold text-purple-600">
-                          {retailer.marginRate ? `${retailer.marginRate}%` : 'Not Set'}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {retailer.marginRate ? 'Admin Set' : 'Pending'}
-                        </span>
-                      </div>
+                    <td className="px-6 py-4">
+                      {(() => {
+                        const productRates = retailerProductMarginRates[retailer.retailerEmail] || [];
+                        const isExpanded = expandedRetailers.has(retailer.retailerEmail);
+                        
+                        if (productRates.length === 0) {
+                          return (
+                            <div className="flex flex-col items-start">
+                              <span className="text-sm font-bold text-gray-400">Not Set</span>
+                              <span className="text-xs text-gray-500">Pending</span>
+                            </div>
+                          );
+                        }
+                        
+                        return (
+                          <div className="min-w-[180px]">
+                            <button
+                              onClick={() => {
+                                const newExpanded = new Set(expandedRetailers);
+                                if (isExpanded) {
+                                  newExpanded.delete(retailer.retailerEmail);
+                                } else {
+                                  newExpanded.add(retailer.retailerEmail);
+                                }
+                                setExpandedRetailers(newExpanded);
+                              }}
+                              className="flex items-center space-x-2 hover:bg-purple-50 p-2 rounded transition w-full"
+                            >
+                              <span className="text-sm font-bold text-purple-600">
+                                {productRates.length} Product{productRates.length !== 1 ? 's' : ''}
+                              </span>
+                              <span className="text-xs text-gray-500 ml-auto">
+                                {isExpanded ? '▲ Hide' : '▼ View'}
+                              </span>
+                            </button>
+                            
+                            {isExpanded && (
+                              <div className="mt-2 space-y-1 bg-purple-50 p-2 rounded-lg border border-purple-200 max-h-60 overflow-y-auto">
+                                {productRates.map((product, idx) => (
+                                  <div key={idx} className="flex justify-between items-center text-xs py-2 px-2 border-b border-purple-100 last:border-0 bg-white rounded">
+                                    <div className="flex-1 mr-2">
+                                      <div className="font-semibold text-gray-900 truncate" title={product.productName}>{product.productName || 'Unknown'}</div>
+                                      <div className="text-gray-600 text-xs truncate" title={product.poolName}>{product.poolName || 'N/A'}</div>
+                                    </div>
+                                    <div className="flex items-center">
+                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-purple-200 text-purple-800">
+                                        {parseFloat(product.marginRate || 0)}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-3 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         retailer.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
                         retailer.status === 'SUSPENDED' ? 'bg-red-100 text-red-800' :
@@ -549,19 +630,21 @@ const RetailerCreditManagement = () => {
                         {retailer.status || 'NOT_SET'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                      <button
-                        onClick={() => handleEditClick(retailer)}
-                        className="text-purple-600 hover:text-purple-900 font-medium"
-                      >
-                        💰 Edit Credit
-                      </button>
-                      <button
-                        onClick={() => handleEditMarginClick(retailer)}
-                        className="text-green-600 hover:text-green-900 font-medium"
-                      >
-                        📊 Margin Rate
-                      </button>
+                    <td className="px-4 py-3 text-right text-sm font-medium sticky right-0 bg-white">
+                      <div className="flex flex-col gap-1">
+                        <button
+                          onClick={() => handleEditClick(retailer)}
+                          className="text-purple-600 hover:text-purple-900 font-medium text-xs whitespace-nowrap"
+                        >
+                          💰 Edit Credit
+                        </button>
+                        <button
+                          onClick={() => handleEditMarginClick(retailer)}
+                          className="text-green-600 hover:text-green-900 font-medium text-xs whitespace-nowrap"
+                        >
+                          📊 Margin Rate
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

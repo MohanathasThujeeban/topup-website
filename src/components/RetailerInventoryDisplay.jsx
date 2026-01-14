@@ -14,6 +14,7 @@ export default function RetailerInventoryDisplay() {
   const [selectedPriceFilter, setSelectedPriceFilter] = useState(null);
   const [selectedTypeFilter, setSelectedTypeFilter] = useState(null); // 'EPIN', 'ESIM', or null for all
   const [error, setError] = useState('');
+  const [productMarginRates, setProductMarginRates] = useState([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -22,6 +23,7 @@ export default function RetailerInventoryDisplay() {
     const loadInventory = async () => {
       try {
         await fetchInventory(controller.signal, isMounted);
+        await fetchProductMarginRates();
       } catch (error) {
         if (error.name !== 'AbortError' && isMounted) {
           console.error('Error loading inventory:', error);
@@ -36,6 +38,45 @@ export default function RetailerInventoryDisplay() {
       controller.abort();
     };
   }, []);
+
+  const fetchProductMarginRates = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/retailer/margin-rates/all`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.productMarginRates) {
+          setProductMarginRates(data.productMarginRates);
+          console.log('📊 Product margin rates loaded:', data.productMarginRates);
+        }
+      } else {
+        console.log('No product margin rates available');
+      }
+    } catch (error) {
+      console.error('Error fetching product margin rates:', error);
+    }
+  };
+
+  // Helper function to get margin rate for a specific product
+  const getProductMarginRate = (bundleId, bundleName) => {
+    // Try to find by bundleId first
+    let marginData = productMarginRates.find(p => p.productId === bundleId);
+    
+    // If not found, try by product name
+    if (!marginData && bundleName) {
+      marginData = productMarginRates.find(p => 
+        p.productName?.toLowerCase() === bundleName.toLowerCase()
+      );
+    }
+    
+    return marginData ? parseFloat(marginData.marginRate || 0) : 0;
+  };
 
   const fetchInventory = async (signal = null, isMounted = true) => {
     try {
@@ -377,6 +418,35 @@ export default function RetailerInventoryDisplay() {
                         {item.status || 'ACTIVE'}
                       </span>
                     </div>
+                    
+                    {/* Margin Rate Information */}
+                    {(() => {
+                      const marginRate = getProductMarginRate(item.bundleId, item.bundleName);
+                      const profitPerUnit = (bundlePrice * marginRate / 100).toFixed(2);
+                      const totalProfit = ((item.availablePins || 0) * parseFloat(profitPerUnit)).toFixed(2);
+                      
+                      return marginRate > 0 ? (
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600 flex items-center gap-1">
+                              <DollarSign size={14} className="text-purple-600" />
+                              Margin Rate:
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+                              {marginRate}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm mt-2">
+                            <span className="text-gray-600">Profit/Unit:</span>
+                            <span className="font-semibold text-green-600">NOK {profitPerUnit}</span>
+                          </div>
+                          <div className="flex justify-between text-sm mt-2">
+                            <span className="text-gray-600">Total Profit:</span>
+                            <span className="font-bold text-green-700">NOK {totalProfit}</span>
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
 
                   {/* PINs Section */}

@@ -10,8 +10,10 @@ import com.example.topup.demo.service.UserService;
 import com.example.topup.demo.service.BundleService;
 import com.example.topup.demo.service.StockService;
 import com.example.topup.demo.entity.StockPool;
+import com.example.topup.demo.entity.RetailerLimit;
 import com.example.topup.demo.repository.RetailerOrderRepository;
 import com.example.topup.demo.repository.OrderRepository;
+import com.example.topup.demo.repository.RetailerLimitRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -53,6 +55,9 @@ public class RetailerController {
     
     @Autowired
     private OrderRepository orderRepository;
+    
+    @Autowired
+    private RetailerLimitRepository retailerLimitRepository;
 
     // Get all orders for the authenticated retailer
     @GetMapping("/orders")
@@ -621,6 +626,179 @@ public class RetailerController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("success", false, "message", "Failed to fetch margin rate: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get all product-specific margin rates for the authenticated retailer
+     */
+    @GetMapping("/margin-rates/all")
+    public ResponseEntity<?> getAllProductMarginRates(Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            
+            // Get all product-specific margin rates
+            List<Map<String, Object>> productMarginRates = retailerService.getAllProductMarginRates(retailer);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("productMarginRates", productMarginRates);
+            response.put("totalProducts", productMarginRates.size());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to fetch product margin rates: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get credit level for the authenticated retailer
+     */
+    @GetMapping("/credit-level")
+    public ResponseEntity<?> getCreditLevel(Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            
+            // Fetch credit limit from retailer_limits collection
+            Optional<RetailerLimit> limitOpt = retailerLimitRepository.findByRetailer_Id(retailer.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            
+            if (limitOpt.isPresent()) {
+                RetailerLimit limit = limitOpt.get();
+                
+                // Calculate credit usage percentage
+                BigDecimal usagePercentage = BigDecimal.ZERO;
+                if (limit.getCreditLimit() != null && limit.getCreditLimit().compareTo(BigDecimal.ZERO) > 0) {
+                    BigDecimal usedCredit = limit.getUsedCredit() != null ? limit.getUsedCredit() : BigDecimal.ZERO;
+                    usagePercentage = usedCredit
+                        .multiply(BigDecimal.valueOf(100))
+                        .divide(limit.getCreditLimit(), 2, RoundingMode.HALF_UP);
+                }
+                
+                response.put("success", true);
+                response.put("creditLimit", limit.getCreditLimit() != null ? limit.getCreditLimit().doubleValue() : 0.0);
+                response.put("usedCredit", limit.getUsedCredit() != null ? limit.getUsedCredit().doubleValue() : 0.0);
+                response.put("availableCredit", limit.getAvailableCredit() != null ? limit.getAvailableCredit().doubleValue() : 0.0);
+                response.put("creditUsagePercentage", usagePercentage.doubleValue());
+                response.put("status", limit.getStatus() != null ? limit.getStatus().toString() : "ACTIVE");
+                response.put("outstandingAmount", limit.getOutstandingAmount() != null ? limit.getOutstandingAmount().doubleValue() : 0.0);
+                
+                // Include transactions if available
+                if (limit.getTransactions() != null && !limit.getTransactions().isEmpty()) {
+                    response.put("transactions", limit.getTransactions());
+                }
+                
+                System.out.println("✅ Credit level fetched for retailer: " + retailer.getId());
+                System.out.println("   Credit Limit: " + limit.getCreditLimit());
+                System.out.println("   Used Credit: " + limit.getUsedCredit());
+                System.out.println("   Available Credit: " + limit.getAvailableCredit());
+                
+                return ResponseEntity.ok(response);
+            } else {
+                // No credit limit set - return zeros
+                System.out.println("⚠️ No credit limit found for retailer: " + retailer.getId());
+                response.put("success", true);
+                response.put("creditLimit", 0.0);
+                response.put("usedCredit", 0.0);
+                response.put("availableCredit", 0.0);
+                response.put("creditUsagePercentage", 0.0);
+                response.put("status", "NOT_SET");
+                response.put("message", "No credit limit set by admin yet");
+                
+                return ResponseEntity.ok(response);
+            }
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching credit level: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to fetch credit level: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Record profit from a sale
+     */
+    @PostMapping("/record-profit")
+    public ResponseEntity<?> recordProfit(@RequestBody Map<String, Object> profitData, Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            
+            BigDecimal saleAmount = new BigDecimal(profitData.get("saleAmount").toString());
+            BigDecimal costPrice = new BigDecimal(profitData.get("costPrice").toString());
+            String bundleName = profitData.get("bundleName").toString();
+            String bundleId = profitData.getOrDefault("bundleId", "").toString();
+            Double marginRate = profitData.containsKey("marginRate") ? 
+                Double.parseDouble(profitData.get("marginRate").toString()) : null;
+            
+            // Record the profit
+            retailerService.recordProfit(retailer, saleAmount, costPrice, bundleName, bundleId, marginRate);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Profit recorded successfully");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("❌ Error recording profit: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to record profit: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get profit data by time period (daily, monthly, yearly)
+     */
+    @GetMapping("/profit/{period}")
+    public ResponseEntity<?> getProfitData(@PathVariable String period, Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            
+            // Validate period
+            if (!Arrays.asList("daily", "monthly", "yearly").contains(period.toLowerCase())) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("success", false, "message", "Invalid period. Use: daily, monthly, or yearly"));
+            }
+            
+            List<Map<String, Object>> profitData = retailerService.getProfitData(retailer, period);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("period", period);
+            response.put("data", profitData);
+            response.put("count", profitData.size());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching profit data: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to fetch profit data: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get profit summary (total profit, daily profit, avg margin)
+     */
+    @GetMapping("/profit-summary")
+    public ResponseEntity<?> getProfitSummary(Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            
+            Map<String, Object> summary = retailerService.getProfitSummary(retailer);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("summary", summary);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching profit summary: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to fetch profit summary: " + e.getMessage()));
         }
     }
 

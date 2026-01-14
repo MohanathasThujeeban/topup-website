@@ -1423,14 +1423,9 @@ public class AdminService {
             metadata.put("productMarginRates", productMarginRates);
             
             System.out.println("✅ Product-specific margin rate stored for product: " + productName);
-        } else {
-            // Store global margin rate (for backward compatibility)
-            metadata.put("marginRate", marginRate);
-            metadata.put("marginRateSetDate", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-            metadata.put("marginRateSetBy", "admin");
-            System.out.println("✅ Global margin rate stored");
         }
         
+        // Always store global margin rate (for backward compatibility)
         metadata.put("marginRate", marginRate);
         metadata.put("marginRateSetDate", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         metadata.put("marginRateSetBy", "admin");
@@ -1506,4 +1501,54 @@ public class AdminService {
             return false;
         }
     }
-}
+
+    // Get all product-specific margin rates for a retailer
+    public List<Map<String, Object>> getAllRetailerProductMarginRates(String retailerEmail) {
+        List<Map<String, Object>> productMarginRates = new ArrayList<>();
+        
+        try {
+            User retailer = userRepository.findByEmailIgnoreCase(retailerEmail)
+                .orElseThrow(() -> new RuntimeException("Retailer not found with email: " + retailerEmail));
+            
+            if (!retailer.getAccountType().equals(User.AccountType.BUSINESS)) {
+                throw new RuntimeException("User is not a business retailer");
+            }
+            
+            if (retailer.getBusinessDetails() != null) {
+                Map<String, Object> metadata = retailer.getBusinessDetails().getMetadata();
+                
+                if (metadata != null && metadata.containsKey("productMarginRates")) {
+                    Object productRatesObj = metadata.get("productMarginRates");
+                    
+                    if (productRatesObj instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> productRatesMap = (Map<String, Object>) productRatesObj;
+                        
+                        for (Map.Entry<String, Object> entry : productRatesMap.entrySet()) {
+                            String productId = entry.getKey();
+                            
+                            if (entry.getValue() instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> rateInfo = (Map<String, Object>) entry.getValue();
+                                
+                                Map<String, Object> productMargin = new HashMap<>();
+                                productMargin.put("productId", productId);
+                                productMargin.put("productName", rateInfo.get("productName"));
+                                productMargin.put("poolName", rateInfo.get("poolName"));
+                                productMargin.put("marginRate", rateInfo.get("marginRate"));
+                                productMargin.put("setDate", rateInfo.get("setDate"));
+                                productMargin.put("setBy", rateInfo.get("setBy"));
+                                
+                                productMarginRates.add(productMargin);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Return empty list on error
+            System.err.println("Error fetching product margin rates for " + retailerEmail + ": " + e.getMessage());
+        }
+        
+        return productMarginRates;
+    }}

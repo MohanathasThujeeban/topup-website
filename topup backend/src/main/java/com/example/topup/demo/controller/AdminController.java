@@ -391,6 +391,30 @@ public class AdminController {
     }
 
     /**
+     * Get all product-specific margin rates for a retailer
+     */
+    @GetMapping("/retailers/{retailerEmail}/margin-rates/all")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getAllRetailerProductMarginRates(@PathVariable String retailerEmail) {
+        try {
+            List<Map<String, Object>> productMarginRates = adminService.getAllRetailerProductMarginRates(retailerEmail);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("productMarginRates", productMarginRates);
+            response.put("totalProducts", productMarginRates.size());
+            response.put("retailerEmail", retailerEmail);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
      * Get retailer purchase history
      */
     @GetMapping("/retailers/{retailerEmail}/purchase-history")

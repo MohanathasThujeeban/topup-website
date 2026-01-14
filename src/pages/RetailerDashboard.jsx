@@ -108,11 +108,28 @@ const RetailerDashboard = () => {
   
   // Retailer margin rate state (set by admin only - no defaults)
   const [retailerMarginRate, setRetailerMarginRate] = useState(null);
+  const [productMarginRates, setProductMarginRates] = useState([]); // Array of product-specific margin rates
   
   // Profit tracking state - starts from zero
   const [totalProfit, setTotalProfit] = useState(0);
   
   const [dailyProfit, setDailyProfit] = useState(0);
+  
+  // Profit analytics state
+  const [profitData, setProfitData] = useState({
+    daily: [],   // Array of {date, profit, sales}
+    monthly: [], // Array of {month, profit, sales}
+    yearly: []   // Array of {year, profit, sales}
+  });
+  const [profitTimeRange, setProfitTimeRange] = useState('daily'); // 'daily', 'monthly', 'yearly'
+  const [analyticsSubTab, setAnalyticsSubTab] = useState('overview'); // 'overview', 'profit'
+  
+  // Credit Level state
+  const [creditLimit, setCreditLimit] = useState(0);
+  const [usedCredit, setUsedCredit] = useState(0);
+  const [availableCredit, setAvailableCredit] = useState(0);
+  const [creditUsagePercentage, setCreditUsagePercentage] = useState(0);
+  const [creditTransactions, setCreditTransactions] = useState([]);
   
   // Recent Activities state - starts empty
   const [recentActivities, setRecentActivities] = useState([]);
@@ -394,46 +411,73 @@ const RetailerDashboard = () => {
     setRecentActivities(prev => [newActivity, ...prev.slice(0, 9)]); // Keep only 10 most recent
   };
   
-  // Enhanced profit calculation using admin-set margin rates only
-  const updateProfit = (saleAmount, costPrice, bundleName) => {
-    // Only calculate profits if admin has set a margin rate
-    if (!retailerMarginRate || retailerMarginRate <= 0) {
-      console.log(`⚠️ No admin margin rate set - skipping profit calculation for ${bundleName}`);
+  // Enhanced profit calculation using product-specific margin rates
+  const updateProfit = (saleAmount, costPrice, bundleName, bundleId = null) => {
+    // Find product-specific margin rate
+    let marginRate = null;
+    
+    // Try to find by bundleId first
+    if (bundleId) {
+      const productRate = productMarginRates.find(p => p.productId === bundleId);
+      if (productRate) {
+        marginRate = parseFloat(productRate.marginRate || 0);
+      }
+    }
+    
+    // If not found by ID, try by name
+    if (!marginRate && bundleName) {
+      const productRate = productMarginRates.find(p => 
+        p.productName?.toLowerCase() === bundleName.toLowerCase()
+      );
+      if (productRate) {
+        marginRate = parseFloat(productRate.marginRate || 0);
+      }
+    }
+    
+    // Fallback to retailer margin rate
+    if (!marginRate) {
+      marginRate = retailerMarginRate;
+    }
+    
+    // Only calculate profits if a margin rate exists
+    if (!marginRate || marginRate <= 0) {
+      console.log(`⚠️ No margin rate set for ${bundleName} - skipping profit calculation`);
       return;
     }
     
-    const profitAmount = saleAmount - costPrice;
-    const profitMarginPercent = ((profitAmount / saleAmount) * 100).toFixed(2);
+    // Calculate profit based on margin rate
+    const profitAmount = (saleAmount * marginRate) / 100;
+    const actualCostPrice = saleAmount - profitAmount;
     
-    console.log(`💰 Real Profit Calculation (Admin Rate: ${retailerMarginRate}%):`);
-    console.log(`  Bundle: ${bundleName}`);
+    console.log(`💰 Real Profit Calculation (${bundleName}):`);
     console.log(`  Sale Amount: NOK ${saleAmount.toFixed(2)}`);
-    console.log(`  Cost Price: NOK ${costPrice.toFixed(2)}`);
+    console.log(`  Margin Rate: ${marginRate}%`);
+    console.log(`  Cost Price: NOK ${actualCostPrice.toFixed(2)}`);
     console.log(`  Profit Amount: NOK ${profitAmount.toFixed(2)}`);
-    console.log(`  Actual Profit Margin: ${profitMarginPercent}%`);
-    console.log(`  Admin Set Margin Rate: ${retailerMarginRate}%`);
     
-    // Update total profit with real calculations
+    const today = new Date().toISOString().split('T')[0];
+    const currentMonth = new Date().toISOString().substring(0, 7);
+    const currentYear = new Date().getFullYear().toString();
+    
+    // Update total profit
     setTotalProfit(prevTotal => {
       const newTotal = prevTotal + profitAmount;
       console.log(`📈 Updated total profit: NOK ${prevTotal.toFixed(2)} → NOK ${newTotal.toFixed(2)}`);
       
-      // Update analytics with real profit data
+      // Update analytics
       setAnalytics(prev => ({
         ...prev,
         totalProfit: newTotal,
-        profitMargin: retailerMarginRate.toString() // Use real admin-set margin rate
+        profitMargin: marginRate.toString()
       }));
       
       return newTotal;
     });
     
-    // Update daily profit with real calculations
+    // Update daily profit
     setDailyProfit(prevDaily => {
       const newDaily = prevDaily + profitAmount;
-      console.log(`📅 Updated daily profit: NOK ${prevDaily.toFixed(2)} → NOK ${newDaily.toFixed(2)}`);
       
-      // Update analytics with real daily profit
       setAnalytics(prev => ({
         ...prev,
         dailyProfit: newDaily
@@ -442,12 +486,80 @@ const RetailerDashboard = () => {
       return newDaily;
     });
     
+    // Update profit data for analytics graphs
+    setProfitData(prev => {
+      const newData = { ...prev };
+      
+      // Update daily data
+      const dailyIndex = newData.daily.findIndex(d => d.date === today);
+      if (dailyIndex >= 0) {
+        newData.daily[dailyIndex].profit += profitAmount;
+        newData.daily[dailyIndex].sales += 1;
+        newData.daily[dailyIndex].revenue += saleAmount;
+      } else {
+        newData.daily.push({
+          date: today,
+          profit: profitAmount,
+          sales: 1,
+          revenue: saleAmount,
+          marginRate: marginRate
+        });
+      }
+      
+      // Update monthly data
+      const monthlyIndex = newData.monthly.findIndex(m => m.month === currentMonth);
+      if (monthlyIndex >= 0) {
+        newData.monthly[monthlyIndex].profit += profitAmount;
+        newData.monthly[monthlyIndex].sales += 1;
+        newData.monthly[monthlyIndex].revenue += saleAmount;
+      } else {
+        newData.monthly.push({
+          month: currentMonth,
+          profit: profitAmount,
+          sales: 1,
+          revenue: saleAmount,
+          marginRate: marginRate
+        });
+      }
+      
+      // Update yearly data
+      const yearlyIndex = newData.yearly.findIndex(y => y.year === currentYear);
+      if (yearlyIndex >= 0) {
+        newData.yearly[yearlyIndex].profit += profitAmount;
+        newData.yearly[yearlyIndex].sales += 1;
+        newData.yearly[yearlyIndex].revenue += saleAmount;
+      } else {
+        newData.yearly.push({
+          year: currentYear,
+          profit: profitAmount,
+          sales: 1,
+          revenue: saleAmount,
+          marginRate: marginRate
+        });
+      }
+      
+      // Keep last 30 days, 12 months, 5 years
+      newData.daily = newData.daily.slice(-30);
+      newData.monthly = newData.monthly.slice(-12);
+      newData.yearly = newData.yearly.slice(-5);
+      
+      // Save to localStorage
+      localStorage.setItem('profitData', JSON.stringify(newData));
+      
+      return newData;
+    });
+    
+    // Save profit to backend database
+    saveProfitToBackend(saleAmount, actualCostPrice, bundleName, bundleId, marginRate);
+    
     // Add activity for profit tracking
     addActivity('pos_sale', `Profit earned: NOK ${profitAmount.toFixed(2)} from ${bundleName}`, {
       saleAmount,
-      costPrice,
+      costPrice: actualCostPrice,
       profitAmount,
       bundleName,
+      bundleId,
+      marginRate,
       timestamp: new Date().toISOString()
     });
   };
@@ -589,6 +701,58 @@ const RetailerDashboard = () => {
     };
   }, []);  // Remove dependencies to prevent constant re-fetching that causes lag
 
+  // Fetch product margin rates when margin tab becomes active
+  useEffect(() => {
+    if (activeTab === 'margin' && productMarginRates.length === 0) {
+      fetchAllProductMarginRates();
+    }
+  }, [activeTab]);
+  
+  // Load profit data from localStorage on initialization
+  useEffect(() => {
+    const savedProfitData = localStorage.getItem('profitData');
+    if (savedProfitData) {
+      try {
+        const parsed = JSON.parse(savedProfitData);
+        setProfitData(parsed);
+        
+        // Calculate total profit from all data
+        const totalFromData = parsed.daily.reduce((sum, day) => sum + (day.profit || 0), 0);
+        if (totalFromData > 0) {
+          setTotalProfit(totalFromData);
+          setAnalytics(prev => ({
+            ...prev,
+            totalProfit: totalFromData
+          }));
+        }
+        
+        console.log('📊 Loaded profit data from localStorage:', parsed);
+      } catch (error) {
+        console.error('Error loading profit data:', error);
+      }
+    }
+    
+    // Load credit level
+    const savedCredit = localStorage.getItem('creditLevel');
+    if (savedCredit) {
+      try {
+        const parsed = JSON.parse(savedCredit);
+        setCreditLimit(parsed.creditLimit || 0);
+        setUsedCredit(parsed.usedCredit || 0);
+        setAvailableCredit(parsed.availableCredit || 0);
+        setCreditUsagePercentage(parsed.creditUsagePercentage || 0);
+      } catch (error) {
+        console.error('Error loading credit level:', error);
+      }
+    }
+    
+    // Fetch credit from server
+    fetchCreditLevel();
+    
+    // Fetch profit data from backend
+    fetchProfitDataFromBackend();
+  }, []);
+
   const fetchRetailerMarginRate = async () => {
     // Prevent multiple concurrent calls
     if (fetchingMarginRate) {
@@ -665,6 +829,40 @@ const RetailerDashboard = () => {
       }
     } finally {
       setFetchingMarginRate(false);
+    }
+  };
+
+  const fetchAllProductMarginRates = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('📊 No token: Cannot fetch product margin rates');
+        return;
+      }
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
+
+      console.log('📊 Fetching all product margin rates...');
+      
+      const response = await fetch(`${API_BASE_URL}/retailer/margin-rates/all`, { 
+        headers,
+        keepalive: false
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.productMarginRates) {
+          setProductMarginRates(data.productMarginRates);
+          console.log(`📊 Loaded ${data.productMarginRates.length} product margin rates`);
+        }
+      } else {
+        console.log(`📊 Failed to fetch product margin rates: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching product margin rates:', error.message);
     }
   };
 
@@ -1363,6 +1561,186 @@ const RetailerDashboard = () => {
             
   };
 
+  const fetchCreditLevel = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('No token - using demo credit data');
+        setCreditLimit(900);
+        setUsedCredit(829);
+        setAvailableCredit(71);
+        setCreditUsagePercentage(92.1);
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/retailer/credit-level`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setCreditLimit(data.creditLimit || 0);
+          setUsedCredit(data.usedCredit || 0);
+          setAvailableCredit(data.availableCredit || 0);
+          setCreditUsagePercentage(data.creditUsagePercentage || 0);
+          
+          console.log('📊 Credit Level:', {
+            limit: data.creditLimit,
+            used: data.usedCredit,
+            available: data.availableCredit,
+            usage: data.creditUsagePercentage
+          });
+        }
+      } else {
+        console.log('Using demo credit data');
+        setCreditLimit(900);
+        setUsedCredit(829);
+        setAvailableCredit(71);
+        setCreditUsagePercentage(92.1);
+      }
+    } catch (error) {
+      console.error('Error fetching credit level:', error);
+      // Set demo data
+      setCreditLimit(900);
+      setUsedCredit(829);
+      setAvailableCredit(71);
+      setCreditUsagePercentage(92.1);
+    }
+  };
+
+  const updateCreditOnSale = (saleAmount) => {
+    setUsedCredit(prev => {
+      const newUsed = prev + saleAmount;
+      const newAvailable = creditLimit - newUsed;
+      const newPercentage = (newUsed / creditLimit) * 100;
+      
+      setAvailableCredit(newAvailable);
+      setCreditUsagePercentage(newPercentage);
+      
+      // Add to credit transactions
+      setCreditTransactions(prevTrans => [{
+        date: new Date().toISOString(),
+        amount: saleAmount,
+        type: 'sale',
+        balance: newAvailable
+      }, ...prevTrans.slice(0, 49)]);
+      
+      // Save to localStorage
+      localStorage.setItem('creditLevel', JSON.stringify({
+        creditLimit,
+        usedCredit: newUsed,
+        availableCredit: newAvailable,
+        creditUsagePercentage: newPercentage
+      }));
+      
+      console.log(`💳 Credit updated: Used ${newUsed.toFixed(2)} / ${creditLimit} (${newPercentage.toFixed(1)}%)`);
+      
+      return newUsed;
+    });
+  };
+
+  // Save profit to backend database
+  const saveProfitToBackend = async (saleAmount, costPrice, bundleName, bundleId = null, marginRate = null) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('⚠️ No token - skipping backend profit save (using localStorage only)');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/retailer/record-profit`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          saleAmount,
+          costPrice,
+          bundleName,
+          bundleId: bundleId || '',
+          marginRate
+        })
+      });
+
+      if (response.ok) {
+        console.log('✅ Profit saved to database');
+      } else {
+        console.warn('⚠️ Failed to save profit to backend, using localStorage fallback');
+      }
+    } catch (error) {
+      console.error('❌ Error saving profit to backend:', error);
+      console.log('⚠️ Profit saved to localStorage only');
+    }
+  };
+
+  // Fetch profit data from backend
+  const fetchProfitDataFromBackend = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('⚠️ No token - using localStorage profit data');
+        return;
+      }
+
+      // Fetch all three periods
+      const [dailyRes, monthlyRes, yearlyRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/retailer/profit/daily`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE_URL}/retailer/profit/monthly`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE_URL}/retailer/profit/yearly`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+
+      if (dailyRes.ok && monthlyRes.ok && yearlyRes.ok) {
+        const daily = await dailyRes.json();
+        const monthly = await monthlyRes.json();
+        const yearly = await yearlyRes.json();
+
+        // Update profitData state with backend data
+        setProfitData({
+          daily: daily.data || [],
+          monthly: monthly.data || [],
+          yearly: yearly.data || []
+        });
+
+        // Calculate totals from backend data
+        const totalProfitFromBackend = yearly.data?.reduce((sum, y) => sum + (y.profit || 0), 0) || 0;
+        const todayProfit = daily.data?.find(d => d.date === new Date().toISOString().split('T')[0])?.profit || 0;
+
+        setTotalProfit(totalProfitFromBackend);
+        setDailyProfit(todayProfit);
+
+        console.log('✅ Profit data loaded from backend:', {
+          daily: daily.data?.length || 0,
+          monthly: monthly.data?.length || 0,
+          yearly: yearly.data?.length || 0,
+          totalProfit: totalProfitFromBackend
+        });
+
+        // Also save to localStorage as backup
+        localStorage.setItem('profitData', JSON.stringify({
+          daily: daily.data || [],
+          monthly: monthly.data || [],
+          yearly: yearly.data || []
+        }));
+      } else {
+        console.log('⚠️ Backend profit data not available, using localStorage');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching profit from backend:', error);
+      console.log('⚠️ Using localStorage profit data as fallback');
+    }
+  };
+
   const handleLogout = () => {
     if (isDemoMode()) {
       navigate('/', { replace: true });
@@ -1646,6 +2024,22 @@ const RetailerDashboard = () => {
       return;
     }
 
+    // Calculate total amount first to check credit
+    const totalAmount = selectedBundle.bundlePrice * saleQuantity;
+
+    // Check credit limit before processing sale
+    if (availableCredit < totalAmount) {
+      alert(
+        `❌ Credit Limit Exceeded!\n\n` +
+        `Sale Amount: ${totalAmount.toFixed(2)} kr\n` +
+        `Available Credit: ${availableCredit.toFixed(2)} kr\n` +
+        `Shortage: ${(totalAmount - availableCredit).toFixed(2)} kr\n\n` +
+        `You need ${(totalAmount - availableCredit).toFixed(2)} kr more credit to complete this sale.\n` +
+        `Please contact the administrator to increase your credit limit.`
+      );
+      return;
+    }
+
     try {
       setSaleLoading(true);
       
@@ -1763,6 +2157,10 @@ const RetailerDashboard = () => {
             
             // Update profit and activity
             updateProfit(totalAmount, costPrice * saleQuantity, selectedBundle.bundleName);
+            
+            // Update credit level after successful sale
+            updateCreditOnSale(totalAmount);
+            
             addActivity(
               'pos_sale',
               `Sold ${saleQuantity}x ${selectedBundle.bundleName} - Profit: NOK ${totalProfit.toFixed(2)} (API)`,
@@ -1873,6 +2271,10 @@ const RetailerDashboard = () => {
       
       // Update profit and activity
       updateProfit(totalAmount, costPrice * saleQuantity, selectedBundle.bundleName);
+      
+      // Update credit level after successful sale
+      updateCreditOnSale(totalAmount);
+      
       addActivity(
         'pos_sale',
         `Sold ${saleQuantity}x ${selectedBundle.bundleName} - Profit: NOK ${profitAmount.toFixed(2)} (Offline)`,
@@ -2274,6 +2676,13 @@ const RetailerDashboard = () => {
                 onClick={handleTabChange}
               />
               <SidebarNavItem
+                id="credit"
+                label="Credit Level"
+                icon={DollarSign}
+                active={activeTab === 'credit'}
+                onClick={handleTabChange}
+              />
+              <SidebarNavItem
                 id="analytics"
                 label="Analytics"
                 icon={PieChart}
@@ -2308,6 +2717,9 @@ const RetailerDashboard = () => {
               <button onClick={() => handleTabChange('margin')} className={`w-full p-3 rounded-xl ${activeTab === 'margin' ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <Award size={20} />
               </button>
+              <button onClick={() => handleTabChange('credit')} className={`w-full p-3 rounded-xl ${activeTab === 'credit' ? 'bg-gradient-to-r from-yellow-600 to-orange-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                <DollarSign size={20} />
+              </button>
               <button onClick={() => setActiveTab('analytics')} className={`w-full p-3 rounded-xl ${activeTab === 'analytics' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 <PieChart size={20} />
               </button>
@@ -2338,6 +2750,7 @@ const RetailerDashboard = () => {
                 {activeTab === 'pos' && 'Point of Sale'}
                 {activeTab === 'offers' && 'Offers'}
                 {activeTab === 'margin' && 'Margin Rate'}
+                {activeTab === 'credit' && 'Credit Level'}
                 {activeTab === 'analytics' && 'Analytics'}
                 {activeTab === 'privacy' && 'Privacy Settings'}
               </h2>
@@ -2419,6 +2832,93 @@ const RetailerDashboard = () => {
                 color={retailerMarginRate ? "bg-gradient-to-br from-purple-600 to-purple-700" : "bg-gradient-to-br from-gray-400 to-gray-500"}
                 description={retailerMarginRate !== null ? `Set by admin - ${retailerMarginRate}% profit margin` : 'Admin needs to set margin rate'}
               />
+            </div>
+
+            {/* Credit Level Status Card */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <DollarSign className="text-yellow-600" size={24} />
+                  Credit Level Status
+                </h3>
+                <button
+                  onClick={() => handleTabChange('credit')}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium underline"
+                >
+                  View Details
+                </button>
+              </div>
+
+              {/* Credit Usage Progress Bar */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-700 font-medium">Credit Usage</span>
+                  <span className={`font-bold ${
+                    creditUsagePercentage > 95 ? 'text-red-600' :
+                    creditUsagePercentage > 80 ? 'text-yellow-600' :
+                    'text-green-600'
+                  }`}>
+                    {creditUsagePercentage.toFixed(1)}%
+                  </span>
+                </div>
+                
+                <div className="relative w-full h-8 bg-gray-200 rounded-lg overflow-hidden shadow-inner">
+                  <div
+                    className={`h-full rounded-lg transition-all duration-700 ease-out ${
+                      creditUsagePercentage > 95 ? 'bg-gradient-to-r from-red-500 to-red-600' :
+                      creditUsagePercentage > 80 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' :
+                      creditUsagePercentage > 50 ? 'bg-gradient-to-r from-blue-400 to-blue-600' :
+                      'bg-gradient-to-r from-green-400 to-green-600'
+                    }`}
+                    style={{ width: `${Math.min(creditUsagePercentage, 100)}%` }}
+                  ></div>
+                </div>
+
+                {/* Credit Details Grid */}
+                <div className="grid grid-cols-3 gap-3 mt-4">
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <div className="text-xs text-blue-700 font-medium">Limit</div>
+                    <div className="text-lg font-bold text-blue-900">{creditLimit.toFixed(0)} kr</div>
+                  </div>
+                  <div className="bg-orange-50 p-3 rounded-lg">
+                    <div className="text-xs text-orange-700 font-medium">Used</div>
+                    <div className="text-lg font-bold text-orange-900">{usedCredit.toFixed(0)} kr</div>
+                  </div>
+                  <div className="bg-green-50 p-3 rounded-lg">
+                    <div className="text-xs text-green-700 font-medium">Available</div>
+                    <div className="text-lg font-bold text-green-900">{availableCredit.toFixed(0)} kr</div>
+                  </div>
+                </div>
+
+                {/* Warning Message */}
+                {creditUsagePercentage > 80 && (
+                  <div className={`mt-3 p-3 rounded-lg border-2 ${
+                    creditUsagePercentage > 95 
+                      ? 'bg-red-50 border-red-300' 
+                      : 'bg-yellow-50 border-yellow-300'
+                  }`}>
+                    <div className="flex items-start gap-2">
+                      <span className="text-lg">{creditUsagePercentage > 95 ? '⚠️' : '⚡'}</span>
+                      <div>
+                        <p className={`text-sm font-semibold ${
+                          creditUsagePercentage > 95 ? 'text-red-900' : 'text-yellow-900'
+                        }`}>
+                          {creditUsagePercentage > 95 
+                            ? 'Credit Limit Almost Reached!' 
+                            : 'High Credit Usage'}
+                        </p>
+                        <p className={`text-xs mt-1 ${
+                          creditUsagePercentage > 95 ? 'text-red-800' : 'text-yellow-800'
+                        }`}>
+                          {availableCredit <= 0 
+                            ? 'Cannot process sales - contact admin to increase limit' 
+                            : `Only ${availableCredit.toFixed(2)} kr remaining - contact admin if needed`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Quick Actions */}
@@ -3089,6 +3589,21 @@ const RetailerDashboard = () => {
                   <form
                     onSubmit={async (e) => {
                       e.preventDefault();
+                      
+                      // Check credit limit before processing eSIM sale
+                      const esimPrice = selectedEsim.productInfo?.price || 0;
+                      if (availableCredit < esimPrice) {
+                        alert(
+                          `❌ Credit Limit Exceeded!\n\n` +
+                          `eSIM Price: ${esimPrice.toFixed(2)} kr\n` +
+                          `Available Credit: ${availableCredit.toFixed(2)} kr\n` +
+                          `Shortage: ${(esimPrice - availableCredit).toFixed(2)} kr\n\n` +
+                          `You need ${(esimPrice - availableCredit).toFixed(2)} kr more credit to complete this sale.\n` +
+                          `Please contact the administrator to increase your credit limit.`
+                        );
+                        return;
+                      }
+                      
                       setEsimSaleLoading(true);
                       
                       try {
@@ -3113,6 +3628,9 @@ const RetailerDashboard = () => {
                         const result = await response.json();
                         
                         if (response.ok && result.success) {
+                          // Update credit level after successful eSIM sale
+                          updateCreditOnSale(esimPrice);
+                          
                           alert(`✅ eSIM QR code sent successfully to ${esimCustomerData.email}!`);
                           setShowEsimCustomerForm(false);
                           setSelectedEsim(null);
@@ -3207,6 +3725,35 @@ const RetailerDashboard = () => {
 
         {activeTab === 'analytics' && (
           <div className="space-y-6">
+            {/* Sub-tabs for Analytics */}
+            <div className="bg-white rounded-xl shadow-lg p-4 border border-gray-100">
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setAnalyticsSubTab('overview')}
+                  className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                    analyticsSubTab === 'overview'
+                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Overview
+                </button>
+                <button
+                  onClick={() => setAnalyticsSubTab('profit')}
+                  className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                    analyticsSubTab === 'profit'
+                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  📊 Profit Analytics
+                </button>
+              </div>
+            </div>
+
+            {/* Overview Sub-tab */}
+            {analyticsSubTab === 'overview' && (
+              <>
             {/* Performance Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
@@ -3308,6 +3855,178 @@ const RetailerDashboard = () => {
                 <p className="text-gray-500">Revenue chart visualization will be available here</p>
               </div>
             </div>
+              </>
+            )}
+
+            {/* Profit Analytics Sub-tab */}
+            {analyticsSubTab === 'profit' && (
+              <div className="space-y-6">
+                {/* Profit Overview Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-gradient-to-br from-green-600 to-emerald-600 rounded-2xl shadow-xl p-6 text-white">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-semibold">Total Profit</h4>
+                      <DollarSign className="w-8 h-8 opacity-80" />
+                    </div>
+                    <div className="text-3xl font-bold mb-2">
+                      NOK {totalProfit.toLocaleString('no-NO', { minimumFractionDigits: 2 })}
+                    </div>
+                    <p className="text-green-100 text-sm">All-time earnings</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-xl p-6 text-white">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-semibold">Today's Profit</h4>
+                      <TrendingUp className="w-8 h-8 opacity-80" />
+                    </div>
+                    <div className="text-3xl font-bold mb-2">
+                      NOK {dailyProfit.toLocaleString('no-NO', { minimumFractionDigits: 2 })}
+                    </div>
+                    <p className="text-blue-100 text-sm">
+                      {profitData.daily.length > 0 ? `${profitData.daily[profitData.daily.length - 1]?.sales || 0} sales` : 'No sales yet'}
+                    </p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl shadow-xl p-6 text-white">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-semibold">Avg. Margin</h4>
+                      <Award className="w-8 h-8 opacity-80" />
+                    </div>
+                    <div className="text-3xl font-bold mb-2">
+                      {(() => {
+                        if (productMarginRates.length > 0) {
+                          const avg = productMarginRates.reduce((sum, p) => sum + parseFloat(p.marginRate || 0), 0) / productMarginRates.length;
+                          return `${avg.toFixed(1)}%`;
+                        }
+                        return retailerMarginRate !== null ? `${retailerMarginRate}%` : 'N/A';
+                      })()}
+                    </div>
+                    <p className="text-purple-100 text-sm">
+                      {productMarginRates.length > 0 ? `${productMarginRates.length} products` : 'Set by admin'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Time Range Selector */}
+                <div className="bg-white rounded-xl shadow-lg p-4 border border-gray-100">
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setProfitTimeRange('daily')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        profitTimeRange === 'daily'
+                          ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      Daily
+                    </button>
+                    <button
+                      onClick={() => setProfitTimeRange('monthly')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        profitTimeRange === 'monthly'
+                          ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      Monthly
+                    </button>
+                    <button
+                      onClick={() => setProfitTimeRange('yearly')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        profitTimeRange === 'yearly'
+                          ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      Yearly
+                    </button>
+                  </div>
+                </div>
+
+                {/* Profit Chart */}
+                <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-6">
+                    {profitTimeRange === 'daily' ? 'Daily' : profitTimeRange === 'monthly' ? 'Monthly' : 'Yearly'} Profit Trends
+                  </h4>
+                  
+                  {(() => {
+                    const data = profitData[profitTimeRange];
+                    if (data.length === 0) {
+                      return (
+                        <div className="text-center py-12">
+                          <BarChart3 size={48} className="text-gray-400 mx-auto mb-4" />
+                          <h3 className="text-lg font-semibold text-gray-900 mb-2">No profit data yet</h3>
+                          <p className="text-gray-500">Make sales through Point of Sale to see profit analytics</p>
+                        </div>
+                      );
+                    }
+
+                    const maxProfit = Math.max(...data.map(d => d.profit));
+                    
+                    return (
+                      <div className="space-y-4">
+                        <div className="grid gap-3">
+                          {data.map((item, index) => {
+                            const label = profitTimeRange === 'daily' 
+                              ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                              : profitTimeRange === 'monthly'
+                              ? new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                              : item.year;
+                            
+                            const percentage = (item.profit / maxProfit) * 100;
+                            
+                            return (
+                              <div key={index} className="space-y-2">
+                                <div className="flex justify-between items-center text-sm">
+                                  <span className="font-medium text-gray-700">{label}</span>
+                                  <div className="text-right">
+                                    <span className="font-bold text-green-600">NOK {item.profit.toFixed(2)}</span>
+                                    <span className="text-gray-500 ml-2">({item.sales} sales)</span>
+                                  </div>
+                                </div>
+                                <div className="relative w-full h-6 bg-gray-100 rounded-full overflow-hidden">
+                                  <div 
+                                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all duration-500"
+                                    style={{ width: `${percentage}%` }}
+                                  ></div>
+                                  <div className="absolute inset-0 flex items-center justify-end pr-3">
+                                    <span className="text-xs font-medium text-gray-700">
+                                      {item.marginRate ? `${item.marginRate}%` : ''}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Summary Stats */}
+                        <div className="mt-6 pt-6 border-t border-gray-200 grid grid-cols-3 gap-4">
+                          <div className="text-center">
+                            <p className="text-sm text-gray-600 mb-1">Total Revenue</p>
+                            <p className="text-xl font-bold text-blue-600">
+                              NOK {data.reduce((sum, d) => sum + (d.revenue || 0), 0).toFixed(2)}
+                            </p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm text-gray-600 mb-1">Total Profit</p>
+                            <p className="text-xl font-bold text-green-600">
+                              NOK {data.reduce((sum, d) => sum + d.profit, 0).toFixed(2)}
+                            </p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm text-gray-600 mb-1">Total Sales</p>
+                            <p className="text-xl font-bold text-purple-600">
+                              {data.reduce((sum, d) => sum + d.sales, 0)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -3342,146 +4061,415 @@ const RetailerDashboard = () => {
             <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl shadow-xl p-6 text-white">
               <h3 className="text-2xl font-bold mb-2 flex items-center gap-3">
                 <Award size={28} />
-                Your Profit Margin Rate
+                Product Margin Rates
               </h3>
               <p className="text-purple-100">
-                This is your profit margin rate set by the admin. It determines your profit on each sale.
+                View all product-specific margin rates set by the admin for your account.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Current Margin Rate */}
-              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-semibold text-gray-900">Current Margin</h4>
-                  <Award className="text-purple-600" size={24} />
-                </div>
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-purple-600 mb-2">{retailerMarginRate}%</div>
-                  <p className="text-sm text-gray-600">Profit margin per sale</p>
-                  <div className="mt-4 p-3 bg-purple-50 rounded-lg">
-                    <p className="text-xs text-purple-700">
-                      📊 For every NOK 100 sale, you earn NOK {retailerMarginRate} profit
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Margin Calculator */}
-              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-semibold text-gray-900">Profit Calculator</h4>
-                  <DollarSign className="text-green-600" size={24} />
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Sale Price:</span>
-                    <span className="font-medium">NOK 100</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Cost Price:</span>
-                    <span className="font-medium">NOK {(100 * (1 - retailerMarginRate / 100)).toFixed(2)}</span>
-                  </div>
-                  <div className="border-t pt-2">
-                    <div className="flex justify-between text-lg font-semibold">
-                      <span className="text-gray-700">Your Profit:</span>
-                      <span className="text-green-600">NOK {retailerMarginRate}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Margin Status */}
-              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-semibold text-gray-900">Margin Status</h4>
-                  <CheckCircle className="text-green-600" size={24} />
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span className="text-sm text-gray-700">Active & Applied</span>
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    Last updated: {new Date().toLocaleDateString()}
-                  </div>
-                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                    <p className="text-xs text-blue-700">
-                      💡 Margin rate is automatically applied to all your sales
-                    </p>
-                  </div>
-                  <div className="mt-2 p-3 bg-yellow-50 rounded-lg">
-                    <p className="text-xs text-yellow-700">
-                      ⚙️ Only admin can modify your margin rate
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Margin History Table */}
+            {/* Product Margin Rates Table */}
             <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
               <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Activity className="text-blue-600" size={20} />
-                Recent Sales with Current Margin
+                <Package className="text-purple-600" size={20} />
+                Your Product Margin Rates
               </h4>
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Bundle</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sale Price</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Margin</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {recentActivities
-                      .filter(activity => activity.type === 'pos_sale' && activity.details?.saleAmount)
-                      .slice(0, 5)
-                      .map((sale, index) => {
-                        const saleAmount = sale.details.saleAmount || 0;
-                        const costPrice = sale.details.costPrice || (saleAmount * (1 - retailerMarginRate / 100));
-                        const profit = saleAmount - costPrice;
+              
+              {productMarginRates.length === 0 ? (
+                <div className="text-center py-12">
+                  <Award size={48} className="mx-auto mb-4 text-gray-400" />
+                  <p className="text-gray-600 mb-2">No product margin rates set yet</p>
+                  <p className="text-sm text-gray-500">Contact admin to set margin rates for your products</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pool Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margin Rate</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Profit on NOK 100</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Set Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Set By</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {productMarginRates.map((product, index) => {
+                        const marginRate = parseFloat(product.marginRate || 0);
+                        const profitPer100 = marginRate.toFixed(2);
+                        const setDate = product.setDate ? new Date(product.setDate).toLocaleDateString() : 'N/A';
                         
                         return (
                           <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {new Date(sale.timestamp).toLocaleDateString()}
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{product.productName || 'Unknown Product'}</div>
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {sale.details.bundleName || 'Bundle Sale'}
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-600">{product.poolName || 'N/A'}</div>
                             </td>
-                            <td className="px-4 py-2 text-sm font-medium text-gray-900">
-                              NOK {saleAmount.toFixed(2)}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-600">
-                              NOK {costPrice.toFixed(2)}
-                            </td>
-                            <td className="px-4 py-2 text-sm font-semibold text-green-600">
-                              NOK {profit.toFixed(2)}
-                            </td>
-                            <td className="px-4 py-2">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                {retailerMarginRate}%
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-800">
+                                {marginRate}%
                               </span>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-green-600">NOK {profitPer100}</div>
+                              <div className="text-xs text-gray-500">per NOK 100 sale</div>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {setDate}
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {product.setBy || 'Admin'}
                             </td>
                           </tr>
                         );
                       })}
-                    {recentActivities.filter(activity => activity.type === 'pos_sale' && activity.details?.saleAmount).length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                          <Activity size={32} className="mx-auto mb-2 text-gray-400" />
-                          <p>No sales data available</p>
-                          <p className="text-xs text-gray-400">Make some sales to see margin calculations here</p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Overall Margin Summary */}
+            {productMarginRates.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-semibold text-gray-900">Total Products</h4>
+                    <Package className="text-purple-600" size={24} />
+                  </div>
+                  <div className="text-4xl font-bold text-purple-600">{productMarginRates.length}</div>
+                  <p className="text-sm text-gray-600 mt-2">Products with margin rates</p>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-semibold text-gray-900">Average Margin</h4>
+                    <Award className="text-green-600" size={24} />
+                  </div>
+                  <div className="text-4xl font-bold text-green-600">
+                    {(productMarginRates.reduce((sum, p) => sum + parseFloat(p.marginRate || 0), 0) / productMarginRates.length).toFixed(1)}%
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">Across all products</p>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-semibold text-gray-900">Highest Margin</h4>
+                    <TrendingUp className="text-blue-600" size={24} />
+                  </div>
+                  <div className="text-4xl font-bold text-blue-600">
+                    {Math.max(...productMarginRates.map(p => parseFloat(p.marginRate || 0))).toFixed(1)}%
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">Best earning rate</p>
+                </div>
+              </div>
+            )}
+
+            {/* Legacy Single Margin Rate Display (if exists) */}
+            {retailerMarginRate && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+                    <span className="text-amber-600 text-sm">ℹ️</span>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-amber-800">Legacy Margin Rate</h4>
+                    <p className="text-sm text-amber-700 mt-1">
+                      A global margin rate of {retailerMarginRate}% is also set for your account. Product-specific rates take precedence.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Credit Level Tab */}
+        {activeTab === 'credit' && (
+          <div className="space-y-6">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-yellow-500 to-orange-600 rounded-2xl p-8 text-white shadow-2xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <DollarSign size={40} className="text-white" />
+                    <h2 className="text-3xl font-bold">Credit Level Management</h2>
+                  </div>
+                  <p className="text-yellow-50 text-lg">Monitor your credit usage and transaction history</p>
+                </div>
+                <div className="hidden lg:block">
+                  <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                    <DollarSign size={48} className="text-white" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Credit Warning Banner - Shows when usage > 95% */}
+            {creditUsagePercentage > 95 && (
+              <div className="bg-red-50 border-2 border-red-500 rounded-xl p-5 shadow-lg">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-xl">⚠️</span>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-red-900 text-lg">Credit Limit Almost Reached!</h4>
+                    <p className="text-red-800 mt-1">
+                      You have used {creditUsagePercentage.toFixed(1)}% of your credit limit. 
+                      {availableCredit <= 0 
+                        ? ' You cannot process any more sales until your credit is replenished.' 
+                        : ` Only ${availableCredit.toFixed(2)} kr remaining. Contact admin to increase your limit.`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Credit High Usage Warning - Shows when usage 80-95% */}
+            {creditUsagePercentage > 80 && creditUsagePercentage <= 95 && (
+              <div className="bg-yellow-50 border-2 border-yellow-500 rounded-xl p-5 shadow-lg">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-xl">⚡</span>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-yellow-900 text-lg">High Credit Usage</h4>
+                    <p className="text-yellow-800 mt-1">
+                      You have used {creditUsagePercentage.toFixed(1)}% of your credit limit. 
+                      Consider contacting admin to request a credit limit increase.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Credit Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Total Credit Limit */}
+              <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-blue-100 hover:shadow-2xl transition-shadow">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Credit Limit</h4>
+                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                    <DollarSign className="text-blue-600" size={24} />
+                  </div>
+                </div>
+                <div className="text-4xl font-bold text-blue-600 mb-2">{creditLimit.toFixed(2)} kr</div>
+                <p className="text-sm text-gray-600">Maximum allowed credit</p>
+              </div>
+
+              {/* Used Credit */}
+              <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-orange-100 hover:shadow-2xl transition-shadow">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Used Credit</h4>
+                  <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                    <TrendingUp className="text-orange-600" size={24} />
+                  </div>
+                </div>
+                <div className="text-4xl font-bold text-orange-600 mb-2">{usedCredit.toFixed(2)} kr</div>
+                <p className="text-sm text-gray-600">Total credit consumed</p>
+              </div>
+
+              {/* Available Credit */}
+              <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-green-100 hover:shadow-2xl transition-shadow">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Available Credit</h4>
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                    <Award className="text-green-600" size={24} />
+                  </div>
+                </div>
+                <div className="text-4xl font-bold text-green-600 mb-2">{availableCredit.toFixed(2)} kr</div>
+                <p className="text-sm text-gray-600">Remaining credit balance</p>
+              </div>
+
+              {/* Usage Percentage */}
+              <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-purple-100 hover:shadow-2xl transition-shadow">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Usage Rate</h4>
+                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                    <PieChart className="text-purple-600" size={24} />
+                  </div>
+                </div>
+                <div className="text-4xl font-bold text-purple-600 mb-2">{creditUsagePercentage.toFixed(1)}%</div>
+                <p className="text-sm text-gray-600">Of total credit limit</p>
+              </div>
+            </div>
+
+            {/* Visual Credit Usage Progress Bar */}
+            <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+              <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                <BarChart3 className="text-indigo-600" size={28} />
+                Credit Usage Visualization
+              </h3>
+              
+              {/* Large Progress Bar */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center text-sm font-medium">
+                  <span className="text-gray-700">Credit Usage Progress</span>
+                  <span className={`font-bold ${
+                    creditUsagePercentage > 95 ? 'text-red-600' :
+                    creditUsagePercentage > 80 ? 'text-yellow-600' :
+                    creditUsagePercentage > 50 ? 'text-blue-600' :
+                    'text-green-600'
+                  }`}>
+                    {creditUsagePercentage.toFixed(1)}%
+                  </span>
+                </div>
+                
+                <div className="relative w-full h-12 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ease-out ${
+                      creditUsagePercentage > 95 ? 'bg-gradient-to-r from-red-500 to-red-600' :
+                      creditUsagePercentage > 80 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' :
+                      creditUsagePercentage > 50 ? 'bg-gradient-to-r from-blue-400 to-blue-600' :
+                      'bg-gradient-to-r from-green-400 to-green-600'
+                    } shadow-lg`}
+                    style={{ width: `${Math.min(creditUsagePercentage, 100)}%` }}
+                  >
+                    <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">
+                      {usedCredit.toFixed(2)} kr / {creditLimit.toFixed(2)} kr
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Indicator */}
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${
+                      creditUsagePercentage > 95 ? 'bg-red-500 animate-pulse' :
+                      creditUsagePercentage > 80 ? 'bg-yellow-500' :
+                      'bg-green-500'
+                    }`}></div>
+                    <span className="text-gray-700 font-medium">
+                      {creditUsagePercentage > 95 ? 'Critical - Limit Almost Reached' :
+                       creditUsagePercentage > 80 ? 'Warning - High Usage' :
+                       creditUsagePercentage > 50 ? 'Moderate Usage' :
+                       'Healthy - Good Balance'}
+                    </span>
+                  </div>
+                  <span className="text-gray-600">
+                    {availableCredit.toFixed(2)} kr remaining
+                  </span>
+                </div>
+              </div>
+
+              {/* Credit Usage Breakdown */}
+              <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl">
+                  <div className="text-sm text-blue-700 font-medium mb-1">Limit Set By Admin</div>
+                  <div className="text-2xl font-bold text-blue-900">{creditLimit.toFixed(2)} kr</div>
+                </div>
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl">
+                  <div className="text-sm text-orange-700 font-medium mb-1">Credit Consumed</div>
+                  <div className="text-2xl font-bold text-orange-900">{usedCredit.toFixed(2)} kr</div>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl">
+                  <div className="text-sm text-green-700 font-medium mb-1">Remaining Balance</div>
+                  <div className="text-2xl font-bold text-green-900">{availableCredit.toFixed(2)} kr</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Credit Transaction History */}
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6">
+                <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                  <BarChart3 size={28} />
+                  Credit Transaction History
+                </h3>
+                <p className="text-indigo-100 mt-2">Track all credit usage from your sales activities</p>
+              </div>
+
+              <div className="p-6">
+                {creditTransactions && creditTransactions.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b-2 border-gray-200">
+                          <th className="text-left py-4 px-4 font-semibold text-gray-700">Date & Time</th>
+                          <th className="text-left py-4 px-4 font-semibold text-gray-700">Transaction Type</th>
+                          <th className="text-right py-4 px-4 font-semibold text-gray-700">Amount</th>
+                          <th className="text-right py-4 px-4 font-semibold text-gray-700">Balance After</th>
+                          <th className="text-left py-4 px-4 font-semibold text-gray-700">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {creditTransactions.map((transaction, index) => (
+                          <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                            <td className="py-4 px-4 text-gray-900">
+                              {new Date(transaction.date).toLocaleString('en-GB', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </td>
+                            <td className="py-4 px-4">
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                                transaction.type === 'sale' ? 'bg-orange-100 text-orange-800' :
+                                transaction.type === 'refund' ? 'bg-green-100 text-green-800' :
+                                'bg-blue-100 text-blue-800'
+                              }`}>
+                                {transaction.type === 'sale' ? '📤 Sale' :
+                                 transaction.type === 'refund' ? '📥 Refund' :
+                                 '💰 Credit Added'}
+                              </span>
+                            </td>
+                            <td className="py-4 px-4 text-right">
+                              <span className={`font-bold ${
+                                transaction.type === 'sale' ? 'text-orange-600' : 'text-green-600'
+                              }`}>
+                                {transaction.type === 'sale' ? '-' : '+'}{transaction.amount.toFixed(2)} kr
+                              </span>
+                            </td>
+                            <td className="py-4 px-4 text-right font-semibold text-gray-900">
+                              {transaction.balanceAfter.toFixed(2)} kr
+                            </td>
+                            <td className="py-4 px-4">
+                              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                transaction.balanceAfter < creditLimit * 0.2 ? 'bg-red-100 text-red-800' :
+                                transaction.balanceAfter < creditLimit * 0.5 ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-green-100 text-green-800'
+                              }`}>
+                                {transaction.balanceAfter < creditLimit * 0.2 ? 'Low Credit' :
+                                 transaction.balanceAfter < creditLimit * 0.5 ? 'Medium' :
+                                 'Healthy'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-16">
+                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <BarChart3 className="text-gray-400" size={48} />
+                    </div>
+                    <h4 className="text-xl font-semibold text-gray-700 mb-2">No Transactions Yet</h4>
+                    <p className="text-gray-500">
+                      Credit transactions will appear here as you make sales
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Help Section */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-200">
+              <h4 className="font-bold text-blue-900 text-lg mb-3 flex items-center gap-2">
+                <span className="text-2xl">💡</span>
+                About Credit Levels
+              </h4>
+              <div className="space-y-2 text-blue-800">
+                <p>• Your credit limit is set by the administrator and determines how much you can sell on credit</p>
+                <p>• Each sale reduces your available credit by the sale amount</p>
+                <p>• When your credit limit is reached, you won't be able to process new sales</p>
+                <p>• Contact the administrator to request a credit limit increase</p>
+                <p>• Monitor your usage regularly to avoid disruptions in your business operations</p>
               </div>
             </div>
           </div>

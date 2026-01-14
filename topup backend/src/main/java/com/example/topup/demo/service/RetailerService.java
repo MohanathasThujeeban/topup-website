@@ -3,16 +3,19 @@ package com.example.topup.demo.service;
 import com.example.topup.demo.entity.Order;
 import com.example.topup.demo.entity.Product;
 import com.example.topup.demo.entity.User;
+import com.example.topup.demo.entity.RetailerProfit;
 import com.example.topup.demo.entity.Order.OrderStatus;
 import com.example.topup.demo.repository.OrderRepository;
 import com.example.topup.demo.repository.ProductRepository;
 import com.example.topup.demo.repository.UserRepository;
+import com.example.topup.demo.repository.RetailerProfitRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -28,6 +31,9 @@ public class RetailerService {
     
     @Autowired
     private UserRepository userRepository;
+    
+    @Autowired
+    private RetailerProfitRepository profitRepository;
 
     // Get all orders for a retailer
     public List<Order> getOrdersByRetailer(User retailer) {
@@ -335,5 +341,229 @@ public class RetailerService {
             // If any error occurs, return null
             return null;
         }
+    }
+
+    // Get all product-specific margin rates for a retailer
+    public List<Map<String, Object>> getAllProductMarginRates(User retailer) {
+        List<Map<String, Object>> productMarginRates = new ArrayList<>();
+        
+        try {
+            if (retailer.getBusinessDetails() != null) {
+                Map<String, Object> metadata = retailer.getBusinessDetails().getMetadata();
+                
+                if (metadata != null && metadata.containsKey("productMarginRates")) {
+                    Object productRatesObj = metadata.get("productMarginRates");
+                    
+                    if (productRatesObj instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> productRatesMap = (Map<String, Object>) productRatesObj;
+                        
+                        for (Map.Entry<String, Object> entry : productRatesMap.entrySet()) {
+                            String productId = entry.getKey();
+                            
+                            if (entry.getValue() instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> rateInfo = (Map<String, Object>) entry.getValue();
+                                
+                                Map<String, Object> productMargin = new HashMap<>();
+                                productMargin.put("productId", productId);
+                                productMargin.put("productName", rateInfo.get("productName"));
+                                productMargin.put("poolName", rateInfo.get("poolName"));
+                                productMargin.put("marginRate", rateInfo.get("marginRate"));
+                                productMargin.put("setDate", rateInfo.get("setDate"));
+                                productMargin.put("setBy", rateInfo.get("setBy"));
+                                
+                                productMarginRates.add(productMargin);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Return empty list on error
+            System.err.println("Error fetching product margin rates: " + e.getMessage());
+        }
+        
+        return productMarginRates;
+    }
+    
+    /**
+     * Record profit from a sale
+     * Creates/updates daily, monthly, and yearly profit records
+     */
+    public void recordProfit(User retailer, BigDecimal saleAmount, BigDecimal costPrice, 
+                            String bundleName, String bundleId, Double marginRate) {
+        try {
+            LocalDate today = LocalDate.now();
+            int currentYear = today.getYear();
+            int currentMonth = today.getMonthValue();
+            
+            BigDecimal profit = saleAmount.subtract(costPrice);
+            
+            // Record daily profit
+            updateProfitRecord(retailer, "daily", today, currentYear, currentMonth, 
+                             saleAmount, costPrice, profit, bundleName, bundleId, marginRate);
+            
+            // Record monthly profit
+            updateProfitRecord(retailer, "monthly", null, currentYear, currentMonth,
+                             saleAmount, costPrice, profit, bundleName, bundleId, marginRate);
+            
+            // Record yearly profit
+            updateProfitRecord(retailer, "yearly", null, currentYear, null,
+                             saleAmount, costPrice, profit, bundleName, bundleId, marginRate);
+            
+            System.out.println("✅ Profit recorded: " + profit + " kr for " + bundleName);
+        } catch (Exception e) {
+            System.err.println("❌ Error recording profit: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Update or create profit record for a specific period
+     */
+    private void updateProfitRecord(User retailer, String period, LocalDate date, 
+                                   Integer year, Integer month, BigDecimal revenue, 
+                                   BigDecimal cost, BigDecimal profit, String bundleName,
+                                   String bundleId, Double marginRate) {
+        RetailerProfit profitRecord = null;
+        
+        // Find existing record
+        if ("daily".equals(period) && date != null) {
+            profitRecord = profitRepository.findByRetailer_IdAndDateAndPeriod(
+                retailer.getId(), date, period).orElse(null);
+        } else if ("monthly".equals(period) && year != null && month != null) {
+            profitRecord = profitRepository.findByRetailer_IdAndYearAndMonthAndPeriod(
+                retailer.getId(), year, month, period).orElse(null);
+        } else if ("yearly".equals(period) && year != null) {
+            profitRecord = profitRepository.findByRetailer_IdAndYearAndPeriod(
+                retailer.getId(), year, period).orElse(null);
+        }
+        
+        // Create new record if doesn't exist
+        if (profitRecord == null) {
+            profitRecord = new RetailerProfit();
+            profitRecord.setRetailer(retailer);
+            profitRecord.setPeriod(period);
+            profitRecord.setDate(date);
+            profitRecord.setYear(year);
+            profitRecord.setMonth(month);
+            profitRecord.setBundleName(bundleName);
+            profitRecord.setProductId(bundleId);
+        }
+        
+        // Add this sale's data
+        profitRecord.addSale(revenue, cost, marginRate);
+        
+        // Save to database
+        profitRepository.save(profitRecord);
+    }
+    
+    /**
+     * Get profit data for a retailer by time period
+     */
+    public List<Map<String, Object>> getProfitData(User retailer, String period) {
+        List<Map<String, Object>> profitData = new ArrayList<>();
+        
+        try {
+            List<RetailerProfit> profits;
+            
+            switch (period.toLowerCase()) {
+                case "daily":
+                    profits = profitRepository.findDailyProfitsByRetailerId(retailer.getId());
+                    break;
+                case "monthly":
+                    profits = profitRepository.findMonthlyProfitsByRetailerId(retailer.getId());
+                    break;
+                case "yearly":
+                    profits = profitRepository.findYearlyProfitsByRetailerId(retailer.getId());
+                    break;
+                default:
+                    profits = profitRepository.findByRetailer_IdAndPeriod(retailer.getId(), period);
+            }
+            
+            // Convert to Map format for JSON response
+            for (RetailerProfit profit : profits) {
+                Map<String, Object> data = new HashMap<>();
+                
+                if ("daily".equals(period) && profit.getDate() != null) {
+                    data.put("date", profit.getDate().toString());
+                } else if ("monthly".equals(period)) {
+                    data.put("month", profit.getYear() + "-" + String.format("%02d", profit.getMonth()));
+                    data.put("year", profit.getYear());
+                    data.put("monthNumber", profit.getMonth());
+                } else if ("yearly".equals(period)) {
+                    data.put("year", profit.getYear());
+                }
+                
+                data.put("profit", profit.getProfit().doubleValue());
+                data.put("revenue", profit.getRevenue().doubleValue());
+                data.put("sales", profit.getSalesCount());
+                data.put("marginRate", profit.getMarginRate());
+                
+                profitData.add(data);
+            }
+            
+            System.out.println("📊 Retrieved " + profitData.size() + " " + period + " profit records");
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching profit data: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
+        return profitData;
+    }
+    
+    /**
+     * Get total profit summary for a retailer
+     */
+    public Map<String, Object> getProfitSummary(User retailer) {
+        Map<String, Object> summary = new HashMap<>();
+        
+        try {
+            // Get all yearly profits to calculate total
+            List<RetailerProfit> yearlyProfits = profitRepository.findYearlyProfitsByRetailerId(retailer.getId());
+            
+            BigDecimal totalProfit = yearlyProfits.stream()
+                .map(RetailerProfit::getProfit)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            BigDecimal totalRevenue = yearlyProfits.stream()
+                .map(RetailerProfit::getRevenue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            int totalSales = yearlyProfits.stream()
+                .mapToInt(RetailerProfit::getSalesCount)
+                .sum();
+            
+            // Get today's profit
+            LocalDate today = LocalDate.now();
+            Optional<RetailerProfit> todayProfit = profitRepository.findByRetailer_IdAndDateAndPeriod(
+                retailer.getId(), today, "daily");
+            
+            BigDecimal dailyProfit = todayProfit.map(RetailerProfit::getProfit).orElse(BigDecimal.ZERO);
+            
+            // Calculate average margin
+            double avgMargin = yearlyProfits.stream()
+                .filter(p -> p.getMarginRate() != null)
+                .mapToDouble(RetailerProfit::getMarginRate)
+                .average()
+                .orElse(0.0);
+            
+            summary.put("totalProfit", totalProfit.doubleValue());
+            summary.put("totalRevenue", totalRevenue.doubleValue());
+            summary.put("totalSales", totalSales);
+            summary.put("dailyProfit", dailyProfit.doubleValue());
+            summary.put("averageMargin", Math.round(avgMargin * 100.0) / 100.0);
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error calculating profit summary: " + e.getMessage());
+            summary.put("totalProfit", 0.0);
+            summary.put("totalRevenue", 0.0);
+            summary.put("totalSales", 0);
+            summary.put("dailyProfit", 0.0);
+            summary.put("averageMargin", 0.0);
+        }
+        
+        return summary;
     }
 }

@@ -1,0 +1,133 @@
+Replace the entire "Margin Rate Tab" section (from line ~3372 to ~3521) with this content:
+
+        {/* Margin Rate Tab */}
+        {activeTab === 'margin' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl shadow-xl p-6 text-white">
+              <h3 className="text-2xl font-bold mb-2 flex items-center gap-3">
+                <Award size={28} />
+                Product Margin Rates
+              </h3>
+              <p className="text-purple-100">
+                View all product-specific margin rates set by the admin for your account.
+              </p>
+            </div>
+
+            {/* Product Margin Rates Table */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Package className="text-purple-600" size={20} />
+                Your Product Margin Rates
+              </h4>
+              
+              {productMarginRates.length === 0 ? (
+                <div className="text-center py-12">
+                  <Award size={48} className="mx-auto mb-4 text-gray-400" />
+                  <p className="text-gray-600 mb-2">No product margin rates set yet</p>
+                  <p className="text-sm text-gray-500">Contact admin to set margin rates for your products</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pool Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margin Rate</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Profit on NOK 100</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Set Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Set By</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {productMarginRates.map((product, index) => {
+                        const marginRate = parseFloat(product.marginRate || 0);
+                        const profitPer100 = marginRate.toFixed(2);
+                        const setDate = product.setDate ? new Date(product.setDate).toLocaleDateString() : 'N/A';
+                        
+                        return (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{product.productName || 'Unknown Product'}</div>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-600">{product.poolName || 'N/A'}</div>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-800">
+                                {marginRate}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-green-600">NOK {profitPer100}</div>
+                              <div className="text-xs text-gray-500">per NOK 100 sale</div>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {setDate}
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {product.setBy || 'Admin'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Overall Margin Summary */}
+            {productMarginRates.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-semibold text-gray-900">Total Products</h4>
+                    <Package className="text-purple-600" size={24} />
+                  </div>
+                  <div className="text-4xl font-bold text-purple-600">{productMarginRates.length}</div>
+                  <p className="text-sm text-gray-600 mt-2">Products with margin rates</p>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-semibold text-gray-900">Average Margin</h4>
+                    <Award className="text-green-600" size={24} />
+                  </div>
+                  <div className="text-4xl font-bold text-green-600">
+                    {(productMarginRates.reduce((sum, p) => sum + parseFloat(p.marginRate || 0), 0) / productMarginRates.length).toFixed(1)}%
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">Across all products</p>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-semibold text-gray-900">Highest Margin</h4>
+                    <TrendingUp className="text-blue-600" size={24} />
+                  </div>
+                  <div className="text-4xl font-bold text-blue-600">
+                    {Math.max(...productMarginRates.map(p => parseFloat(p.marginRate || 0))).toFixed(1)}%
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">Best earning rate</p>
+                </div>
+              </div>
+            )}
+
+            {/* Legacy Single Margin Rate Display (if exists) */}
+            {retailerMarginRate && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+                    <span className="text-amber-600 text-sm">ℹ️</span>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-amber-800">Legacy Margin Rate</h4>
+                    <p className="text-sm text-amber-700 mt-1">
+                      A global margin rate of {retailerMarginRate}% is also set for your account. Product-specific rates take precedence.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
