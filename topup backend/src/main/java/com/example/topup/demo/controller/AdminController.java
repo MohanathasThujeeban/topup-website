@@ -5,6 +5,8 @@ import com.example.topup.demo.dto.RetailerCreditLimitDTO;
 import com.example.topup.demo.dto.UpdateCreditLimitRequest;
 import com.example.topup.demo.dto.UpdateUnitLimitRequest;
 import com.example.topup.demo.dto.UpdateMarginRateRequest;
+import com.example.topup.demo.dto.UpdateKickbackLimitRequest;
+import com.example.topup.demo.dto.RetailerKickbackLimitDTO;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -279,6 +281,29 @@ public class AdminController {
             response.put("success", true);
             response.put("data", updatedLimit);
             response.put("message", "Unit limit updated successfully");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Update retailer eSIM credit limit specifically
+     */
+    @PostMapping("/retailers/esim-credit-limit")
+    public ResponseEntity<Map<String, Object>> updateRetailerEsimCreditLimit(
+            @Valid @RequestBody com.example.topup.demo.dto.UpdateEsimCreditLimitRequest request) {
+        try {
+            RetailerCreditLimitDTO updatedLimit = adminService.updateRetailerEsimCreditLimit(request);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", updatedLimit);
+            response.put("message", "eSIM credit limit updated successfully");
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -629,6 +654,156 @@ public class AdminController {
             error.put("success", false);
             error.put("error", "Error sending invoice: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+    
+    /**
+     * Get retailer's sales details (orders with eSIM and ePIN information)
+     */
+    @GetMapping("/retailers/{retailerId}/sales")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getRetailerSales(@PathVariable String retailerId) {
+        try {
+            Map<String, Object> salesData = adminService.getRetailerSalesDetails(retailerId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", salesData);
+            response.put("message", "Retailer sales details fetched successfully");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to fetch retailer sales: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Get eSIM sales analytics
+     * Includes total eSIMs sold, total earnings, and sales history with details
+     */
+    @GetMapping("/analytics/esim-sales")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getEsimSalesAnalytics(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String retailerId) {
+        try {
+            Map<String, Object> esimAnalytics = adminService.getEsimSalesAnalytics(startDate, endDate, retailerId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", esimAnalytics);
+            response.put("message", "eSIM sales analytics fetched successfully");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to fetch eSIM analytics: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Get detailed eSIM sales history with pagination
+     */
+    @GetMapping("/analytics/esim-sales/history")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getEsimSalesHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String retailerId,
+            @RequestParam(required = false) String productType) {
+        try {
+            Map<String, Object> salesHistory = adminService.getEsimSalesHistory(page, size, startDate, endDate, retailerId, productType);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", salesHistory);
+            response.put("message", "eSIM sales history fetched successfully");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to fetch eSIM sales history: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Get all retailers with their kickback limits
+     */
+    @GetMapping("/retailers/kickback-limits")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getAllRetailerKickbackLimits() {
+        try {
+            List<RetailerKickbackLimitDTO> kickbackLimits = adminService.getAllRetailersWithKickbackLimits();
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", kickbackLimits);
+            response.put("count", kickbackLimits.size());
+            response.put("message", "Retailer kickback limits fetched successfully");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to fetch retailer kickback limits: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Get specific retailer's kickback limit
+     */
+    @GetMapping("/retailers/{retailerId}/kickback-limit")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getRetailerKickbackLimit(@PathVariable String retailerId) {
+        try {
+            RetailerKickbackLimitDTO kickbackLimit = adminService.getRetailerKickbackLimit(retailerId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", kickbackLimit);
+            response.put("message", "Retailer kickback limit fetched successfully");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Update retailer kickback limit
+     */
+    @PostMapping("/retailers/kickback-limit")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> updateRetailerKickbackLimit(
+            @Valid @RequestBody UpdateKickbackLimitRequest request) {
+        try {
+            RetailerKickbackLimitDTO updatedLimit = adminService.updateRetailerKickbackLimit(request);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", updatedLimit);
+            response.put("message", "Kickback limit updated successfully");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         }
     }
 }

@@ -1,17 +1,25 @@
 package com.example.topup.demo.controller;
 
 import com.example.topup.demo.entity.EsimOrderRequest;
+import com.example.topup.demo.entity.RetailerOrder;
+import com.example.topup.demo.entity.RetailerLimit;
 import com.example.topup.demo.entity.StockPool;
+import com.example.topup.demo.entity.User;
 import com.example.topup.demo.repository.EsimOrderRequestRepository;
+import com.example.topup.demo.repository.RetailerOrderRepository;
+import com.example.topup.demo.repository.RetailerLimitRepository;
 import com.example.topup.demo.repository.StockPoolRepository;
+import com.example.topup.demo.repository.UserRepository;
 import com.example.topup.demo.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
@@ -26,6 +34,15 @@ public class EsimOrderController {
 
     @Autowired
     private EmailService emailService;
+
+    @Autowired
+    private RetailerOrderRepository retailerOrderRepository;
+
+    @Autowired
+    private RetailerLimitRepository retailerLimitRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     // Public endpoint - Customer submits eSIM order request
     @PostMapping("/public/esim-orders")
@@ -160,6 +177,68 @@ public class EsimOrderController {
             
             esimOrderRequestRepository.save(request);
             
+            // CREATE RETAILER ORDER FOR ANALYTICS & CREDIT TRACKING
+            // Get retailer ID from the order data (either from POS or admin assignment)
+            String retailerId = approvalData.get("retailerId");
+            if (retailerId != null && !retailerId.isEmpty()) {
+                try {
+                    System.out.println("=== Creating RetailerOrder for eSIM sale ===");
+                    
+                    RetailerOrder retailerOrder = new RetailerOrder();
+                    retailerOrder.setRetailerId(retailerId);
+                    retailerOrder.setOrderNumber(request.getOrderNumber());
+                    retailerOrder.setTotalAmount(BigDecimal.valueOf(request.getAmount()));
+                    retailerOrder.setCurrency("NOK");
+                    retailerOrder.setStatus(RetailerOrder.OrderStatus.COMPLETED);
+                    retailerOrder.setPaymentStatus(RetailerOrder.PaymentStatus.COMPLETED);
+                    retailerOrder.setPaymentMethod("POINT_OF_SALE");
+                    retailerOrder.setCreatedDate(LocalDateTime.now());
+                    retailerOrder.setLastModifiedDate(LocalDateTime.now());
+                    retailerOrder.setCreatedBy(request.getCustomerEmail());
+                    
+                    // Create order item for eSIM
+                    RetailerOrder.OrderItem orderItem = new RetailerOrder.OrderItem();
+                    orderItem.setProductId(selectedPool.getId());
+                    orderItem.setProductName(request.getProductName());
+                    orderItem.setProductType("ESIM");
+                    orderItem.setCategory("esim");
+                    orderItem.setQuantity(1);
+                    orderItem.setUnitPrice(BigDecimal.valueOf(request.getAmount()));
+                    orderItem.setRetailPrice(BigDecimal.valueOf(request.getAmount()));
+                    
+                    List<RetailerOrder.OrderItem> items = new ArrayList<>();
+                    items.add(orderItem);
+                    retailerOrder.setItems(items);
+                    
+                    // Save retailer order
+                    RetailerOrder savedRetailerOrder = retailerOrderRepository.save(retailerOrder);
+                    System.out.println("✅ Created RetailerOrder for analytics: " + savedRetailerOrder.getOrderNumber());
+                    
+                    // UPDATE RETAILER CREDIT LIMIT
+                    Optional<RetailerLimit> limitOpt = retailerLimitRepository.findByRetailer_Id(retailerId);
+                    if (limitOpt.isPresent()) {
+                        RetailerLimit limit = limitOpt.get();
+                        
+                        // Deduct the sale amount from eSIM credit limit (separate from general credit)
+                        limit.useEsimCredit(BigDecimal.valueOf(request.getAmount()), 
+                                        savedRetailerOrder.getId(), 
+                                        "eSIM Sale: " + request.getProductName() + " to " + request.getCustomerEmail());
+                        
+                        retailerLimitRepository.save(limit);
+                        System.out.println("✅ Updated eSIM credit limit for retailer: " + retailerId);
+                        System.out.println("   eSIM Used: " + limit.getEsimUsedCredit() + ", Available: " + limit.getEsimAvailableCredit());
+                    } else {
+                        System.out.println("⚠️ No credit limit found for retailer: " + retailerId);
+                    }
+                } catch (Exception e) {
+                    System.err.println("❌ Failed to create RetailerOrder/update eSIM credit: " + e.getMessage());
+                    e.printStackTrace();
+                    // Don't fail the approval, just log the error
+                }
+            } else {
+                System.out.println("⚠️ No retailerId provided - skipping RetailerOrder creation");
+            }
+            
             // Send approval email with eSIM QR code
             boolean emailSent = false;
             String emailError = null;
@@ -170,13 +249,18 @@ public class EsimOrderController {
                 System.out.println("Serial: " + assignedEsim.getSerialNumber());
                 System.out.println("QR Code length: " + (assignedEsim.getQrCodeImage() != null ? assignedEsim.getQrCodeImage().length() : 0));
                 
+                // Extract activation code and SM-DP address
+                String activationCode = assignedEsim.getActivationCode() != null ? assignedEsim.getActivationCode() : "";
+                String smDpAddress = assignedEsim.getActivationUrl() != null ? assignedEsim.getActivationUrl() : "";
+                
                 emailService.sendEsimApprovalEmail(
                     request.getCustomerEmail(),
                     request.getCustomerFullName(),
                     request.getOrderNumber(),
                     assignedEsim.getSerialNumber(),
                     assignedEsim.getQrCodeImage(),
-                    assignedEsim.getActivationUrl()
+                    activationCode,
+                    smDpAddress
                 );
                 emailSent = true;
                 System.out.println("✅ Email sent successfully!");
@@ -281,7 +365,8 @@ public class EsimOrderController {
                 "TEST-" + System.currentTimeMillis(),
                 "TEST-SERIAL-12345",
                 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", // 1x1 transparent PNG
-                "https://test.activation.url"
+                "LPA:1$test.sm-dp-plus.com$TEST-ACTIVATION-CODE",
+                "test.sm-dp-plus.com"
             );
             
             Map<String, Object> response = new HashMap<>();
@@ -396,6 +481,69 @@ public class EsimOrderController {
             System.out.println("✅ PIN assigned: " + pinCode);
             System.out.println("📦 Stock updated - Available: " + selectedPool.getAvailableQuantity());
             
+            // CREATE RETAILER ORDER FOR ANALYTICS IF RETAILER ID PROVIDED
+            String retailerId = (String) orderData.get("retailerId");
+            if (retailerId != null && !retailerId.isEmpty()) {
+                try {
+                    System.out.println("=== Creating RetailerOrder for ePIN sale ===");
+                    
+                    RetailerOrder retailerOrder = new RetailerOrder();
+                    retailerOrder.setRetailerId(retailerId);
+                    retailerOrder.setOrderNumber(orderNumber);
+                    retailerOrder.setTotalAmount(BigDecimal.valueOf(amount));
+                    retailerOrder.setCurrency("NOK");
+                    retailerOrder.setStatus(RetailerOrder.OrderStatus.COMPLETED);
+                    retailerOrder.setPaymentStatus(RetailerOrder.PaymentStatus.COMPLETED);
+                    retailerOrder.setPaymentMethod("POINT_OF_SALE");
+                    retailerOrder.setCreatedDate(LocalDateTime.now());
+                    retailerOrder.setLastModifiedDate(LocalDateTime.now());
+                    retailerOrder.setCreatedBy(email);
+                    
+                    // Create order item for ePIN
+                    RetailerOrder.OrderItem orderItem = new RetailerOrder.OrderItem();
+                    orderItem.setProductId(selectedPool.getId());
+                    orderItem.setProductName(selectedPool.getName());
+                    orderItem.setProductType("EPIN");
+                    orderItem.setCategory("epin");
+                    orderItem.setQuantity(1);
+                    orderItem.setUnitPrice(BigDecimal.valueOf(amount));
+                    orderItem.setRetailPrice(BigDecimal.valueOf(amount));
+                    
+                    List<RetailerOrder.OrderItem> items = new ArrayList<>();
+                    items.add(orderItem);
+                    retailerOrder.setItems(items);
+                    
+                    // Store PIN in notes (encrypted)
+                    retailerOrder.setNotes("ENCRYPTED_PIN:" + pinCode);
+                    
+                    // Save retailer order
+                    RetailerOrder savedRetailerOrder = retailerOrderRepository.save(retailerOrder);
+                    System.out.println("✅ Created RetailerOrder for analytics: " + savedRetailerOrder.getOrderNumber());
+                    
+                    // UPDATE RETAILER CREDIT LIMIT
+                    Optional<RetailerLimit> limitOpt = retailerLimitRepository.findByRetailer_Id(retailerId);
+                    if (limitOpt.isPresent()) {
+                        RetailerLimit limit = limitOpt.get();
+                        
+                        // Deduct the sale amount from general credit (ePINs use general credit, not eSIM credit)
+                        limit.useCredit(BigDecimal.valueOf(amount), 
+                                        savedRetailerOrder.getId(), 
+                                        "ePIN Sale: " + selectedPool.getName() + " to " + email);
+                        
+                        retailerLimitRepository.save(limit);
+                        System.out.println("✅ Updated credit limit for retailer: " + retailerId);
+                    } else {
+                        System.out.println("⚠️ No credit limit found for retailer: " + retailerId);
+                    }
+                } catch (Exception e) {
+                    System.err.println("❌ Failed to create RetailerOrder/update credit: " + e.getMessage());
+                    e.printStackTrace();
+                    // Don't fail the order, just log the error
+                }
+            } else {
+                System.out.println("⚠️ No retailerId provided - skipping RetailerOrder creation");
+            }
+            
             // Send ePIN delivery email immediately
             try {
                 String customerName = email.split("@")[0]; // Extract name from email
@@ -483,6 +631,124 @@ public class EsimOrderController {
             error.put("error", e.getClass().getSimpleName());
             error.put("details", e.toString());
             
+            return ResponseEntity.status(500).body(error);
+        }
+    }
+    
+    // Utility endpoint to fix existing retailer orders for analytics AND credit limits
+    @PostMapping("/admin/fix-retailer-orders")
+    public ResponseEntity<Map<String, Object>> fixRetailerOrders() {
+        try {
+            System.out.println("=== Fixing Existing Retailer Orders & Credit Limits ===");
+            
+            // Get all retailer orders
+            List<RetailerOrder> allOrders = retailerOrderRepository.findAll();
+            
+            int ordersFixed = 0;
+            int ordersSkipped = 0;
+            int creditLimitsUpdated = 0;
+            
+            for (RetailerOrder order : allOrders) {
+                boolean needsUpdate = false;
+                
+                // Fix productType and category
+                if (order.getItems() != null && !order.getItems().isEmpty()) {
+                    for (RetailerOrder.OrderItem item : order.getItems()) {
+                        // Fix items without productType or category
+                        if (item.getProductType() == null || item.getProductType().isEmpty() ||
+                            item.getCategory() == null || item.getCategory().isEmpty()) {
+                            
+                            String productName = item.getProductName() != null ? item.getProductName().toLowerCase() : "";
+                            
+                            // Determine type based on product name
+                            if (productName.contains("esim") || productName.contains("e-sim")) {
+                                item.setProductType("ESIM");
+                                item.setCategory("esim");
+                                needsUpdate = true;
+                                System.out.println("  Fixed eSIM item: " + item.getProductName());
+                            } else if (productName.contains("pin") || productName.contains("bundle") || productName.contains("lycamobile")) {
+                                item.setProductType("EPIN");
+                                item.setCategory("bundle");
+                                needsUpdate = true;
+                                System.out.println("  Fixed ePIN item: " + item.getProductName());
+                            }
+                        }
+                    }
+                }
+                
+                if (needsUpdate) {
+                    order.setLastModifiedDate(LocalDateTime.now());
+                    retailerOrderRepository.save(order);
+                    ordersFixed++;
+                } else {
+                    ordersSkipped++;
+                }
+                
+                // UPDATE CREDIT LIMIT FOR THIS ORDER (if not already tracked)
+                if (order.getRetailerId() != null && !order.getRetailerId().isEmpty() && 
+                    order.getStatus() == RetailerOrder.OrderStatus.COMPLETED) {
+                    
+                    try {
+                        Optional<RetailerLimit> limitOpt = retailerLimitRepository.findByRetailer_Id(order.getRetailerId());
+                        
+                        if (limitOpt.isPresent()) {
+                            RetailerLimit limit = limitOpt.get();
+                            
+                            // Check if this order is already tracked in credit transaction history
+                            boolean alreadyTracked = false;
+                            if (limit.getTransactions() != null) {
+                                alreadyTracked = limit.getTransactions().stream()
+                                    .anyMatch(transaction -> order.getId().equals(transaction.getReferenceOrderId()));
+                            }
+                            
+                            if (!alreadyTracked) {
+                                System.out.println("  📊 Adding credit usage for order: " + order.getOrderNumber());
+                                
+                                // Add credit usage
+                                String description = "Historical Order: " + order.getOrderNumber();
+                                if (order.getItems() != null && !order.getItems().isEmpty()) {
+                                    String productNames = order.getItems().stream()
+                                        .map(RetailerOrder.OrderItem::getProductName)
+                                        .collect(Collectors.joining(", "));
+                                    description += " (" + productNames + ")";
+                                }
+                                
+                                limit.useCredit(order.getTotalAmount(), order.getId(), description);
+                                retailerLimitRepository.save(limit);
+                                creditLimitsUpdated++;
+                                
+                                System.out.println("    ✅ Credit updated: -" + order.getTotalAmount() + " kr");
+                            } else {
+                                System.out.println("  ⏭️ Order already tracked in credit: " + order.getOrderNumber());
+                            }
+                        } else {
+                            System.out.println("  ⚠️ No credit limit found for retailer: " + order.getRetailerId());
+                        }
+                    } catch (Exception e) {
+                        System.err.println("  ❌ Failed to update credit for order " + order.getOrderNumber() + ": " + e.getMessage());
+                    }
+                }
+            }
+            
+            System.out.println("✅ Fixed " + ordersFixed + " orders, skipped " + ordersSkipped + ", updated " + creditLimitsUpdated + " credit limits");
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Retailer orders and credit limits fixed successfully");
+            response.put("totalOrders", allOrders.size());
+            response.put("ordersFixed", ordersFixed);
+            response.put("ordersSkipped", ordersSkipped);
+            response.put("creditLimitsUpdated", creditLimitsUpdated);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error fixing orders: " + e.getMessage());
+            e.printStackTrace();
+            
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "Error fixing orders: " + e.getMessage());
             return ResponseEntity.status(500).body(error);
         }
     }

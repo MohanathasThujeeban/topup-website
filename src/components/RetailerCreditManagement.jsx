@@ -27,6 +27,20 @@ const RetailerCreditManagement = () => {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [retailerProductMarginRates, setRetailerProductMarginRates] = useState({}); // Map of retailerEmail -> product margin rates
   const [expandedRetailers, setExpandedRetailers] = useState(new Set()); // Track which retailers have expanded margin view
+  
+  // eSIM Credit Modal State
+  const [showEsimCreditModal, setShowEsimCreditModal] = useState(false);
+  const [esimCreditFormData, setEsimCreditFormData] = useState({
+    esimCreditLimit: '',
+    notes: ''
+  });
+
+  // Kickback Limit Modal State
+  const [showKickbackModal, setShowKickbackModal] = useState(false);
+  const [kickbackFormData, setKickbackFormData] = useState({
+    kickbackLimit: '',
+    notes: ''
+  });
 
   useEffect(() => {
     fetchRetailers();
@@ -299,6 +313,98 @@ const RetailerCreditManagement = () => {
     setShowMarginModal(true);
   };
 
+  const handleEditEsimCreditClick = (retailer) => {
+    setSelectedRetailer(retailer);
+    setEsimCreditFormData({
+      esimCreditLimit: retailer.esimCreditLimit || '',
+      notes: ''
+    });
+    setShowEsimCreditModal(true);
+  };
+
+  const handleEditKickbackClick = (retailer) => {
+    setSelectedRetailer(retailer);
+    setKickbackFormData({
+      kickbackLimit: retailer.kickbackLimit || '',
+      notes: ''
+    });
+    setShowKickbackModal(true);
+  };
+
+  const handleEsimCreditSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/retailers/esim-credit-limit`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          retailerId: selectedRetailer.retailerId,
+          esimCreditLimit: parseFloat(esimCreditFormData.esimCreditLimit),
+          notes: esimCreditFormData.notes
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await fetchRetailers();
+        setShowEsimCreditModal(false);
+        setSelectedRetailer(null);
+        setEsimCreditFormData({ esimCreditLimit: '', notes: '' });
+      } else {
+        alert('Failed to update eSIM credit limit: ' + data.error);
+      }
+    } catch (err) {
+      console.error('Error updating eSIM credit limit:', err);
+      alert('Failed to update eSIM credit limit');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleKickbackSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/retailers/kickback-limit`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          retailerEmail: selectedRetailer.retailerEmail,
+          kickbackLimit: parseFloat(kickbackFormData.kickbackLimit),
+          notes: kickbackFormData.notes
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Refresh the retailers list
+        await fetchRetailers();
+        setShowKickbackModal(false);
+        setSelectedRetailer(null);
+        setKickbackFormData({ kickbackLimit: '', notes: '' });
+        alert('✅ Kickback limit updated successfully');
+      } else {
+        alert('Failed to update kickback limit: ' + data.error);
+      }
+    } catch (err) {
+      console.error('Error updating kickback limit:', err);
+      alert('Failed to update kickback limit');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleMarginSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -474,6 +580,15 @@ const RetailerCreditManagement = () => {
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Credit<br/>Usage
                 </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-purple-50">
+                  eSIM<br/>Limit
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-purple-50">
+                  eSIM<br/>Used
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-purple-50">
+                  eSIM<br/>Available
+                </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Unit<br/>Limit
                 </th>
@@ -544,6 +659,15 @@ const RetailerCreditManagement = () => {
                           ></div>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-purple-900 bg-purple-50">
+                      NOK {(retailer.esimCreditLimit || 0).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-purple-600 bg-purple-50">
+                      NOK {(retailer.esimUsedCredit || 0).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-purple-700 bg-purple-50">
+                      NOK {(retailer.esimAvailableCredit || 0).toLocaleString()}
                     </td>
                     <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                       {(retailer.unitLimit || 0).toLocaleString()}
@@ -637,6 +761,18 @@ const RetailerCreditManagement = () => {
                           className="text-purple-600 hover:text-purple-900 font-medium text-xs whitespace-nowrap"
                         >
                           💰 Edit Credit
+                        </button>
+                        <button
+                          onClick={() => handleEditEsimCreditClick(retailer)}
+                          className="text-indigo-600 hover:text-indigo-900 font-medium text-xs whitespace-nowrap"
+                        >
+                          📱 eSIM Credit
+                        </button>
+                        <button
+                          onClick={() => handleEditKickbackClick(retailer)}
+                          className="text-orange-600 hover:text-orange-900 font-medium text-xs whitespace-nowrap"
+                        >
+                          🎁 Kickback Limit
                         </button>
                         <button
                           onClick={() => handleEditMarginClick(retailer)}
@@ -891,6 +1027,176 @@ const RetailerCreditManagement = () => {
                   disabled={saving || !marginFormData.marginRate || !marginFormData.productId}
                 >
                   {saving ? 'Setting...' : 'Set Margin Rate'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* eSIM Credit Edit Modal */}
+      {showEsimCreditModal && selectedRetailer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-xl font-bold text-gray-900">
+                Edit eSIM Credit Limit
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">
+                {selectedRetailer.retailerName}
+              </p>
+            </div>
+            <form onSubmit={handleEsimCreditSubmit} className="px-6 py-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    eSIM Credit Limit (NOK)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    value={esimCreditFormData.esimCreditLimit}
+                    onChange={(e) => setEsimCreditFormData({...esimCreditFormData, esimCreditLimit: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Enter eSIM credit limit"
+                  />
+                  <div className="mt-2 p-3 bg-purple-50 rounded-lg">
+                    <div className="text-xs text-purple-700">
+                      <div className="flex justify-between mb-1">
+                        <span>Current Limit:</span>
+                        <strong>NOK {(selectedRetailer.esimCreditLimit || 0).toLocaleString()}</strong>
+                      </div>
+                      <div className="flex justify-between mb-1">
+                        <span>Used:</span>
+                        <strong>NOK {(selectedRetailer.esimUsedCredit || 0).toLocaleString()}</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Available:</span>
+                        <strong>NOK {(selectedRetailer.esimAvailableCredit || 0).toLocaleString()}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes (Optional)
+                  </label>
+                  <textarea
+                    value={esimCreditFormData.notes}
+                    onChange={(e) => setEsimCreditFormData({...esimCreditFormData, notes: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    rows="3"
+                    placeholder="Reason for change..."
+                  />
+                </div>
+
+                <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                  <h4 className="text-sm font-medium text-indigo-800 mb-2">💡 Information</h4>
+                  <p className="text-xs text-indigo-700">
+                    eSIM credit is separate from general credit and is specifically used for eSIM purchases. 
+                    This allows you to manage eSIM sales independently from other products.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 mt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEsimCreditModal(false);
+                    setSelectedRetailer(null);
+                    setEsimCreditFormData({ esimCreditLimit: '', notes: '' });
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 rounded-md transition-colors disabled:opacity-50 shadow-md"
+                  disabled={saving}
+                >
+                  {saving ? 'Updating...' : 'Update eSIM Credit'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Kickback Limit Modal */}
+      {showKickbackModal && selectedRetailer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-orange-600 to-red-600 text-white p-6 rounded-t-2xl">
+              <h3 className="text-2xl font-bold">🎁 Set Kickback Bonus Limit</h3>
+              <p className="text-orange-100 mt-1">for {selectedRetailer.retailerName}</p>
+            </div>
+
+            <form onSubmit={handleKickbackSubmit} className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Kickback Bonus Limit (kr)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={kickbackFormData.kickbackLimit}
+                    onChange={(e) => setKickbackFormData({...kickbackFormData, kickbackLimit: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    placeholder="Enter kickback limit..."
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes
+                  </label>
+                  <textarea
+                    value={kickbackFormData.notes}
+                    onChange={(e) => setKickbackFormData({...kickbackFormData, notes: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    rows="3"
+                    placeholder="Reason for setting this limit..."
+                  />
+                </div>
+
+                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                  <h4 className="text-sm font-medium text-orange-800 mb-2">💡 About Kickback Limits</h4>
+                  <p className="text-xs text-orange-700">
+                    Kickback bonus limits set the maximum reward amount a retailer can earn through 
+                    the kickback program. This is managed separately from credit limits and helps 
+                    track promotional incentives.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 mt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowKickbackModal(false);
+                    setSelectedRetailer(null);
+                    setKickbackFormData({ kickbackLimit: '', notes: '' });
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 rounded-md transition-colors disabled:opacity-50 shadow-md"
+                  disabled={saving}
+                >
+                  {saving ? 'Updating...' : 'Set Kickback Limit'}
                 </button>
               </div>
             </form>

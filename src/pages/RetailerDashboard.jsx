@@ -3,7 +3,8 @@ import {
   BarChart3, Users, Package, DollarSign, TrendingUp, Clock, 
   AlertCircle, CheckCircle, Eye, Edit, Plus, Search, RefreshCw,
   ShoppingCart, Award, Activity, Bell, Download, LogOut, Tag,
-  Menu, X, Building, Box, MessageCircle, PieChart, Globe2, Copy
+  Menu, X, Building, Box, MessageCircle, PieChart, Globe2, Copy, Settings, Printer,
+  Smartphone, CreditCard, Gift
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -11,6 +12,9 @@ import FeaturedPromotions from '../components/FeaturedPromotions';
 import RetailerPromotionalBanner from '../components/RetailerPromotionalBanner';
 import StockManagement from '../components/StockManagement';
 import RetailerCreditManagement from '../components/RetailerCreditManagement';
+import RetailerSalesDetails from '../components/RetailerSalesDetails';
+import RetailerEsimSalesReport from '../components/RetailerEsimSalesReport';
+import KickbackLimitIndicator from '../components/KickbackLimitIndicator';
 
 // API Base URL - should match AuthContext
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -86,6 +90,12 @@ const RetailerDashboard = () => {
   const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
   const [passwordChangeMessage, setPasswordChangeMessage] = useState({ type: '', text: '' });
   
+  // Sales Summary state (separate from analytics)
+  const [salesSummary, setSalesSummary] = useState({
+    totalSalesCount: 0,
+    totalEarnings: 0
+  });
+  
   // Use ref to track if initialization has started
   const initializationStarted = useRef(false);
   
@@ -122,7 +132,11 @@ const RetailerDashboard = () => {
     yearly: []   // Array of {year, profit, sales}
   });
   const [profitTimeRange, setProfitTimeRange] = useState('daily'); // 'daily', 'monthly', 'yearly'
-  const [analyticsSubTab, setAnalyticsSubTab] = useState('overview'); // 'overview', 'profit'
+  const [analyticsSubTab, setAnalyticsSubTab] = useState('overview'); // 'overview', 'profit', 'sales', 'esim'
+  
+  // Sales details state
+  const [salesData, setSalesData] = useState(null);
+  const [loadingSalesData, setLoadingSalesData] = useState(false);
   
   // Credit Level state
   const [creditLimit, setCreditLimit] = useState(0);
@@ -130,6 +144,22 @@ const RetailerDashboard = () => {
   const [availableCredit, setAvailableCredit] = useState(0);
   const [creditUsagePercentage, setCreditUsagePercentage] = useState(0);
   const [creditTransactions, setCreditTransactions] = useState([]);
+  
+  // eSIM Credit Level state
+  const [esimCreditLimit, setEsimCreditLimit] = useState(0);
+  const [esimUsedCredit, setEsimUsedCredit] = useState(0);
+  const [esimAvailableCredit, setEsimAvailableCredit] = useState(0);
+  const [esimCreditUsagePercentage, setEsimCreditUsagePercentage] = useState(0);
+  
+  // Kickback Limit state
+  const [kickbackLimit, setKickbackLimit] = useState(0);
+  const [usedKickback, setUsedKickback] = useState(0);
+  const [availableKickback, setAvailableKickback] = useState(0);
+  const [kickbackUsagePercentage, setKickbackUsagePercentage] = useState(0);
+  const [kickbackStatus, setKickbackStatus] = useState('NOT_SET');
+  
+  // Payment Mode Selection state (for POS)
+  const [paymentMode, setPaymentMode] = useState('credit'); // 'credit' or 'kickback'
   
   // Recent Activities state - starts empty
   const [recentActivities, setRecentActivities] = useState([]);
@@ -445,15 +475,19 @@ const RetailerDashboard = () => {
       return;
     }
     
-    // Calculate profit based on margin rate
+    // Calculate profit based on margin rate percentage
+    // Profit = Sale Amount × (Margin Rate / 100)
     const profitAmount = (saleAmount * marginRate) / 100;
+    // Cost Price = Sale Amount - Profit
     const actualCostPrice = saleAmount - profitAmount;
     
-    console.log(`💰 Real Profit Calculation (${bundleName}):`);
-    console.log(`  Sale Amount: NOK ${saleAmount.toFixed(2)}`);
-    console.log(`  Margin Rate: ${marginRate}%`);
-    console.log(`  Cost Price: NOK ${actualCostPrice.toFixed(2)}`);
-    console.log(`  Profit Amount: NOK ${profitAmount.toFixed(2)}`);
+    console.log(`💰 PROFIT CALCULATION (${bundleName}):`);
+    console.log(`  ├─ Sale Amount: NOK ${saleAmount.toFixed(2)}`);
+    console.log(`  ├─ Margin Rate: ${marginRate}%`);
+    console.log(`  ├─ Calculation: ${saleAmount.toFixed(2)} × (${marginRate}/100)`);
+    console.log(`  ├─ Profit Amount: NOK ${profitAmount.toFixed(2)}`);
+    console.log(`  ├─ Cost Price: NOK ${actualCostPrice.toFixed(2)}`);
+    console.log(`  └─ Verification: ${actualCostPrice.toFixed(2)} + ${profitAmount.toFixed(2)} = ${(actualCostPrice + profitAmount).toFixed(2)}`);
     
     const today = new Date().toISOString().split('T')[0];
     const currentMonth = new Date().toISOString().substring(0, 7);
@@ -486,27 +520,23 @@ const RetailerDashboard = () => {
       return newDaily;
     });
     
-    // Update profit data for analytics graphs
+    // Update profit data for analytics graphs - ADD EACH SALE AS INDIVIDUAL POINT
     setProfitData(prev => {
       const newData = { ...prev };
+      const timestamp = new Date().toISOString();
       
-      // Update daily data
-      const dailyIndex = newData.daily.findIndex(d => d.date === today);
-      if (dailyIndex >= 0) {
-        newData.daily[dailyIndex].profit += profitAmount;
-        newData.daily[dailyIndex].sales += 1;
-        newData.daily[dailyIndex].revenue += saleAmount;
-      } else {
-        newData.daily.push({
-          date: today,
-          profit: profitAmount,
-          sales: 1,
-          revenue: saleAmount,
-          marginRate: marginRate
-        });
-      }
+      // Add each sale as a separate data point for daily view
+      newData.daily.push({
+        date: today,
+        timestamp: timestamp,
+        profit: profitAmount,
+        sales: 1,
+        revenue: saleAmount,
+        marginRate: marginRate,
+        bundleName: bundleName
+      });
       
-      // Update monthly data
+      // For monthly - still aggregate by month
       const monthlyIndex = newData.monthly.findIndex(m => m.month === currentMonth);
       if (monthlyIndex >= 0) {
         newData.monthly[monthlyIndex].profit += profitAmount;
@@ -522,7 +552,7 @@ const RetailerDashboard = () => {
         });
       }
       
-      // Update yearly data
+      // For yearly - still aggregate by year
       const yearlyIndex = newData.yearly.findIndex(y => y.year === currentYear);
       if (yearlyIndex >= 0) {
         newData.yearly[yearlyIndex].profit += profitAmount;
@@ -538,8 +568,8 @@ const RetailerDashboard = () => {
         });
       }
       
-      // Keep last 30 days, 12 months, 5 years
-      newData.daily = newData.daily.slice(-30);
+      // Keep last 100 individual sales for daily, 12 months, 5 years
+      newData.daily = newData.daily.slice(-100);
       newData.monthly = newData.monthly.slice(-12);
       newData.yearly = newData.yearly.slice(-5);
       
@@ -711,6 +741,63 @@ const RetailerDashboard = () => {
   // Load profit data from localStorage on initialization
   useEffect(() => {
     const savedProfitData = localStorage.getItem('profitData');
+    const dataVersion = localStorage.getItem('profitDataVersion');
+    
+    // Version 2: Individual sales as points (not aggregated by day)
+    if (dataVersion !== '2' && savedProfitData) {
+      console.log('🔄 Upgrading profitData to version 2 (individual sales)');
+      try {
+        const oldData = JSON.parse(savedProfitData);
+        const newData = { daily: [], monthly: oldData.monthly || [], yearly: oldData.yearly || [] };
+        
+        // Convert aggregated daily data into individual sale points
+        if (oldData.daily && oldData.daily.length > 0) {
+          oldData.daily.forEach(dayData => {
+            const salesCount = dayData.sales || 1;
+            const profitPerSale = dayData.profit / salesCount;
+            const revenuePerSale = (dayData.revenue || dayData.profit) / salesCount;
+            const date = dayData.date;
+            
+            // Create individual points for each sale
+            for (let i = 0; i < salesCount; i++) {
+              // Spread sales across the day with realistic timestamps
+              const hour = 9 + Math.floor((i / salesCount) * 8); // Between 9 AM and 5 PM
+              const minute = Math.floor(Math.random() * 60);
+              const timestamp = new Date(date + `T${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`).toISOString();
+              
+              newData.daily.push({
+                date: date,
+                timestamp: timestamp,
+                profit: profitPerSale,
+                sales: 1,
+                revenue: revenuePerSale,
+                marginRate: dayData.marginRate || 0,
+                bundleName: dayData.bundleName || 'Unknown Bundle'
+              });
+            }
+          });
+        }
+        
+        console.log('✅ Converted to individual sales:', newData.daily.length, 'points');
+        setProfitData(newData);
+        localStorage.setItem('profitData', JSON.stringify(newData));
+        localStorage.setItem('profitDataVersion', '2');
+        
+        // Calculate total profit
+        const totalFromData = newData.daily.reduce((sum, sale) => sum + (sale.profit || 0), 0);
+        if (totalFromData > 0) {
+          setTotalProfit(totalFromData);
+          setAnalytics(prev => ({
+            ...prev,
+            totalProfit: totalFromData
+          }));
+        }
+      } catch (error) {
+        console.error('Error upgrading profit data:', error);
+      }
+      return;
+    }
+    
     if (savedProfitData) {
       try {
         const parsed = JSON.parse(savedProfitData);
@@ -749,8 +836,21 @@ const RetailerDashboard = () => {
     // Fetch credit from server
     fetchCreditLevel();
     
+    // Fetch kickback limit from server
+    fetchKickbackLimit();
+    
     // Fetch profit data from backend
     fetchProfitDataFromBackend();
+
+    // Auto-refresh profit data every 30 seconds
+    const profitRefreshInterval = setInterval(() => {
+      console.log('🔄 Auto-refreshing profit data...');
+      fetchProfitDataFromBackend();
+    }, 30000);
+
+    return () => {
+      clearInterval(profitRefreshInterval);
+    };
   }, []);
 
   const fetchRetailerMarginRate = async () => {
@@ -879,197 +979,63 @@ const RetailerDashboard = () => {
         'Authorization': `Bearer ${token}`
       };
 
-      console.log('📈 Fetching customer sales data and direct sales orders...');
-      const salesController = new AbortController();
-      const timeoutId = setTimeout(() => salesController.abort(), 8000);
+      console.log('📈 Fetching analytics data from backend...');
       
-      // First try to fetch from orders endpoint for direct sales
-      let ordersData = { customerSales: 0, totalRevenue: 0 };
-      let ordersResponse;
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.log('📈 Analytics fetch timeout - aborting request');
+        controller.abort();
+      }, 5000); // 5 second timeout
       
-      // First check if we have direct sales in recent activities as fallback
-      const localDirectSales = recentActivities.filter(activity => 
-        activity.type === 'pos_sale' || activity.type === 'direct_sale'
-      );
-      
-      if (localDirectSales.length > 0) {
-        ordersData.customerSales = localDirectSales.length;
-        ordersData.totalRevenue = localDirectSales.reduce((sum, activity) => {
-          return sum + (activity.details?.saleAmount || activity.details?.amount || 0);
-        }, 0);
-        console.log(`📦 Using local activities: ${localDirectSales.length} sales, NOK ${ordersData.totalRevenue} revenue`);
-      }
-      
-      // Add a demo direct sale if no data exists (for testing)
-      if (ordersData.customerSales === 0) {
-        const demoSale = {
-          type: 'direct_sale',
-          description: 'Demo direct sale: EPIN Bundle',
-          details: {
-            orderId: 'DEMO-DIRECT-001',
-            amount: 99.0,
-            product: 'EPIN Bundle',
-            customer: 'Demo Customer',
-            timestamp: new Date().toISOString(),
-            paymentMethod: 'DIRECT_SALE'
-          }
-        };
-        
-        // Add demo sale to activities if not already present
-        const hasDemoSale = recentActivities.find(a => a.details?.orderId === 'DEMO-DIRECT-001');
-        if (!hasDemoSale) {
-          addActivity(demoSale.type, demoSale.description, demoSale.details);
-          ordersData.customerSales = 1;
-          ordersData.totalRevenue = 99.0;
-          console.log('📦 Added demo direct sale for testing purposes');
-        }
-      }
-      
-      // Try to fetch from backend orders endpoints (may not exist yet)
-      const orderEndpoints = [
-        `${API_BASE_URL}/retailer/orders`,
-        `${API_BASE_URL}/orders`
-      ];
-      
-      let foundValidEndpoint = false;
-      for (const endpoint of orderEndpoints) {
-        try {
-          console.log(`📦 Trying orders endpoint: ${endpoint}`);
-          ordersResponse = await fetch(endpoint, {
-            headers,
-            signal: salesController.signal,
-            keepalive: false
-          });
-          
-          if (ordersResponse.ok) {
-            console.log(`📦 Success with endpoint: ${endpoint}`);
-            foundValidEndpoint = true;
-            break;
-          } else if (ordersResponse.status === 500) {
-            console.log(`📦 Server error (500) for ${endpoint} - backend may not have this endpoint yet`);
-          } else if (ordersResponse.status === 404) {
-            console.log(`📦 Endpoint ${endpoint} not found (404) - trying next endpoint`);
-          }
-        } catch (endpointError) {
-          console.log(`📦 Network error for ${endpoint}:`, endpointError.message);
-          continue;
-        }
-      }
-      
-      if (!foundValidEndpoint) {
-        console.log('📦 No valid orders endpoints found - using local data only');
-      }
-      
-      // Only process backend orders if we found a valid endpoint
-      if (foundValidEndpoint && ordersResponse && ordersResponse.ok) {
-        try {
-          const ordersResult = await ordersResponse.json();
-          console.log('📦 Backend orders data received:', ordersResult);
-          
-          // Parse direct sales from backend orders
-          let backendDirectSales = [];
-          if (ordersResult.success && Array.isArray(ordersResult.data)) {
-            backendDirectSales = ordersResult.data.filter(order => 
-              order.paymentMethod === 'DIRECT_SALE' && order.status === 'SOLD'
-            );
-          } else if (Array.isArray(ordersResult)) {
-            backendDirectSales = ordersResult.filter(order => 
-              order.paymentMethod === 'DIRECT_SALE' && order.status === 'SOLD'
-            );
-          }
-          
-          if (backendDirectSales.length > 0) {
-            // Replace local data with backend data if available
-            ordersData.customerSales = backendDirectSales.length;
-            ordersData.totalRevenue = backendDirectSales.reduce((sum, order) => sum + (order.amount || 0), 0);
-            console.log(`📦 Backend: Found ${backendDirectSales.length} direct sales orders totaling NOK ${ordersData.totalRevenue}`);
-            
-            // Add backend direct sales to recent activities
-            backendDirectSales.forEach(order => {
-              const existingActivity = recentActivities.find(activity => 
-                activity.type === 'direct_sale' && activity.id === order._id
-              );
-              
-              if (!existingActivity) {
-                addActivity('direct_sale', `Direct sale: ${order.productName || 'Unknown Product'}`, {
-                  orderId: order._id,
-                  amount: order.amount,
-                  product: order.productName || 'Unknown Product',
-                  customer: order.retailer || 'Customer',
-                  timestamp: order.createdDate || new Date().toISOString(),
-                  paymentMethod: 'DIRECT_SALE'
-                });
-              }
-            });
-          } else {
-            console.log('📦 Backend: No direct sales found in orders, keeping local data');
-          }
-        } catch (ordersParseError) {
-          console.log('📦 Error parsing backend orders data:', ordersParseError.message);
-        }
-      } else {
-        console.log('📦 Backend orders not available - using local activities only');
-      }
-      
-      // Fallback to original sales endpoint
-      const response = await fetch(`${API_BASE_URL}/retailer/sales`, {
-        headers,
-        signal: salesController.signal,
-        keepalive: false
-      });
-      
-      clearTimeout(timeoutId);
+      try {
+        // Call the correct backend analytics endpoint with cache busting
+        const response = await fetch(`${API_BASE_URL}/retailer/analytics?_t=${Date.now()}`, {
+          headers,
+          cache: 'no-cache',
+          signal: controller.signal,
+          keepalive: false
+        });
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log('📈 Sales data received:', result);
-        
-        let customerSales = ordersData.customerSales; // Start with direct sales count
-        let totalRevenue = ordersData.totalRevenue;   // Start with direct sales revenue
-        
-        // Add additional sales data from various response formats
-        if (result.success && result.data) {
-          customerSales += result.data.customerSales || result.data.totalSales || 0;
-          totalRevenue += result.data.totalRevenue || result.data.revenue || 0;
-        } else if (result.sales) {
-          const additionalSales = Array.isArray(result.sales) ? result.sales.length : result.sales;
-          customerSales += additionalSales;
-          totalRevenue += result.totalRevenue || 0;
-        }
-        
-        console.log(`📈 Final totals - Customer sales: ${customerSales} (${ordersData.customerSales} from orders/activities), Revenue: NOK ${totalRevenue}`);
-        return { customerSales, totalRevenue };
-      } else {
-        if (response.status === 500) {
-          console.log('📈 Server error (500) for sales data - backend may be starting up');
-        } else if (response.status === 404) {
-          console.log('📈 Sales endpoint not found (404) - backend may not have this endpoint yet');
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('📈 Analytics data received:', result);
+          console.log('📈 Analytics data.data:', result.data);
+          
+          if (result.success && result.data) {
+            const { customerSales = 0, totalRevenue = 0 } = result.data;
+            console.log(`📈 Customer Sales: ${customerSales}, Total Revenue: NOK ${totalRevenue}`);
+            console.log(`📈 Total Revenue type: ${typeof totalRevenue}, value: ${totalRevenue}`);
+            return { customerSales, totalRevenue };
+          }
+          
+          console.log('📈 Analytics data format unexpected:', result);
+          return { customerSales: 0, totalRevenue: 0 };
         } else {
-          console.log(`📈 Sales API returned ${response.status}, using direct sales data only`);
+          clearTimeout(timeoutId);
+          if (response.status === 500) {
+            console.log('📈 Server error (500) for analytics data - backend may be starting up');
+          } else if (response.status === 404) {
+            console.log('📈 Analytics endpoint not found (404) - backend may not have this endpoint yet');
+          } else {
+            console.log(`📈 Analytics API returned ${response.status}`);
+          }
+          
+          return { customerSales: 0, totalRevenue: 0 };
         }
-        
-        // Return available data even if sales endpoint fails
-        if (ordersData.customerSales > 0) {
-          console.log(`📈 Using available data only: ${ordersData.customerSales} sales, NOK ${ordersData.totalRevenue} revenue`);
-          return ordersData;
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          console.log('📈 Analytics fetch aborted due to timeout');
+        } else {
+          console.log('📈 Fetch error:', fetchError.message);
         }
-        
         return { customerSales: 0, totalRevenue: 0 };
       }
     } catch (error) {
       console.log('📈 Error in fetchCustomerSalesData:', error.message);
-      
-      // Return any local activity data as fallback
-      const localSales = recentActivities.filter(a => a.type === 'pos_sale' || a.type === 'direct_sale').length;
-      const localRevenue = recentActivities
-        .filter(a => a.type === 'pos_sale' || a.type === 'direct_sale')
-        .reduce((sum, a) => sum + (a.details?.saleAmount || a.details?.amount || 0), 0);
-      
-      if (localSales > 0) {
-        console.log(`📈 Using local fallback: ${localSales} sales, NOK ${localRevenue} revenue`);
-        return { customerSales: localSales, totalRevenue: localRevenue };
-      }
-      
       return { customerSales: 0, totalRevenue: 0 };
     }
   };
@@ -1205,6 +1171,46 @@ const RetailerDashboard = () => {
     } finally {
       setLoadingInventory(false);
     }
+  };
+
+  // Fetch analytics from backend
+  const fetchAnalytics = async () => {
+    if (!user || isDemoMode()) {
+      console.log('🔒 Cannot fetch analytics in demo mode');
+      return null;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      
+      console.log('📊 Fetching analytics data...');
+      const response = await fetch(`${API_BASE_URL}/retailer/analytics`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Analytics response:', data);
+        
+        if (data.success && data.analytics) {
+          console.log('✅ Analytics loaded with eSIM/ePIN breakdown:', {
+            totalEsimSold: data.analytics.totalEsimSold,
+            totalEpinSold: data.analytics.totalEpinSold,
+            esimEarnings: data.analytics.esimEarnings,
+            epinEarnings: data.analytics.epinEarnings
+          });
+          return data.analytics;
+        }
+      } else {
+        console.error('❌ Failed to fetch analytics:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching analytics:', error);
+    }
+    return null;
   };
 
   // View encrypted PINs for selected item
@@ -1476,26 +1482,41 @@ const RetailerDashboard = () => {
         console.log('📦 Fetching inventory before setting analytics...');
         await fetchInventoryBundles();
         
+        // Fetch fresh sales summary data from dedicated endpoint
+        console.log('📊 Fetching sales summary from new endpoint...');
+        const salesSummaryData = await fetchSalesSummary();
+        setSalesSummary(salesSummaryData);
+        
+        // Fetch analytics with eSIM/ePIN breakdown
+        console.log('📊 Fetching analytics with eSIM/ePIN breakdown...');
+        const analyticsData = await fetchAnalytics();
+        
         // Only fetch essential data to prevent lag - remove orders and analytics fetching
         console.log('✅ Backend connected - using minimal API calls to prevent lag');
           
-          // Set analytics with real sales data
+          // Set analytics with real sales data including eSIM/ePIN breakdown
           const currentInventoryUnits = getTotalInventoryUnits();
           console.log(`📊 Setting analytics with inventory units: ${currentInventoryUnits}`);
           
           setAnalytics({
-            totalOrders: customerSales || 0,
-            totalRevenue: totalRevenue || 0,
-            monthlyGrowth: 0,
-            pendingOrders: 0,
-            orderGrowth: 0,
-            successRate: customerSales > 0 ? 100 : 0,
-            customerSales: customerSales || 0, // Real customer sales from direct sales orders
-            totalProfit: totalProfit || 0,
-            bundleInventory: currentInventoryUnits, // Total units, not bundle types
+            totalOrders: analyticsData?.totalOrders || customerSales || 0,
+            totalRevenue: analyticsData?.totalRevenue || totalRevenue || 0,
+            monthlyGrowth: analyticsData?.monthlyGrowth || 0,
+            pendingOrders: analyticsData?.pendingOrders || 0,
+            orderGrowth: analyticsData?.orderGrowth || 0,
+            successRate: analyticsData?.successRate || (customerSales > 0 ? 100 : 0),
+            customerSales: analyticsData?.customerSales || customerSales || 0,
+            totalProfit: analyticsData?.totalProfit || totalProfit || 0,
+            bundleInventory: currentInventoryUnits,
             profitMargin: retailerMarginRate || 0,
-            salesPerformance: {},
-            topProducts: []
+            salesPerformance: analyticsData?.salesPerformance || {},
+            topProducts: analyticsData?.topProducts || [],
+            // eSIM and ePIN breakdown
+            totalEsimSold: analyticsData?.totalEsimSold || 0,
+            totalEpinSold: analyticsData?.totalEpinSold || 0,
+            esimEarnings: analyticsData?.esimEarnings || 0,
+            epinEarnings: analyticsData?.epinEarnings || 0,
+            customerInsights: analyticsData?.customerInsights || {}
           });
         
         console.log('✅ Backend data loaded with graceful error handling');
@@ -1561,6 +1582,42 @@ const RetailerDashboard = () => {
             
   };
 
+  const fetchSalesSummary = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('No token - skipping sales summary fetch');
+        return { totalSalesCount: 0, totalEarnings: 0 };
+      }
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
+
+      const response = await fetch(`${API_BASE_URL}/retailer/sales-summary`, {
+        headers,
+        method: 'GET'
+      });
+
+      if (!response.ok) {
+        console.error('Failed to fetch sales summary:', response.status);
+        return { totalSalesCount: 0, totalEarnings: 0 };
+      }
+
+      const data = await response.json();
+      console.log('✅ Sales Summary:', data);
+      
+      return {
+        totalSalesCount: data.totalSalesCount || 0,
+        totalEarnings: data.totalEarnings || 0
+      };
+    } catch (error) {
+      console.error('❌ Error fetching sales summary:', error);
+      return { totalSalesCount: 0, totalEarnings: 0 };
+    }
+  };
+
   const fetchCreditLevel = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -1583,40 +1640,111 @@ const RetailerDashboard = () => {
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          setCreditLimit(data.creditLimit || 0);
-          setUsedCredit(data.usedCredit || 0);
-          setAvailableCredit(data.availableCredit || 0);
-          setCreditUsagePercentage(data.creditUsagePercentage || 0);
+          setCreditLimit(Number(data.creditLimit) || 0);
+          setUsedCredit(Number(data.usedCredit) || 0);
+          setAvailableCredit(Number(data.availableCredit) || 0);
+          setCreditUsagePercentage(Number(data.creditUsagePercentage) || 0);
+          
+          // eSIM Credit
+          setEsimCreditLimit(Number(data.esimCreditLimit) || 0);
+          setEsimUsedCredit(Number(data.esimUsedCredit) || 0);
+          setEsimAvailableCredit(Number(data.esimAvailableCredit) || 0);
+          setEsimCreditUsagePercentage(Number(data.esimCreditUsagePercentage) || 0);
           
           console.log('📊 Credit Level:', {
             limit: data.creditLimit,
             used: data.usedCredit,
             available: data.availableCredit,
-            usage: data.creditUsagePercentage
+            usage: data.creditUsagePercentage,
+            esimLimit: data.esimCreditLimit,
+            esimUsed: data.esimUsedCredit,
+            esimAvailable: data.esimAvailableCredit,
+            esimUsage: data.esimCreditUsagePercentage
           });
         }
       } else {
         console.log('Using demo credit data');
-        setCreditLimit(900);
-        setUsedCredit(829);
-        setAvailableCredit(71);
-        setCreditUsagePercentage(92.1);
+        setCreditLimit(Number(900));
+        setUsedCredit(Number(829));
+        setAvailableCredit(Number(71));
+        setCreditUsagePercentage(Number(92.1));
       }
     } catch (error) {
       console.error('Error fetching credit level:', error);
       // Set demo data
-      setCreditLimit(900);
-      setUsedCredit(829);
-      setAvailableCredit(71);
-      setCreditUsagePercentage(92.1);
+      setCreditLimit(Number(900));
+      setUsedCredit(Number(829));
+      setAvailableCredit(Number(71));
+      setCreditUsagePercentage(Number(92.1));
+    }
+  };
+
+  const fetchKickbackLimit = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('No token - using demo kickback data');
+        setKickbackLimit(5000);
+        setUsedKickback(3200);
+        setAvailableKickback(1800);
+        setKickbackUsagePercentage(64);
+        setKickbackStatus('ACTIVE');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/retailer/kickback-limit`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setKickbackLimit(Number(data.kickbackLimit) || 0);
+          setUsedKickback(Number(data.usedKickback) || 0);
+          setAvailableKickback(Number(data.availableKickback) || 0);
+          setKickbackUsagePercentage(Number(data.usagePercentage) || 0);
+          setKickbackStatus(data.status || 'NOT_SET');
+          
+          console.log('🎁 Kickback Limit:', {
+            limit: data.kickbackLimit,
+            used: data.usedKickback,
+            available: data.availableKickback,
+            usage: data.usagePercentage,
+            status: data.status
+          });
+        }
+      } else {
+        console.log('Using demo kickback data');
+        setKickbackLimit(5000);
+        setUsedKickback(3200);
+        setAvailableKickback(1800);
+        setKickbackUsagePercentage(64);
+        setKickbackStatus('ACTIVE');
+      }
+    } catch (error) {
+      console.error('Error fetching kickback limit:', error);
+      // Set demo data
+      setKickbackLimit(5000);
+      setUsedKickback(3200);
+      setAvailableKickback(1800);
+      setKickbackUsagePercentage(64);
+      setKickbackStatus('ACTIVE');
     }
   };
 
   const updateCreditOnSale = (saleAmount) => {
     setUsedCredit(prev => {
-      const newUsed = prev + saleAmount;
-      const newAvailable = creditLimit - newUsed;
-      const newPercentage = (newUsed / creditLimit) * 100;
+      // Ensure all values are numbers
+      const prevUsed = Number(prev) || 0;
+      const amount = Number(saleAmount) || 0;
+      const limit = Number(creditLimit) || 0;
+      
+      const newUsed = prevUsed + amount;
+      const newAvailable = limit - newUsed;
+      const newPercentage = limit > 0 ? (newUsed / limit) * 100 : 0;
       
       setAvailableCredit(newAvailable);
       setCreditUsagePercentage(newPercentage);
@@ -1624,20 +1752,69 @@ const RetailerDashboard = () => {
       // Add to credit transactions
       setCreditTransactions(prevTrans => [{
         date: new Date().toISOString(),
-        amount: saleAmount,
+        amount: amount,
         type: 'sale',
         balance: newAvailable
       }, ...prevTrans.slice(0, 49)]);
       
       // Save to localStorage
       localStorage.setItem('creditLevel', JSON.stringify({
-        creditLimit,
+        creditLimit: limit,
         usedCredit: newUsed,
         availableCredit: newAvailable,
         creditUsagePercentage: newPercentage
       }));
       
-      console.log(`💳 Credit updated: Used ${newUsed.toFixed(2)} / ${creditLimit} (${newPercentage.toFixed(1)}%)`);
+      console.log(`💳 Credit updated: Used ${newUsed.toFixed(2)} / ${limit} (${newPercentage.toFixed(1)}%)`);
+      
+      return newUsed;
+    });
+  };
+
+  // Update kickback bonus on sale
+  const updateKickbackOnSale = (saleAmount) => {
+    setUsedKickback(prev => {
+      // Ensure all values are numbers
+      const prevUsed = Number(prev) || 0;
+      const amount = Number(saleAmount) || 0;
+      const limit = Number(kickbackLimit) || 0;
+      
+      const newUsed = prevUsed + amount;
+      const newAvailable = limit - newUsed;
+      const newPercentage = limit > 0 ? (newUsed / limit) * 100 : 0;
+      
+      setAvailableKickback(newAvailable);
+      setKickbackUsagePercentage(newPercentage);
+      
+      console.log(`🎁 Kickback updated: Used ${newUsed.toFixed(2)} / ${limit} (${newPercentage.toFixed(1)}%)`);
+      
+      return newUsed;
+    });
+  };
+
+  const updateEsimCreditOnSale = (saleAmount) => {
+    setEsimUsedCredit(prev => {
+      // Ensure all values are numbers
+      const prevUsed = Number(prev) || 0;
+      const amount = Number(saleAmount) || 0;
+      const limit = Number(esimCreditLimit) || 0;
+      
+      const newUsed = prevUsed + amount;
+      const newAvailable = limit - newUsed;
+      const newPercentage = limit > 0 ? (newUsed / limit) * 100 : 0;
+      
+      setEsimAvailableCredit(newAvailable);
+      setEsimCreditUsagePercentage(newPercentage);
+      
+      // Save to localStorage
+      localStorage.setItem('esimCreditLevel', JSON.stringify({
+        esimCreditLimit: limit,
+        esimUsedCredit: newUsed,
+        esimAvailableCredit: newAvailable,
+        esimCreditUsagePercentage: newPercentage
+      }));
+      
+      console.log(`📱 eSIM Credit updated: Used ${newUsed.toFixed(2)} / ${limit} (${newPercentage.toFixed(1)}%)`);
       
       return newUsed;
     });
@@ -1687,40 +1864,165 @@ const RetailerDashboard = () => {
         return;
       }
 
-      // Fetch all three periods
-      const [dailyRes, monthlyRes, yearlyRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/retailer/profit/daily`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE_URL}/retailer/profit/monthly`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE_URL}/retailer/profit/yearly`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-      ]);
+      console.log('📊 Fetching profit data from backend...');
+
+      // Fetch profit summary first (more efficient)
+      try {
+        const summaryRes = await fetch(`${API_BASE_URL}/retailer/profit-summary`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        console.log('📊 Profit summary response status:', summaryRes.status);
+
+        if (summaryRes.ok) {
+          const summaryData = await summaryRes.json();
+          console.log('📊 Profit summary received:', summaryData);
+          
+          if (summaryData.success && summaryData.data) {
+            setTotalProfit(summaryData.data.totalProfit || 0);
+            setDailyProfit(summaryData.data.dailyProfit || 0);
+            console.log(`✅ Profit summary set: Total=${summaryData.data.totalProfit}, Daily=${summaryData.data.dailyProfit}`);
+          }
+        } else {
+          console.log('⚠️ Profit summary endpoint not available, status:', summaryRes.status);
+        }
+      } catch (summaryError) {
+        console.log('⚠️ Error fetching profit summary:', summaryError.message);
+      }
+
+      // Fetch detailed profit data for all three periods
+      console.log('📊 Fetching profit/daily endpoint...');
+      const dailyRes = await fetch(`${API_BASE_URL}/retailer/profit/daily`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('📊 Daily response status:', dailyRes.status);
+      if (!dailyRes.ok) {
+        const errorText = await dailyRes.text();
+        console.log('📊 Daily error response:', errorText);
+      }
+
+      console.log('📊 Fetching profit/monthly endpoint...');
+      const monthlyRes = await fetch(`${API_BASE_URL}/retailer/profit/monthly`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('📊 Monthly response status:', monthlyRes.status);
+      if (!monthlyRes.ok) {
+        const errorText = await monthlyRes.text();
+        console.log('📊 Monthly error response:', errorText);
+      }
+
+      console.log('📊 Fetching profit/yearly endpoint...');
+      const yearlyRes = await fetch(`${API_BASE_URL}/retailer/profit/yearly`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('📊 Yearly response status:', yearlyRes.status);
+      if (!yearlyRes.ok) {
+        const errorText = await yearlyRes.text();
+        console.log('📊 Yearly error response:', errorText);
+      }
 
       if (dailyRes.ok && monthlyRes.ok && yearlyRes.ok) {
         const daily = await dailyRes.json();
         const monthly = await monthlyRes.json();
         const yearly = await yearlyRes.json();
 
-        // Update profitData state with backend data
+        console.log('📊 Profit data received:', {
+          daily: daily,
+          monthly: monthly,
+          yearly: yearly
+        });
+
+        console.log('📊 Profit data counts:', {
+          daily: daily.data?.length || 0,
+          monthly: monthly.data?.length || 0,
+          yearly: yearly.data?.length || 0
+        });
+
+        // DON'T divide profit - use actual individual sales from activities
+        // Try to get from state first, then from localStorage
+        let salesActivities = recentActivities.filter(a => 
+          (a.type === 'pos_sale' || a.iconType === 'pos_sale') && 
+          a.details?.profitAmount !== undefined
+        );
+        
+        console.log('📊 Found sales activities in state:', salesActivities.length);
+        
+        // If no activities in state, try localStorage
+        if (salesActivities.length === 0) {
+          try {
+            const savedActivities = localStorage.getItem('recentActivities');
+            if (savedActivities) {
+              const parsed = JSON.parse(savedActivities);
+              salesActivities = parsed.filter(a => 
+                (a.type === 'pos_sale' || a.iconType === 'pos_sale') && 
+                a.details?.profitAmount !== undefined
+              );
+              console.log('📊 Found sales activities in localStorage:', salesActivities.length);
+            }
+          } catch (e) {
+            console.error('Error loading activities from localStorage:', e);
+          }
+        }
+        
+        let individualDailySales = [];
+        
+        if (salesActivities.length > 0) {
+          individualDailySales = salesActivities.map(activity => {
+            const timestamp = activity.timestamp || activity.details?.timestamp || new Date().toISOString();
+            const date = timestamp.split('T')[0];
+            
+            return {
+              date: date,
+              timestamp: timestamp,
+              profit: activity.details?.profitAmount || 0,
+              sales: 1,
+              revenue: activity.details?.saleAmount || activity.details?.profitAmount || 0,
+              marginRate: activity.details?.marginRate || 0,
+              bundleName: activity.details?.bundleName || activity.message || 'Sale'
+            };
+          });
+          
+          console.log(`✅ Using ${individualDailySales.length} real sales with actual profit amounts`);
+        } else {
+          // Fallback: if no activities, just use the aggregated data as is
+          console.log('⚠️ No sales activities found, using aggregated backend data');
+          individualDailySales = daily.data || [];
+        }
+
+        // Update profitData state with individual sales from activities
         setProfitData({
-          daily: daily.data || [],
+          daily: individualDailySales,
           monthly: monthly.data || [],
           yearly: yearly.data || []
         });
 
-        // Calculate totals from backend data
+        console.log('✅ Profit data set to state with real individual sales');
+
+        // Calculate totals from backend data if summary wasn't available
         const totalProfitFromBackend = yearly.data?.reduce((sum, y) => sum + (y.profit || 0), 0) || 0;
         const todayProfit = daily.data?.find(d => d.date === new Date().toISOString().split('T')[0])?.profit || 0;
 
         setTotalProfit(totalProfitFromBackend);
         setDailyProfit(todayProfit);
+        console.log(`✅ Profit calculated from yearly data: Total=${totalProfitFromBackend}, Daily=${todayProfit}`);
 
         console.log('✅ Profit data loaded from backend:', {
-          daily: daily.data?.length || 0,
+          daily: individualDailySales.length,
           monthly: monthly.data?.length || 0,
           yearly: yearly.data?.length || 0,
           totalProfit: totalProfitFromBackend
@@ -1728,18 +2030,22 @@ const RetailerDashboard = () => {
 
         // Also save to localStorage as backup
         localStorage.setItem('profitData', JSON.stringify({
-          daily: daily.data || [],
+          daily: individualDailySales,
           monthly: monthly.data || [],
           yearly: yearly.data || []
         }));
+        localStorage.setItem('profitDataVersion', '2');
       } else {
-        console.log('⚠️ Backend profit data not available, using localStorage');
+        console.log('⚠️ Backend profit data not available');
       }
     } catch (error) {
       console.error('❌ Error fetching profit from backend:', error);
       console.log('⚠️ Using localStorage profit data as fallback');
     }
   };
+
+  // Load sample profit data for demo/testing
+  // REMOVED - Only fetch real profit data
 
   const handleLogout = () => {
     if (isDemoMode()) {
@@ -2018,6 +2324,441 @@ const RetailerDashboard = () => {
     }
   };
 
+  // Print Receipt Function
+  const handlePrintReceipt = (orderData) => {
+    const printWindow = window.open('', '_blank');
+    const printContent = generateReceiptHTML(orderData);
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  // Print eSIM Receipt Function
+  const handlePrintEsimReceipt = (esimData, qrCodeImage) => {
+    console.log('🖨️ handlePrintEsimReceipt called with:', {
+      hasQrCode: !!qrCodeImage,
+      qrCodeLength: qrCodeImage?.length,
+      qrCodePreview: qrCodeImage?.substring(0, 100)
+    });
+    const printWindow = window.open('', '_blank');
+    const printContent = generateEsimReceiptHTML(esimData, qrCodeImage);
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  // Generate Receipt HTML
+  const generateReceiptHTML = (orderData) => {
+    const receiptHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Receipt</title>
+        <style>
+          body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: white;
+          }
+          .receipt {
+            max-width: 300px;
+            margin: 0 auto;
+            border: 1px solid #ddd;
+            padding: 20px;
+            background: white;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: bold;
+          }
+          .header p {
+            margin: 5px 0;
+            font-size: 12px;
+            color: #666;
+          }
+          .item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 13px;
+            border-bottom: 1px solid #eee;
+          }
+          .item-name {
+            flex: 1;
+          }
+          .item-qty {
+            width: 40px;
+            text-align: center;
+          }
+          .item-price {
+            width: 60px;
+            text-align: right;
+            font-weight: bold;
+          }
+          .total-section {
+            border-top: 2px solid #333;
+            padding-top: 10px;
+            margin-top: 10px;
+          }
+          .total {
+            display: flex;
+            justify-content: space-between;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 10px 0;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 11px;
+            color: #666;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+          }
+          .timestamp {
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+          }
+          @media print {
+            body { margin: 0; padding: 0; }
+            .receipt { border: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt">
+          <div class="header">
+            <h1>RECEIPT</h1>
+            <p>EasyTopup.no</p>
+            <p class="timestamp">${new Date().toLocaleString()}</p>
+            <p>Order: ${orderData.orderId || 'POS-' + Date.now()}</p>
+          </div>
+
+          <div class="item" style="font-weight: bold; padding: 10px 0;">
+            <div class="item-name">Item</div>
+            <div class="item-qty">Qty</div>
+            <div class="item-price">Total</div>
+          </div>
+
+          <div class="item">
+            <div class="item-name">${orderData.bundleName || 'Product'}</div>
+            <div class="item-qty">${orderData.quantity || 1}</div>
+            <div class="item-price">NOK ${(orderData.totalAmount || 0).toFixed(2)}</div>
+          </div>
+
+          <div class="total-section">
+            <div class="total">
+              <span>Subtotal:</span>
+              <span>NOK ${(orderData.totalAmount || 0).toFixed(2)}</span>
+            </div>
+            <div class="total" style="font-size: 18px; border-top: 2px solid #333; padding-top: 10px;">
+              <span>TOTAL:</span>
+              <span>NOK ${(orderData.totalAmount || 0).toFixed(2)}</span>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>Thank you for your purchase!</p>
+            <p>Please keep this receipt for your records</p>
+            <p style="margin-top: 10px;">For support, contact us at:</p>
+            <p>📧 support@easytopup.no<br>
+               💬 WhatsApp: +47 XXX XXX XXX</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    return receiptHTML;
+  };
+
+  // Generate eSIM Receipt HTML with Telelys template
+  const generateEsimReceiptHTML = (esimData, qrCodeImage) => {
+    // Format QR code with proper data URI prefix if not already present
+    let formattedQrCode = '';
+    if (qrCodeImage) {
+      if (qrCodeImage.startsWith('data:image')) {
+        formattedQrCode = qrCodeImage;
+      } else {
+        // Add data URI prefix if missing
+        formattedQrCode = `data:image/png;base64,${qrCodeImage}`;
+      }
+      console.log('📸 Formatted QR Code:', {
+        original: qrCodeImage.substring(0, 50),
+        formatted: formattedQrCode.substring(0, 100),
+        hasPrefix: formattedQrCode.startsWith('data:image')
+      });
+    } else {
+      console.warn('⚠️ No QR code image provided');
+    }
+    
+    const qrHtml = formattedQrCode ? `
+      <div style="background: #F9FAFB; border-radius: 8px; padding: 20px; margin: 30px 0; text-align: center;">
+        <h3 style="color: #1F2937; margin-bottom: 15px;">Your eSIM QR Code</h3>
+        <img src="${formattedQrCode}" alt="eSIM QR Code" style="max-width: 300px; height: auto; border-radius: 8px; border: 2px solid #E5E7EB;">
+      </div>
+    ` : '<div style="padding: 20px; text-align: center; color: red;">⚠️ QR Code not available</div>';
+
+    return `
+      <!DOCTYPE html>
+      <html lang="no">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>eSIM Receipt - Telelys</title>
+        <style>
+          body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: white;
+          }
+          .receipt {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #2563EB;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+          }
+          .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2563EB;
+            margin-bottom: 10px;
+          }
+          .company {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+          }
+          .title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1F2937;
+            margin: 20px 0;
+          }
+          .info-section {
+            background: #F9FAFB;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+          }
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #E5E7EB;
+          }
+          .info-label {
+            color: #6B7280;
+            font-weight: 600;
+          }
+          .info-value {
+            color: #1F2937;
+            font-weight: 600;
+          }
+          .activation {
+            background: #FEF3C7;
+            border: 1px solid #FCD34D;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+          }
+          .activation h3 {
+            margin-top: 0;
+            color: #92400E;
+          }
+          .step {
+            padding: 10px 0;
+            margin: 10px 0;
+            border-bottom: 1px solid #E5E7EB;
+          }
+          .step-title {
+            font-weight: bold;
+            color: #1F2937;
+          }
+          .step-content {
+            color: #6B7280;
+            font-size: 14px;
+            margin-top: 5px;
+          }
+          .code-box {
+            background: #F3F4F6;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+            word-break: break-all;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #E5E7EB;
+            color: #6B7280;
+            font-size: 12px;
+          }
+          @media print {
+            body { margin: 0; padding: 0; }
+            .receipt { border: none; box-shadow: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt">
+          <div class="header">
+            <div class="logo">Telelys</div>
+            <div class="company">Thank you for choosing Telelys</div>
+          </div>
+
+          <div class="title">eSIM Activation Receipt</div>
+
+          <div class="info-section">
+            <h3 style="margin-top: 0; color: #1F2937;">Your eSIM Information</h3>
+            <div class="info-row">
+              <span class="info-label">Date:</span>
+              <span class="info-value">${new Date(esimData.date || Date.now()).toLocaleDateString()}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Order ID:</span>
+              <span class="info-value">${esimData.orderId || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Bundle Name:</span>
+              <span class="info-value">${esimData.bundleName || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Bundle Price:</span>
+              <span class="info-value">NOK ${parseFloat(esimData.bundlePrice || 0).toFixed(2)}</span>
+            </div>
+          </div>
+
+          <div class="info-section">
+            <h3 style="margin-top: 0; color: #1F2937;">Customer Details</h3>
+            <div class="info-row">
+              <span class="info-label">Name:</span>
+              <span class="info-value">${esimData.customerName || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Email:</span>
+              <span class="info-value">${esimData.customerEmail || 'N/A'}</span>
+            </div>
+            <div class="info-row" style="border-bottom: none;">
+              <span class="info-label">Phone:</span>
+              <span class="info-value">${esimData.customerPhone || 'N/A'}</span>
+            </div>
+          </div>
+
+          <div class="activation">
+            <h3>⚠️ Important Notes Before Setting Up</h3>
+            <div class="step">
+              <div class="step-title">1. Internet Connection Required</div>
+              <div class="step-content">eSIM can only be installed when there is an internet connection.</div>
+            </div>
+            <div class="step">
+              <div class="step-title">2. Do Not Delete eSIM</div>
+              <div class="step-content">Please do not delete eSIM after activation. The eSIM QR code can only be activated once.</div>
+            </div>
+            <div class="step">
+              <div class="step-title">3. Single Device Installation</div>
+              <div class="step-content">eSIM cannot be transferred to another device after installation.</div>
+            </div>
+          </div>
+
+          <div class="info-section">
+            <h3 style="margin-top: 0; color: #1F2937;">Activation Information</h3>
+            <div class="info-row">
+              <span class="info-label">SM-DP+ Address:</span>
+            </div>
+            <div class="code-box">${esimData.smDpAddress || 'N/A'}</div>
+            <div class="info-row">
+              <span class="info-label">Activation Code:</span>
+            </div>
+            <div class="code-box">${esimData.activationCode || 'N/A'}</div>
+            <div class="info-row">
+              <span class="info-label">ICCID:</span>
+            </div>
+            <div class="code-box">${esimData.iccid || 'N/A'}</div>
+          </div>
+
+          ${qrHtml}
+
+          <div class="info-section">
+            <h3 style="margin-top: 0; color: #1F2937;">Setup Instructions</h3>
+            <div style="margin: 15px 0;">
+              <div class="step-title" style="color: #2563EB;">For iOS:</div>
+              <div class="step-content">
+                1. Go to Settings > Cellular (or Mobile Data)<br>
+                2. Click Add eSIM or Add Cellular Plan > Choose Use QR Code<br>
+                3. Scan the QR code above or enter details manually<br>
+                4. Click Next to finish installation<br>
+                5. Register your SIM: <a href="https://www.lyca-mobile.no/en/registration/">https://www.lyca-mobile.no/en/registration/</a>
+              </div>
+            </div>
+            <div style="margin: 15px 0;">
+              <div class="step-title" style="color: #2563EB;">For Android:</div>
+              <div class="step-content">
+                1. Go to Settings > Connections<br>
+                2. Choose Add eSIM > Choose Use QR Code<br>
+                3. Scan the QR code above or enter details manually<br>
+                4. Click Next to finish installation<br>
+                5. Register your SIM: <a href="https://www.lyca-mobile.no/en/registration/">https://www.lyca-mobile.no/en/registration/</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="info-section">
+            <h3 style="margin-top: 0; color: #1F2937;">Troubleshooting</h3>
+            <div class="step">
+              <div class="step-title">Unable to Scan QR Code</div>
+              <div class="step-content">Place your phone camera opposite the QR Code and ensure the camera captures the whole code.</div>
+            </div>
+            <div class="step">
+              <div class="step-title">eSIM in Activating Status</div>
+              <div class="step-content">You need to travel to a country supported by your eSIM to start using it.</div>
+            </div>
+            <div class="step">
+              <div class="step-title">No Signal After Installation</div>
+              <div class="step-content">Enable Data Roaming mode and Cellular Data mode on your phone.</div>
+            </div>
+            <div class="step">
+              <div class="step-title">Network Signal but No Internet</div>
+              <div class="step-content">Check APN settings and configure.<br><code>${esimData.apnSettings || 'Contact support'}</code></div>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p><strong>Need Help?</strong></p>
+            <p>💬 WhatsApp: ${esimData.retailerPhone || '+47 XXX XXX XXX'}</p>
+            <p>📧 Email: ${esimData.retailerEmail || 'support@telelys.no'}</p>
+            <p style="margin-top: 20px; border-top: 1px solid #E5E7EB; padding-top: 15px;">
+              Thank you for choosing Telelys!<br>
+              Please keep this receipt for your records.
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
   const handleDirectSale = async () => {
     if (!selectedBundle || selectedBundle.availableQuantity < saleQuantity) {
       alert(`Please select a valid bundle. Only ${selectedBundle?.availableQuantity || 0} PINs available.`);
@@ -2027,17 +2768,33 @@ const RetailerDashboard = () => {
     // Calculate total amount first to check credit
     const totalAmount = selectedBundle.bundlePrice * saleQuantity;
 
-    // Check credit limit before processing sale
-    if (availableCredit < totalAmount) {
-      alert(
-        `❌ Credit Limit Exceeded!\n\n` +
-        `Sale Amount: ${totalAmount.toFixed(2)} kr\n` +
-        `Available Credit: ${availableCredit.toFixed(2)} kr\n` +
-        `Shortage: ${(totalAmount - availableCredit).toFixed(2)} kr\n\n` +
-        `You need ${(totalAmount - availableCredit).toFixed(2)} kr more credit to complete this sale.\n` +
-        `Please contact the administrator to increase your credit limit.`
-      );
-      return;
+    // Check payment mode and validate balance
+    if (paymentMode === 'credit') {
+      // Check Credit Limit
+      if (availableCredit <= 0 || availableCredit < totalAmount) {
+        alert(
+          `❌ Insufficient Credit Balance!\n\n` +
+          `Sale Amount: ${totalAmount.toFixed(2)} kr\n` +
+          `Available Credit: ${availableCredit.toFixed(2)} kr\n` +
+          (availableCredit <= 0 
+            ? `Your credit balance is empty. Please contact the administrator.`
+            : `Shortage: ${(totalAmount - availableCredit).toFixed(2)} kr\n\nYou need ${(totalAmount - availableCredit).toFixed(2)} kr more credit to complete this sale.`)
+        );
+        return;
+      }
+    } else if (paymentMode === 'kickback') {
+      // Check Kickback Bonus Limit
+      if (availableKickback <= 0 || availableKickback < totalAmount) {
+        alert(
+          `❌ Insufficient Kickback Bonus Balance!\n\n` +
+          `Sale Amount: ${totalAmount.toFixed(2)} kr\n` +
+          `Available Kickback: ${availableKickback.toFixed(2)} kr\n` +
+          (availableKickback <= 0 
+            ? `Your kickback bonus balance is empty. Please contact the administrator.`
+            : `Shortage: ${(totalAmount - availableKickback).toFixed(2)} kr\n\nYou need ${(totalAmount - availableKickback).toFixed(2)} kr more kickback bonus to complete this sale.`)
+        );
+        return;
+      }
     }
 
     try {
@@ -2085,6 +2842,11 @@ const RetailerDashboard = () => {
             apiUrl: `${API_BASE_URL}/retailer/direct-sale`
           });
 
+          // Direct sale is ONLY for ePIN bundles (eSIMs use separate /send-qr endpoint)
+          const saleType = 'EPIN';
+          
+          console.log('🔍 Bundle sale - saleType:', saleType);
+          
           const saleData = {
             bundleId: selectedBundle.bundleId || selectedBundle.id || 'BUNDLE-' + Date.now(),
             bundleName: selectedBundle.bundleName,
@@ -2094,7 +2856,8 @@ const RetailerDashboard = () => {
             customerName: 'Walk-in Customer',
             customerPhone: '',
             customerEmail: '',
-            saleType: 'DIRECT_SALE'
+            saleType: saleType,
+            paymentMode: paymentMode // 'credit' or 'kickback'
           };
 
           console.log('📤 Sending sale data:', saleData);
@@ -2158,8 +2921,16 @@ const RetailerDashboard = () => {
             // Update profit and activity
             updateProfit(totalAmount, costPrice * saleQuantity, selectedBundle.bundleName);
             
-            // Update credit level after successful sale
-            updateCreditOnSale(totalAmount);
+            // Update credit level or kickback bonus after successful sale based on payment mode
+            if (paymentMode === 'credit') {
+              updateCreditOnSale(totalAmount);
+            } else if (paymentMode === 'kickback') {
+              updateKickbackOnSale(totalAmount);
+            }
+            
+            // Refresh credit and kickback data from server
+            fetchCreditLevel();
+            fetchKickbackLimit();
             
             addActivity(
               'pos_sale',
@@ -2179,6 +2950,7 @@ const RetailerDashboard = () => {
             // Prepare receipt data
             const receipt = {
               saleId: result.data?.saleId || `API-${Date.now()}`,
+              retailerId: user?.id || user?.email || 'Unknown',
               bundleName: selectedBundle.bundleName,
               quantity: saleQuantity,
               unitPrice: selectedBundle.bundlePrice,
@@ -2293,6 +3065,7 @@ const RetailerDashboard = () => {
       // Prepare offline receipt
       const offlineReceipt = {
         saleId: `OFFLINE-${Date.now()}`,
+        retailerId: user?.id || user?.email || 'Unknown',
         bundleName: selectedBundle.bundleName,
         quantity: saleQuantity,
         unitPrice: selectedBundle.bundlePrice,
@@ -2559,13 +3332,102 @@ const RetailerDashboard = () => {
       <head>
         <title>PIN Receipt</title>
         <style>
-          body { font-family: 'Courier New', monospace; margin: 20px; }
-          .receipt { max-width: 300px; margin: 0 auto; }
-          .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 15px; }
-          .line { margin: 5px 0; }
-          .pins { margin-top: 15px; padding-top: 10px; border-top: 1px dashed #000; }
-          .pin-item { margin: 10px 0; padding: 8px; background: #f5f5f5; border: 1px solid #ddd; }
-          .footer { text-align: center; margin-top: 20px; padding-top: 10px; border-top: 2px dashed #000; font-size: 12px; }
+          body { 
+            font-family: 'Courier New', monospace; 
+            margin: 20px;
+            background: white;
+          }
+          .receipt { 
+            max-width: 400px; 
+            margin: 0 auto;
+            border: 2px solid #000;
+            padding: 20px;
+          }
+          .header { 
+            text-align: center; 
+            border-bottom: 2px dashed #000; 
+            padding-bottom: 15px; 
+            margin-bottom: 20px; 
+          }
+          .header h2 {
+            margin: 0 0 5px 0;
+            font-size: 24px;
+          }
+          .header p {
+            margin: 5px 0;
+            font-size: 14px;
+          }
+          .section {
+            margin: 15px 0;
+            padding: 10px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+          }
+          .line { 
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+          }
+          .line strong {
+            min-width: 120px;
+          }
+          .pins { 
+            margin-top: 20px; 
+            padding-top: 15px; 
+            border-top: 2px dashed #000; 
+          }
+          .pins h3 {
+            text-align: center;
+            margin: 0 0 15px 0;
+            font-size: 16px;
+          }
+          .pin-item { 
+            margin: 15px 0; 
+            padding: 12px; 
+            background: #fff; 
+            border: 2px solid #333;
+            border-radius: 5px;
+          }
+          .pin-item strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #333;
+          }
+          .pin-number {
+            font-size: 16px;
+            font-weight: bold;
+            color: #000;
+            background: #ffeb3b;
+            padding: 5px 8px;
+            border-radius: 3px;
+            display: inline-block;
+            margin: 5px 0;
+            letter-spacing: 1px;
+          }
+          .pin-details {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #555;
+          }
+          .pin-details div {
+            margin: 4px 0;
+          }
+          .footer { 
+            text-align: center; 
+            margin-top: 20px; 
+            padding-top: 15px; 
+            border-top: 2px dashed #000; 
+            font-size: 12px; 
+          }
+          .footer p {
+            margin: 5px 0;
+          }
+          @media print {
+            body { margin: 0; }
+            .receipt { border: none; }
+          }
         </style>
       </head>
       <body>
@@ -2573,30 +3435,58 @@ const RetailerDashboard = () => {
           <div class="header">
             <h2>EASYTOPUP.NO</h2>
             <p>PIN Receipt</p>
+            <p style="font-size: 11px; margin-top: 10px;">Telelys or Website URL</p>
           </div>
           
-          <div class="line"><strong>Sale ID:</strong> ${receiptData.saleId}</div>
-          <div class="line"><strong>Date:</strong> ${receiptData.saleDate}</div>
-          <div class="line"><strong>Bundle:</strong> ${receiptData.bundleName}</div>
-          <div class="line"><strong>Quantity:</strong> ${receiptData.quantity}</div>
-          <div class="line"><strong>Unit Price:</strong> NOK ${receiptData.unitPrice}</div>
-          <div class="line"><strong>Total:</strong> NOK ${receiptData.totalAmount}</div>
+          <div class="section">
+            <h3 style="margin: 0 0 10px 0; font-size: 14px; text-align: center;">PIN INFO</h3>
+            <div class="line">
+              <strong>Date:</strong>
+              <span>${receiptData.saleDate}</span>
+            </div>
+            <div class="line">
+              <strong>Order ID:</strong>
+              <span>${receiptData.saleId}</span>
+            </div>
+            <div class="line">
+              <strong>Retailer ID:</strong>
+              <span>${receiptData.retailerId || 'N/A'}</span>
+            </div>
+            <div class="line">
+              <strong>Bundle Name:</strong>
+              <span>${receiptData.bundleName}</span>
+            </div>
+            <div class="line">
+              <strong>Bundle Price:</strong>
+              <span>NOK ${receiptData.unitPrice}</span>
+            </div>
+          </div>
           
           <div class="pins">
-            <h3>Your PINs:</h3>
+            <h3>Your PIN${receiptData.quantity > 1 ? 'S' : ''}</h3>
             ${receiptData.pins.map((pin, index) => `
               <div class="pin-item">
-                <strong>PIN ${index + 1}:</strong><br>
-                ${pin.pin}<br>
-                <small>Serial: ${pin.serialNumber || 'N/A'}</small><br>
-                <small>Valid until: ${pin.expiryDate ? new Date(pin.expiryDate).toLocaleDateString() : '365 days'}</small>
+                <strong>PIN ${index + 1} of ${receiptData.quantity}</strong>
+                <div class="pin-number">${pin.pin || 'N/A'}</div>
+                <div class="pin-details">
+                  <div><strong>PIN number:</strong> ${pin.pin || 'N/A'}</div>
+                  <div><strong>Serial number:</strong> ${pin.serialNumber || 'N/A'}</div>
+                  <div><strong>Valid until:</strong> ${pin.expiryDate ? new Date(pin.expiryDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '365 days'}</div>
+                </div>
               </div>
             `).join('')}
           </div>
           
+          <div style="margin: 20px 0; padding: 12px; background: #fffbea; border: 1px dashed #f59e0b; border-radius: 5px;">
+            <p style="margin: 0; font-size: 12px; text-align: center;">
+              <strong>ENTER *150*PIN NUMBER# to activate</strong>
+            </p>
+          </div>
+          
           <div class="footer">
-            <p>Thank you for your purchase!</p>
+            <p style="font-weight: bold;">Thank you for your purchase!</p>
             <p>Keep this receipt safe</p>
+            <p style="font-size: 10px; margin-top: 10px;">If you encounter any problems, Dial 3332 from your Lycamobile or +4794733332 from other networks</p>
           </div>
         </div>
         
@@ -2615,9 +3505,9 @@ const RetailerDashboard = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50 overflow-hidden">
+    <div className="flex h-screen w-screen bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50 overflow-hidden">
       {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-gray-200 transition-all duration-300 ease-in-out flex flex-col shadow-xl`}>
+      <div className={`${sidebarOpen ? 'w-64' : 'w-20'} min-h-screen bg-white border-r border-gray-200 transition-all duration-300 ease-in-out flex flex-col shadow-xl flex-shrink-0`}>
         {/* Logo & Brand */}
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           {sidebarOpen ? (
@@ -2689,13 +3579,6 @@ const RetailerDashboard = () => {
                 active={activeTab === 'analytics'}
                 onClick={handleTabChange}
               />
-              <SidebarNavItem
-                id="privacy"
-                label="Privacy Settings"
-                icon={AlertCircle}
-                active={activeTab === 'privacy'}
-                onClick={handleTabChange}
-              />
             </>
           ) : (
             <>
@@ -2740,7 +3623,7 @@ const RetailerDashboard = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-h-screen">
         {/* Header Bar */}
         <div className="bg-white border-b border-gray-200 p-4">
           <div className="flex items-center justify-between">
@@ -2781,6 +3664,17 @@ const RetailerDashboard = () => {
                 <RefreshCw size={20} />
               </button>
 
+              <button 
+                onClick={() => handleTabChange('privacy')}
+                className={`p-2 rounded-lg transition-all ${
+                  activeTab === 'privacy' 
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg' 
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                title="Privacy Settings"
+              >
+                <Settings size={20} />
+              </button>
               
               <button className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 relative" title="Notifications">
                 <Bell size={20} />
@@ -2791,7 +3685,7 @@ const RetailerDashboard = () => {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50">
           <div className="max-w-7xl mx-auto space-y-6">
             {/* Content */}
         {activeTab === 'overview' && (
@@ -2803,19 +3697,19 @@ const RetailerDashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <StatCard
                 title="Customer Sales"
-                value={(analytics.customerSales || analytics.totalOrders || 0).toLocaleString()}
+                value={(salesSummary.totalSalesCount || 0).toLocaleString()}
                 change={analytics.orderGrowth || 0}
                 icon={ShoppingCart}
                 color="bg-gradient-to-br from-blue-600 to-blue-700"
-                description="Total sales"
+                description="Total ePINs and eSIMs sold"
               />
               <StatCard
                 title="Total Earnings"
-                value={`NOK ${totalProfit.toLocaleString('no-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                change={dailyProfit > 0 ? ((dailyProfit / Math.max(totalProfit - dailyProfit, 1)) * 100).toFixed(1) : 0}
+                value={`NOK ${(salesSummary.totalEarnings || 0).toLocaleString('no-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                change={analytics.monthlyGrowth || 0}
                 icon={DollarSign}
                 color="bg-gradient-to-br from-green-600 to-green-700"
-                description={`daily, weekly, monthly`}
+                description="Total earned from all sales"
               />
               <StatCard
                 title="Bundle Inventory"
@@ -2878,15 +3772,15 @@ const RetailerDashboard = () => {
                 <div className="grid grid-cols-3 gap-3 mt-4">
                   <div className="bg-blue-50 p-3 rounded-lg">
                     <div className="text-xs text-blue-700 font-medium">Limit</div>
-                    <div className="text-lg font-bold text-blue-900">{creditLimit.toFixed(0)} kr</div>
+                    <div className="text-lg font-bold text-blue-900">{Number(creditLimit || 0).toFixed(0)} kr</div>
                   </div>
                   <div className="bg-orange-50 p-3 rounded-lg">
                     <div className="text-xs text-orange-700 font-medium">Used</div>
-                    <div className="text-lg font-bold text-orange-900">{usedCredit.toFixed(0)} kr</div>
+                    <div className="text-lg font-bold text-orange-900">{Number(usedCredit || 0).toFixed(0)} kr</div>
                   </div>
                   <div className="bg-green-50 p-3 rounded-lg">
                     <div className="text-xs text-green-700 font-medium">Available</div>
-                    <div className="text-lg font-bold text-green-900">{availableCredit.toFixed(0)} kr</div>
+                    <div className="text-lg font-bold text-green-900">{Number(availableCredit || 0).toFixed(0)} kr</div>
                   </div>
                 </div>
 
@@ -3154,7 +4048,7 @@ const RetailerDashboard = () => {
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
-                  {/* Show eSIMs if Esims category is selected */}
+                  {/* Show eSIMs if Esims category is selected - uses /send-qr endpoint */}
                   {selectedProductCategory === 'Esims' && availableEsims.length > 0 ? (
                     (() => {
                       // Filter eSIMs by selected network provider
@@ -3233,10 +4127,12 @@ const RetailerDashboard = () => {
                       console.log(`   - Total bundles: ${inventoryBundles.length}`);
                       
                       const filtered = inventoryBundles.filter((bundle) => {
-                        // EXCLUDE eSIM stock type from non-Esims categories
-                        if (bundle.stockType === 'ESIM') {
-                          console.log(`   🚫 Excluding eSIM: ${bundle.bundleName} (stockType: ESIM)`);
-                          return false; // Don't show eSIMs in Bundle plans, Topups, Data plans
+                        // EXCLUDE eSIMs from bundle tabs - eSIMs only show in Esims tab
+                        const isEsim = (bundle.stockType || '').toUpperCase() === 'ESIM' || 
+                                      (bundle.productType || '').toUpperCase() === 'ESIM';
+                        if (isEsim) {
+                          console.log(`   🚫 Excluding eSIM: ${bundle.bundleName}`);
+                          return false;
                         }
                         
                         // Filter by network provider
@@ -3250,9 +4146,10 @@ const RetailerDashboard = () => {
                         console.log(`   📦 Bundle: ${bundle.bundleName}`);
                         console.log(`      - Provider: "${bundle.networkProvider}" (matches: ${matchesOperator})`);
                         console.log(`      - Type: "${bundle.productType}" (matches: ${matchesCategory})`);
+                        console.log(`      - stockType: "${bundle.stockType}"`);
                         console.log(`      - Show: ${matchesOperator && matchesCategory}`);
                         
-                        // Must match both operator and category
+                        // Must match both operator and category, and NOT be an eSIM
                         return matchesOperator && matchesCategory;
                       });
                       
@@ -3338,6 +4235,22 @@ const RetailerDashboard = () => {
                       
                       {/* eSIM Details - No QR Code Shown */}
                       <div className="space-y-2 text-xs bg-white p-3 rounded-lg">
+                        {selectedEsim.qrCodeImage && (
+                          <div className="mb-3 p-2 bg-gray-50 rounded text-center">
+                            <p className="text-xs text-gray-600 mb-2">QR Code Preview:</p>
+                            <img 
+                              src={selectedEsim.qrCodeImage.startsWith('data:') ? selectedEsim.qrCodeImage : `data:image/png;base64,${selectedEsim.qrCodeImage}`} 
+                              alt="QR Preview" 
+                              style={{ maxWidth: '150px', height: 'auto', margin: '0 auto', border: '1px solid #ddd' }}
+                              onError={(e) => {
+                                console.error('❌ QR Code image failed to load');
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'block';
+                              }}
+                            />
+                            <p style={{ display: 'none', color: 'red', fontSize: '10px' }}>QR image failed to load</p>
+                          </div>
+                        )}
                         <div className="flex justify-between items-center py-1 border-b border-blue-200">
                           <span className="text-gray-600">ICCID:</span>
                           <span className="font-mono text-gray-900">{selectedEsim.iccid?.slice(0, 15)}...</span>
@@ -3427,6 +4340,74 @@ const RetailerDashboard = () => {
                       </div>
                     </div>
 
+                    {/* Payment Mode Selection */}
+                    <div className="border-t border-gray-200 pt-4">
+                      <label className="block text-sm font-semibold text-gray-700 mb-3">
+                        💳 Payment Mode
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Credit Limit Option */}
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMode('credit')}
+                          className={`p-4 rounded-lg border-2 transition-all ${
+                            paymentMode === 'credit'
+                              ? 'border-blue-500 bg-blue-50 shadow-md'
+                              : 'border-gray-200 bg-white hover:border-blue-300'
+                          }`}
+                        >
+                          <div className="flex flex-col items-center text-center">
+                            <CreditCard size={24} className={paymentMode === 'credit' ? 'text-blue-600' : 'text-gray-400'} />
+                            <span className={`text-sm font-semibold mt-2 ${
+                              paymentMode === 'credit' ? 'text-blue-700' : 'text-gray-600'
+                            }`}>
+                              Credit Limit
+                            </span>
+                            <span className={`text-xs mt-1 ${
+                              availableCredit > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              NOK {availableCredit.toFixed(2)}
+                            </span>
+                          </div>
+                        </button>
+
+                        {/* Kickback Bonus Option */}
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMode('kickback')}
+                          className={`p-4 rounded-lg border-2 transition-all ${
+                            paymentMode === 'kickback'
+                              ? 'border-orange-500 bg-orange-50 shadow-md'
+                              : 'border-gray-200 bg-white hover:border-orange-300'
+                          }`}
+                        >
+                          <div className="flex flex-col items-center text-center">
+                            <Gift size={24} className={paymentMode === 'kickback' ? 'text-orange-600' : 'text-gray-400'} />
+                            <span className={`text-sm font-semibold mt-2 ${
+                              paymentMode === 'kickback' ? 'text-orange-700' : 'text-gray-600'
+                            }`}>
+                              Kickback Bonus
+                            </span>
+                            <span className={`text-xs mt-1 ${
+                              availableKickback > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              NOK {availableKickback.toFixed(2)}
+                            </span>
+                          </div>
+                        </button>
+                      </div>
+
+                      {/* Insufficient Balance Warning */}
+                      {((paymentMode === 'credit' && availableCredit <= 0) || 
+                        (paymentMode === 'kickback' && availableKickback <= 0)) && (
+                        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <p className="text-xs text-red-600 text-center font-medium">
+                            ⚠️ Insufficient Balance - Please contact administrator
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Subtotal */}
                     <div className="border-t border-gray-200 pt-4">
                       <div className="flex justify-between items-center">
@@ -3439,11 +4420,16 @@ const RetailerDashboard = () => {
 
                     {/* Action Buttons */}
                     <div className="space-y-3 pt-4">
-                      {/* Print Button - Working */}
+                      {/* Complete Sale Button - Now checks payment mode balance */}
                       <button
                         type="button"
                         onClick={handleDirectSale}
-                        disabled={saleLoading || !retailerMarginRate}
+                        disabled={
+                          saleLoading || 
+                          !retailerMarginRate || 
+                          (paymentMode === 'credit' && availableCredit <= 0) ||
+                          (paymentMode === 'kickback' && availableKickback <= 0)
+                        }
                         className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3.5 px-4 rounded-lg font-bold text-base hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md"
                       >
                         {saleLoading ? (
@@ -3453,9 +4439,25 @@ const RetailerDashboard = () => {
                           </>
                         ) : (
                           <>
-                            Print NOK{(selectedBundle.bundlePrice * saleQuantity).toFixed(2)}
+                            <Printer size={18} />
+                            Complete Sale - NOK{(selectedBundle.bundlePrice * saleQuantity).toFixed(2)}
                           </>
                         )}
+                      </button>
+
+                      {/* Print Receipt Separately Button */}
+                      <button
+                        type="button"
+                        onClick={() => handlePrintReceipt({
+                          orderId: 'POS-' + selectedBundle.id,
+                          bundleName: selectedBundle.bundleName,
+                          quantity: saleQuantity,
+                          totalAmount: selectedBundle.bundlePrice * saleQuantity
+                        })}
+                        className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-2.5 px-4 rounded-lg font-semibold text-sm hover:from-blue-600 hover:to-cyan-600 flex items-center justify-center gap-2 shadow-md"
+                      >
+                        <Printer size={16} />
+                        Print Receipt Only
                       </button>
 
                       {/* Direct Topup Button - Disabled */}
@@ -3586,57 +4588,192 @@ const RetailerDashboard = () => {
                     </p>
                   </div>
 
+                  {/* Payment Mode Selection for eSIM */}
+                  <div className="p-6 border-b border-gray-200 bg-gray-50">
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
+                      💳 Payment Mode
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* eSIM Credit Option */}
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMode('credit')}
+                        className={`p-4 rounded-lg border-2 transition-all ${
+                          paymentMode === 'credit'
+                            ? 'border-purple-500 bg-purple-50 shadow-md'
+                            : 'border-gray-200 bg-white hover:border-purple-300'
+                        }`}
+                      >
+                        <div className="flex flex-col items-center text-center">
+                          <Smartphone size={24} className={paymentMode === 'credit' ? 'text-purple-600' : 'text-gray-400'} />
+                          <span className={`text-sm font-semibold mt-2 ${
+                            paymentMode === 'credit' ? 'text-purple-700' : 'text-gray-600'
+                          }`}>
+                            eSIM Credit
+                          </span>
+                          <span className={`text-xs mt-1 ${
+                            esimAvailableCredit > 0 ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            NOK {esimAvailableCredit.toFixed(2)}
+                          </span>
+                        </div>
+                      </button>
+
+                      {/* Kickback Bonus Option */}
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMode('kickback')}
+                        className={`p-4 rounded-lg border-2 transition-all ${
+                          paymentMode === 'kickback'
+                            ? 'border-orange-500 bg-orange-50 shadow-md'
+                            : 'border-gray-200 bg-white hover:border-orange-300'
+                        }`}
+                      >
+                        <div className="flex flex-col items-center text-center">
+                          <Gift size={24} className={paymentMode === 'kickback' ? 'text-orange-600' : 'text-gray-400'} />
+                          <span className={`text-sm font-semibold mt-2 ${
+                            paymentMode === 'kickback' ? 'text-orange-700' : 'text-gray-600'
+                          }`}>
+                            Kickback Bonus
+                          </span>
+                          <span className={`text-xs mt-1 ${
+                            availableKickback > 0 ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            NOK {availableKickback.toFixed(2)}
+                          </span>
+                        </div>
+                      </button>
+                    </div>
+
+                    {/* Insufficient Balance Warning */}
+                    {((paymentMode === 'credit' && esimAvailableCredit <= 0) || 
+                      (paymentMode === 'kickback' && availableKickback <= 0)) && (
+                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <p className="text-xs text-red-600 text-center font-medium">
+                          ⚠️ Insufficient Balance - Please contact administrator
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
                   <form
                     onSubmit={async (e) => {
                       e.preventDefault();
                       
-                      // Check credit limit before processing eSIM sale
+                      // Check payment mode balance before processing eSIM sale
                       const esimPrice = selectedEsim.productInfo?.price || 0;
-                      if (availableCredit < esimPrice) {
-                        alert(
-                          `❌ Credit Limit Exceeded!\n\n` +
-                          `eSIM Price: ${esimPrice.toFixed(2)} kr\n` +
-                          `Available Credit: ${availableCredit.toFixed(2)} kr\n` +
-                          `Shortage: ${(esimPrice - availableCredit).toFixed(2)} kr\n\n` +
-                          `You need ${(esimPrice - availableCredit).toFixed(2)} kr more credit to complete this sale.\n` +
-                          `Please contact the administrator to increase your credit limit.`
-                        );
-                        return;
+                      
+                      if (paymentMode === 'credit') {
+                        // Check eSIM Credit Limit
+                        if (esimAvailableCredit <= 0 || esimAvailableCredit < esimPrice) {
+                          alert(
+                            `❌ Insufficient eSIM Credit Balance!\n\n` +
+                            `eSIM Price: ${esimPrice.toFixed(2)} kr\n` +
+                            `Available eSIM Credit: ${esimAvailableCredit.toFixed(2)} kr\n` +
+                            (esimAvailableCredit <= 0 
+                              ? `Your eSIM credit balance is empty. Please contact the administrator.`
+                              : `Shortage: ${(esimPrice - esimAvailableCredit).toFixed(2)} kr\n\nYou need ${(esimPrice - esimAvailableCredit).toFixed(2)} kr more eSIM credit to complete this sale.`)
+                          );
+                          return;
+                        }
+                      } else if (paymentMode === 'kickback') {
+                        // Check Kickback Bonus Limit
+                        if (availableKickback <= 0 || availableKickback < esimPrice) {
+                          alert(
+                            `❌ Insufficient Kickback Bonus Balance!\n\n` +
+                            `eSIM Price: ${esimPrice.toFixed(2)} kr\n` +
+                            `Available Kickback: ${availableKickback.toFixed(2)} kr\n` +
+                            (availableKickback <= 0 
+                              ? `Your kickback bonus balance is empty. Please contact the administrator.`
+                              : `Shortage: ${(esimPrice - availableKickback).toFixed(2)} kr\n\nYou need ${(esimPrice - availableKickback).toFixed(2)} kr more kickback bonus to complete this sale.`)
+                          );
+                          return;
+                        }
                       }
                       
                       setEsimSaleLoading(true);
                       
                       try {
                         const token = localStorage.getItem('token');
+                        
+                        // Ensure all fields are properly converted to strings
+                        const requestData = {
+                          itemId: String(selectedEsim?.itemId || ''),
+                          iccid: String(selectedEsim?.iccid || ''),
+                          customerEmail: String(esimCustomerData?.email || ''),
+                          customerName: String(esimCustomerData?.fullName || ''),
+                          passportId: String(esimCustomerData?.passportId || ''),
+                          poolId: String(selectedEsim?.productInfo?.id || ''),
+                          price: String(selectedEsim?.productInfo?.price || '0'),
+                          paymentMode: paymentMode // 'credit' or 'kickback'
+                        };
+                        
+                        console.log('📤 Sending eSIM request with data:', requestData);
+                        console.log('   Selected eSIM:', selectedEsim);
+                        console.log('   Customer Data:', esimCustomerData);
+                        
                         const response = await fetch(`${API_BASE_URL}/admin/stock/esims/send-qr`, {
                           method: 'POST',
                           headers: {
                             'Authorization': `Bearer ${token}`,
                             'Content-Type': 'application/json'
                           },
-                          body: JSON.stringify({
-                            itemId: selectedEsim.itemId,
-                            iccid: selectedEsim.iccid,
-                            customerEmail: esimCustomerData.email,
-                            customerName: esimCustomerData.fullName,
-                            passportId: esimCustomerData.passportId,
-                            poolId: selectedEsim.productInfo.id,
-                            price: selectedEsim.productInfo.price
-                          })
+                          body: JSON.stringify(requestData)
                         });
 
                         const result = await response.json();
                         
+                        console.log('📥 Response from backend:', { status: response.status, data: result });
+                        
                         if (response.ok && result.success) {
-                          // Update credit level after successful eSIM sale
-                          updateCreditOnSale(esimPrice);
+                          const esimPrice = selectedEsim.productInfo?.price || 0;
                           
                           alert(`✅ eSIM QR code sent successfully to ${esimCustomerData.email}!`);
+                          
+                          // Refresh credit levels from backend to get updated values
+                          await fetchCreditLevel();
+                          
+                          // Update local tracking based on payment mode for immediate UI feedback
+                          if (paymentMode === 'credit') {
+                            updateEsimCreditOnSale(esimPrice);
+                          } else if (paymentMode === 'kickback') {
+                            updateKickbackOnSale(esimPrice);
+                          }
+                          
+                          // Refresh kickback data from server
+                          fetchKickbackLimit();
+                          
+                          // Add to credit transactions for history display
+                          setCreditTransactions(prevTrans => [{
+                            date: new Date().toISOString(),
+                            amount: esimPrice,
+                            type: 'esim_sale',
+                            description: `eSIM Sale: ${selectedEsim.productInfo?.poolName || 'eSIM'} to ${esimCustomerData.email}`,
+                            balance: esimAvailableCredit - esimPrice
+                          }, ...prevTrans.slice(0, 49)]);
+                          
+                          // Add to recent activities
+                          addActivity(
+                            'esim_sale',
+                            `Sold eSIM: ${selectedEsim.productInfo?.poolName || 'eSIM'} - NOK ${esimPrice}`,
+                            {
+                              productName: selectedEsim.productInfo?.poolName,
+                              networkProvider: selectedEsim.productInfo?.networkProvider,
+                              saleAmount: esimPrice,
+                              customerEmail: esimCustomerData.email,
+                              customerName: esimCustomerData.fullName,
+                              iccid: selectedEsim.iccid,
+                              method: 'pos'
+                            }
+                          );
+                          
+                          // Also refresh eSIM list
+                          fetchAvailableEsims();
+                          
+                          // Close form and reset
                           setShowEsimCustomerForm(false);
                           setSelectedEsim(null);
                           setEsimCustomerData({ email: '', fullName: '', passportId: '' });
-                          // Refresh eSIM list
-                          fetchAvailableEsims();
                         } else {
                           alert('❌ Failed to send eSIM: ' + (result.error || 'Unknown error'));
                         }
@@ -3699,22 +4836,59 @@ const RetailerDashboard = () => {
                         </span>
                       </div>
 
-                      <button
-                        type="submit"
-                        disabled={esimSaleLoading}
-                        className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white py-3 px-4 rounded-lg font-bold hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                      >
-                        {esimSaleLoading ? (
-                          <>
-                            <RefreshCw size={18} className="animate-spin" />
-                            Sending...
-                          </>
-                        ) : (
-                          <>
-                            Send eSIM QR Code
-                          </>
-                        )}
-                      </button>
+                      <div className="space-y-3">
+                        <button
+                          type="submit"
+                          disabled={esimSaleLoading}
+                          className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white py-3 px-4 rounded-lg font-bold hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {esimSaleLoading ? (
+                            <>
+                              <RefreshCw size={18} className="animate-spin" />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <Printer size={18} />
+                              Send eSIM QR Code
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            console.log('🖨️ Printing eSIM Receipt with data:', {
+                              hasQrCode: !!selectedEsim.qrCodeImage,
+                              qrCodeLength: selectedEsim.qrCodeImage?.length,
+                              qrCodePreview: selectedEsim.qrCodeImage?.substring(0, 50),
+                              esimKeys: Object.keys(selectedEsim)
+                            });
+                            handlePrintEsimReceipt({
+                              orderId: 'ESIM-' + selectedEsim.itemId,
+                              date: new Date(),
+                              bundleName: selectedEsim.productInfo?.poolName || 'eSIM Bundle',
+                              bundlePrice: selectedEsim.productInfo?.price || 0,
+                              quantity: 1,
+                              totalAmount: selectedEsim.productInfo?.price,
+                              customerName: esimCustomerData.fullName,
+                              customerEmail: esimCustomerData.email,
+                              customerPhone: '',
+                              retailerName: user?.businessName || user?.username || 'EasyTopup.no',
+                              retailerEmail: user?.email || '',
+                              retailerPhone: user?.phoneNumber || '+47 XXX XXX XXX',
+                              activationCode: selectedEsim.activationCode || 'Provided via email',
+                              smDpAddress: selectedEsim.smDpAddress || 'Provided via email',
+                              iccid: selectedEsim.iccid || 'N/A',
+                              apnSettings: 'Contact support for APN configuration'
+                            }, selectedEsim.qrCodeImage || null);
+                          }}
+                          className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white py-2.5 px-4 rounded-lg font-semibold text-sm hover:from-cyan-600 hover:to-blue-600 flex items-center justify-center gap-2"
+                        >
+                          <Printer size={16} />
+                          Print eSIM Receipt
+                        </button>
+                      </div>
                     </div>
                   </form>
                 </div>
@@ -3747,6 +4921,26 @@ const RetailerDashboard = () => {
                   }`}
                 >
                   📊 Profit Analytics
+                </button>
+                <button
+                  onClick={() => setAnalyticsSubTab('sales')}
+                  className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                    analyticsSubTab === 'sales'
+                      ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  📈 Sales Details
+                </button>
+                <button
+                  onClick={() => setAnalyticsSubTab('esim')}
+                  className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                    analyticsSubTab === 'esim'
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  📱 eSIM Sales (POS)
                 </button>
               </div>
             </div>
@@ -3843,6 +5037,64 @@ const RetailerDashboard = () => {
                     <p className="text-gray-500 text-sm">No customer data</p>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* eSIM and ePIN Sales Breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Total Orders Card */}
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-xl p-6 text-white">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold opacity-90">Total Orders</h4>
+                  <ShoppingCart className="w-6 h-6 opacity-80" />
+                </div>
+                <div className="text-3xl font-bold mb-1">
+                  {analytics.totalOrders || 0}
+                </div>
+                <p className="text-blue-100 text-xs">All completed orders</p>
+              </div>
+
+              {/* Total Sales Card */}
+              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-xl p-6 text-white">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold opacity-90">Total Sales</h4>
+                  <DollarSign className="w-6 h-6 opacity-80" />
+                </div>
+                <div className="text-2xl font-bold mb-1">
+                  NOK {((analytics.esimEarnings || 0) + (analytics.epinEarnings || 0)).toLocaleString('no-NO', { minimumFractionDigits: 2 })}
+                </div>
+                <p className="text-green-100 text-xs">Total revenue</p>
+              </div>
+
+              {/* ePIN Sales Card */}
+              <div className="bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl shadow-xl p-6 text-white">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold opacity-90">ePIN Sales</h4>
+                  <CreditCard className="w-6 h-6 opacity-80" />
+                </div>
+                <div className="text-3xl font-bold mb-1">
+                  {analytics.totalEpinSold || 0}
+                </div>
+                <p className="text-orange-100 text-xs">
+                  NOK {(analytics.epinEarnings || 0).toLocaleString('no-NO', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+
+            {/* Customer Count */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <Users className="text-indigo-600" size={24} />
+                    Customer Count
+                  </h4>
+                  <p className="text-gray-600 text-sm">Total unique customers served</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-4xl font-bold text-indigo-600">{analytics.customerSales || 0}</div>
+                  <p className="text-xs text-gray-500 mt-1">All-time customers</p>
+                </div>
               </div>
             </div>
 
@@ -3944,81 +5196,288 @@ const RetailerDashboard = () => {
                 </div>
 
                 {/* Profit Chart */}
-                <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-6">
-                    {profitTimeRange === 'daily' ? 'Daily' : profitTimeRange === 'monthly' ? 'Monthly' : 'Yearly'} Profit Trends
-                  </h4>
+                <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+                  <div className="flex items-center justify-between mb-8">
+                    <h4 className="text-xl font-bold text-gray-900">
+                      {profitTimeRange === 'daily' ? 'Daily' : profitTimeRange === 'monthly' ? 'Monthly' : 'Yearly'} Profit Trends
+                    </h4>
+                    <button
+                      onClick={fetchProfitDataFromBackend}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      title="Refresh profit data"
+                    >
+                      <BarChart3 size={20} className="text-blue-600" />
+                    </button>
+                  </div>
                   
                   {(() => {
-                    const data = profitData[profitTimeRange];
-                    if (data.length === 0) {
+                    const data = profitData[profitTimeRange] || [];
+                    console.log('📊 Graph render - Time Range:', profitTimeRange);
+                    console.log('📊 Graph render - Data:', data);
+                    console.log('📊 Graph render - Data length:', data.length);
+                    console.log('📊 Graph render - Full profitData:', profitData);
+                    console.log('📊 Graph render - First 5 data points:', data.slice(0, 5));
+                    
+                    if (!data || data.length === 0) {
                       return (
-                        <div className="text-center py-12">
+                        <div className="text-center py-16">
                           <BarChart3 size={48} className="text-gray-400 mx-auto mb-4" />
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">No profit data yet</h3>
-                          <p className="text-gray-500">Make sales through Point of Sale to see profit analytics</p>
+                          <p className="text-gray-500 mb-4">Make sales through Point of Sale to generate profit data</p>
+                          <p className="text-sm text-gray-400">Profit data will appear here automatically when you record sales</p>
+                          <button
+                            onClick={fetchProfitDataFromBackend}
+                            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                          >
+                            Refresh Now
+                          </button>
                         </div>
                       );
                     }
 
-                    const maxProfit = Math.max(...data.map(d => d.profit));
+                    const maxProfit = Math.max(...data.map(d => d.profit), 1);
+                    const maxRevenue = Math.max(...data.map(d => d.revenue || 0), 1);
+                    const chartHeight = 250;
+                    const chartWidth = 100; // percentage
+                    const padding = { top: 20, right: 20, bottom: 40, left: 60 };
+                    
+                    // Sort data by timestamp for daily (individual sales), by date for monthly/yearly
+                    const sortedData = [...data].sort((a, b) => {
+                      if (profitTimeRange === 'daily') {
+                        // Sort by timestamp for individual sales
+                        return new Date(a.timestamp || a.date) - new Date(b.timestamp || b.date);
+                      }
+                      if (profitTimeRange === 'monthly') return new Date(a.month) - new Date(b.month);
+                      return a.year - b.year;
+                    });
+                    
+                    // Take last 100 sales for daily, last 12 months for monthly, last 5 years for yearly
+                    const displayData = profitTimeRange === 'daily' 
+                      ? sortedData.slice(-100)
+                      : profitTimeRange === 'monthly'
+                      ? sortedData.slice(-12)
+                      : sortedData.slice(-5);
+                    
+                    // Calculate positions - handle single or multiple data points
+                    const getX = (index) => {
+                      if (displayData.length === 1) {
+                        // Center single point
+                        return padding.left + (800 - padding.left - padding.right) / 2;
+                      }
+                      return padding.left + ((800 - padding.left - padding.right) / (displayData.length - 1)) * index;
+                    };
                     
                     return (
-                      <div className="space-y-4">
-                        <div className="grid gap-3">
-                          {data.map((item, index) => {
-                            const label = profitTimeRange === 'daily' 
-                              ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                              : profitTimeRange === 'monthly'
-                              ? new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-                              : item.year;
-                            
-                            const percentage = (item.profit / maxProfit) * 100;
-                            
-                            return (
-                              <div key={index} className="space-y-2">
-                                <div className="flex justify-between items-center text-sm">
-                                  <span className="font-medium text-gray-700">{label}</span>
-                                  <div className="text-right">
-                                    <span className="font-bold text-green-600">NOK {item.profit.toFixed(2)}</span>
-                                    <span className="text-gray-500 ml-2">({item.sales} sales)</span>
-                                  </div>
-                                </div>
-                                <div className="relative w-full h-6 bg-gray-100 rounded-full overflow-hidden">
-                                  <div 
-                                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all duration-500"
-                                    style={{ width: `${percentage}%` }}
-                                  ></div>
-                                  <div className="absolute inset-0 flex items-center justify-end pr-3">
-                                    <span className="text-xs font-medium text-gray-700">
-                                      {item.marginRate ? `${item.marginRate}%` : ''}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
+                      <div className="space-y-6">
+                        {/* Line Chart */}
+                        <div className="relative bg-white rounded-lg border border-gray-200 overflow-hidden" style={{ height: `${chartHeight}px`, minHeight: '280px' }}>
+                          <svg className="w-full h-full" viewBox={`0 0 800 ${chartHeight}`} preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+                            {/* Grid lines */}
+                            <g className="grid-lines">
+                              {[0, 25, 50, 75, 100].map((percent) => {
+                                const y = padding.top + (chartHeight - padding.top - padding.bottom) * (1 - percent / 100);
+                                return (
+                                  <g key={percent}>
+                                    <line
+                                      x1={padding.left}
+                                      y1={y}
+                                      x2={800 - padding.right}
+                                      y2={y}
+                                      stroke="#e5e7eb"
+                                      strokeWidth="1"
+                                      strokeDasharray={percent === 0 ? "0" : "3,3"}
+                                    />
+                                    <text
+                                      x={padding.left - 10}
+                                      y={y + 4}
+                                      textAnchor="end"
+                                      className="text-xs fill-gray-500"
+                                      style={{ fontSize: '10px' }}
+                                    >
+                                      {(maxProfit * percent / 100).toFixed(0)}
+                                    </text>
+                                  </g>
+                                );
+                              })}
+                            </g>
+
+                            {/* Area fill for profit */}
+                            <defs>
+                              <linearGradient id="profitGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                                <stop offset="100%" stopColor="#10b981" stopOpacity="0.05" />
+                              </linearGradient>
+                              <linearGradient id="revenueGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.2" />
+                                <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.05" />
+                              </linearGradient>
+                            </defs>
+
+                            {/* Revenue area */}
+                            {displayData.length > 1 && (
+                            <path
+                              d={displayData.map((item, index) => {
+                                const x = getX(index);
+                                const y = padding.top + (chartHeight - padding.top - padding.bottom) * (1 - (item.revenue || 0) / maxRevenue);
+                                return index === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
+                              }).join(' ') + ` L ${800 - padding.right} ${chartHeight - padding.bottom} L ${padding.left} ${chartHeight - padding.bottom} Z`}
+                              fill="url(#revenueGradient)"
+                            />
+                            )}
+
+                            {/* Profit area */}
+                            {displayData.length > 1 && (
+                            <path
+                              d={displayData.map((item, index) => {
+                                const x = getX(index);
+                                const y = padding.top + (chartHeight - padding.top - padding.bottom) * (1 - item.profit / maxProfit);
+                                return index === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
+                              }).join(' ') + ` L ${800 - padding.right} ${chartHeight - padding.bottom} L ${padding.left} ${chartHeight - padding.bottom} Z`}
+                              fill="url(#profitGradient)"
+                            />
+                            )}
+
+                            {/* Revenue line */}
+                            {displayData.length > 1 && (
+                            <path
+                              d={displayData.map((item, index) => {
+                                const x = getX(index);
+                                const y = padding.top + (chartHeight - padding.top - padding.bottom) * (1 - (item.revenue || 0) / maxRevenue);
+                                return index === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
+                              }).join(' ')}
+                              fill="none"
+                              stroke="#3b82f6"
+                              strokeWidth="2"
+                              opacity="0.6"
+                            />
+                            )}
+
+                            {/* Profit line */}
+                            {displayData.length > 1 && (
+                            <path
+                              d={displayData.map((item, index) => {
+                                const x = getX(index);
+                                const y = padding.top + (chartHeight - padding.top - padding.bottom) * (1 - item.profit / maxProfit);
+                                return index === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
+                              }).join(' ')}
+                              fill="none"
+                              stroke="#10b981"
+                              strokeWidth="3"
+                            />
+                            )}
+
+                            {/* Data points */}
+                            {displayData.map((item, index) => {
+                              const x = getX(index);
+                              const yProfit = padding.top + (chartHeight - padding.top - padding.bottom) * (1 - item.profit / maxProfit);
+                              const yRevenue = padding.top + (chartHeight - padding.top - padding.bottom) * (1 - (item.revenue || 0) / maxRevenue);
+                              
+                              return (
+                                <g key={index}>
+                                  {/* Revenue point */}
+                                  <circle cx={x} cy={yRevenue} r="3" fill="#3b82f6" opacity="0.6" />
+                                  {/* Profit point */}
+                                  <circle cx={x} cy={yProfit} r="4" fill="#10b981" />
+                                  <circle cx={x} cy={yProfit} r="2" fill="white" />
+                                </g>
+                              );
+                            })}
+
+                            {/* X-axis labels */}
+                            {displayData.map((item, index) => {
+                              const x = getX(index);
+                              const label = profitTimeRange === 'daily'
+                                ? (item.timestamp 
+                                    ? new Date(item.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                                    : new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+                                : profitTimeRange === 'monthly'
+                                ? new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'short' })
+                                : item.year;
+                              
+                              // For individual sales, show fewer labels; for aggregated data show more
+                              const showInterval = profitTimeRange === 'daily' 
+                                ? (displayData.length > 20 ? Math.floor(displayData.length / 10) : Math.floor(displayData.length / 5) || 1)
+                                : profitTimeRange === 'monthly' ? 2 : 1;
+                              
+                              if (displayData.length === 1 || index % showInterval === 0 || index === displayData.length - 1) {
+                                return (
+                                  <text
+                                    key={index}
+                                    x={x}
+                                    y={chartHeight - padding.bottom + 20}
+                                    textAnchor="middle"
+                                    className="text-xs fill-gray-600"
+                                    style={{ fontSize: '10px' }}
+                                  >
+                                    {label}
+                                  </text>
+                                );
+                              }
+                              return null;
+                            })}
+                          </svg>
+
+                          {/* Legend */}
+                          <div className="absolute top-4 right-4 flex gap-6 text-xs bg-white px-4 py-2 rounded-lg shadow-md border border-gray-200 z-10">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm"></div>
+                              <span className="text-gray-700 font-medium">Profit</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-blue-500 shadow-sm"></div>
+                              <span className="text-gray-700 font-medium">Revenue</span>
+                            </div>
+                          </div>
                         </div>
 
                         {/* Summary Stats */}
                         <div className="mt-6 pt-6 border-t border-gray-200 grid grid-cols-3 gap-4">
-                          <div className="text-center">
-                            <p className="text-sm text-gray-600 mb-1">Total Revenue</p>
-                            <p className="text-xl font-bold text-blue-600">
-                              NOK {data.reduce((sum, d) => sum + (d.revenue || 0), 0).toFixed(2)}
+                          <div className="bg-blue-50 rounded-lg p-4 text-center border border-blue-100">
+                            <p className="text-xs text-blue-600 font-semibold uppercase tracking-wide mb-2">Total Revenue</p>
+                            <p className="text-2xl font-bold text-blue-600">
+                              NOK {displayData.reduce((sum, d) => sum + (d.revenue || 0), 0).toFixed(2)}
                             </p>
                           </div>
-                          <div className="text-center">
-                            <p className="text-sm text-gray-600 mb-1">Total Profit</p>
-                            <p className="text-xl font-bold text-green-600">
-                              NOK {data.reduce((sum, d) => sum + d.profit, 0).toFixed(2)}
+                          <div className="bg-green-50 rounded-lg p-4 text-center border border-green-100">
+                            <p className="text-xs text-green-600 font-semibold uppercase tracking-wide mb-2">Total Profit</p>
+                            <p className="text-2xl font-bold text-green-600">
+                              NOK {displayData.reduce((sum, d) => sum + d.profit, 0).toFixed(2)}
                             </p>
                           </div>
-                          <div className="text-center">
-                            <p className="text-sm text-gray-600 mb-1">Total Sales</p>
-                            <p className="text-xl font-bold text-purple-600">
-                              {data.reduce((sum, d) => sum + d.sales, 0)}
+                          <div className="bg-purple-50 rounded-lg p-4 text-center border border-purple-100">
+                            <p className="text-xs text-purple-600 font-semibold uppercase tracking-wide mb-2">Total Sales</p>
+                            <p className="text-2xl font-bold text-purple-600">
+                              {displayData.reduce((sum, d) => sum + d.sales, 0)}
                             </p>
+                          </div>
+                        </div>
+
+                        {/* Detailed List */}
+                        <div className="mt-8 bg-white rounded-lg border border-gray-200 overflow-hidden">
+                          <div className="bg-gray-50 border-b border-gray-200 px-6 py-4">
+                            <h5 className="font-semibold text-gray-900">Detailed Breakdown</h5>
+                          </div>
+                          <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
+                            {displayData.slice().reverse().map((item, index) => {
+                              const label = profitTimeRange === 'daily' 
+                                ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                : profitTimeRange === 'monthly'
+                                ? new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                                : item.year;
+                              
+                              return (
+                                <div key={index} className="flex justify-between items-center p-4 hover:bg-gray-50 transition-colors">
+                                  <div>
+                                    <span className="font-medium text-gray-900 block">{label}</span>
+                                    <span className="text-gray-500 text-sm">{item.sales} {item.sales === 1 ? 'sale' : 'sales'}</span>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="font-bold text-green-600 text-lg">NOK {item.profit.toFixed(2)}</div>
+                                    <div className="text-xs text-gray-500">Revenue: NOK {(item.revenue || 0).toFixed(2)}</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -4026,6 +5485,16 @@ const RetailerDashboard = () => {
                   })()}
                 </div>
               </div>
+            )}
+
+            {/* Sales Details Sub-tab */}
+            {analyticsSubTab === 'sales' && (
+              <RetailerSalesDetails />
+            )}
+
+            {/* eSIM POS Sales Sub-tab */}
+            {analyticsSubTab === 'esim' && (
+              <RetailerEsimSalesReport />
             )}
           </div>
         )}
@@ -4458,18 +5927,245 @@ const RetailerDashboard = () => {
               </div>
             </div>
 
+            {/* eSIM Credit Level Section */}
+            <div className="space-y-6 border-t-4 border-purple-200 pt-6">
+              {/* eSIM Credit Header */}
+              <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-2xl p-8 text-white shadow-2xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-3 mb-3">
+                      <Smartphone size={40} className="text-white" />
+                      <h2 className="text-3xl font-bold">eSIM Credit Level</h2>
+                    </div>
+                    <p className="text-purple-50 text-lg">Separate credit limit for eSIM sales</p>
+                  </div>
+                  <div className="hidden lg:block">
+                    <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                      <Smartphone size={48} className="text-white" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* eSIM Credit Warning Banner - Shows when usage > 95% */}
+              {esimCreditUsagePercentage > 95 && esimCreditLimit > 0 && (
+                <div className="bg-red-50 border-2 border-red-500 rounded-xl p-5 shadow-lg">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-xl">⚠️</span>
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-red-900 text-lg">eSIM Credit Limit Almost Reached!</h4>
+                      <p className="text-red-800 mt-1">
+                        You have used {esimCreditUsagePercentage.toFixed(1)}% of your eSIM credit limit. 
+                        {esimAvailableCredit <= 0 
+                          ? ' You cannot process any more eSIM sales until your credit is replenished.' 
+                          : ` Only ${esimAvailableCredit.toFixed(2)} kr remaining for eSIM sales.`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* eSIM Credit Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* eSIM Credit Limit */}
+                <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-purple-100 hover:shadow-2xl transition-shadow">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">eSIM Credit Limit</h4>
+                    <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                      <DollarSign className="text-purple-600" size={24} />
+                    </div>
+                  </div>
+                  <div className="text-4xl font-bold text-purple-600 mb-2">{esimCreditLimit.toFixed(2)} kr</div>
+                  <p className="text-sm text-gray-600">Maximum eSIM credit</p>
+                </div>
+
+                {/* eSIM Used Credit */}
+                <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-orange-100 hover:shadow-2xl transition-shadow">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">eSIM Used</h4>
+                    <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                      <TrendingUp className="text-orange-600" size={24} />
+                    </div>
+                  </div>
+                  <div className="text-4xl font-bold text-orange-600 mb-2">{esimUsedCredit.toFixed(2)} kr</div>
+                  <p className="text-sm text-gray-600">eSIM credit consumed</p>
+                </div>
+
+                {/* eSIM Available Credit */}
+                <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-green-100 hover:shadow-2xl transition-shadow">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">eSIM Available</h4>
+                    <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                      <Award className="text-green-600" size={24} />
+                    </div>
+                  </div>
+                  <div className="text-4xl font-bold text-green-600 mb-2">{esimAvailableCredit.toFixed(2)} kr</div>
+                  <p className="text-sm text-gray-600">Remaining eSIM credit</p>
+                </div>
+
+                {/* eSIM Usage Percentage */}
+                <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-indigo-100 hover:shadow-2xl transition-shadow">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">eSIM Usage Rate</h4>
+                    <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
+                      <PieChart className="text-indigo-600" size={24} />
+                    </div>
+                  </div>
+                  <div className="text-4xl font-bold text-indigo-600 mb-2">{esimCreditUsagePercentage.toFixed(1)}%</div>
+                  <p className="text-sm text-gray-600">Of eSIM credit limit</p>
+                </div>
+              </div>
+
+              {/* Visual eSIM Credit Usage Progress Bar */}
+              <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+                <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                  <BarChart3 className="text-purple-600" size={28} />
+                  eSIM Credit Usage Visualization
+                </h3>
+                
+                {esimCreditLimit > 0 ? (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center text-sm font-medium">
+                      <span className="text-gray-700">eSIM Credit Usage Progress</span>
+                      <span className={`font-bold ${
+                        esimCreditUsagePercentage > 95 ? 'text-red-600' :
+                        esimCreditUsagePercentage > 80 ? 'text-yellow-600' :
+                        esimCreditUsagePercentage > 50 ? 'text-blue-600' :
+                        'text-green-600'
+                      }`}>
+                        {esimCreditUsagePercentage.toFixed(1)}%
+                      </span>
+                    </div>
+                    
+                    <div className="relative w-full h-12 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ease-out ${
+                          esimCreditUsagePercentage > 95 ? 'bg-gradient-to-r from-red-500 to-red-600' :
+                          esimCreditUsagePercentage > 80 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' :
+                          esimCreditUsagePercentage > 50 ? 'bg-gradient-to-r from-purple-400 to-indigo-600' :
+                          'bg-gradient-to-r from-green-400 to-green-600'
+                        } shadow-lg`}
+                        style={{ width: `${Math.min(esimCreditUsagePercentage, 100)}%` }}
+                      >
+                        <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">
+                          {esimUsedCredit.toFixed(2)} kr / {esimCreditLimit.toFixed(2)} kr
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Status Indicator */}
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${
+                          esimCreditUsagePercentage > 95 ? 'bg-red-500 animate-pulse' :
+                          esimCreditUsagePercentage > 80 ? 'bg-yellow-500' :
+                          'bg-green-500'
+                        }`}></div>
+                        <span className="text-gray-700 font-medium">
+                          {esimCreditUsagePercentage > 95 ? 'Critical - eSIM Limit Almost Reached' :
+                           esimCreditUsagePercentage > 80 ? 'Warning - High eSIM Usage' :
+                           esimCreditUsagePercentage > 50 ? 'Moderate eSIM Usage' :
+                           'Healthy - Good eSIM Balance'}
+                        </span>
+                      </div>
+                      <span className="text-gray-600">
+                        {esimAvailableCredit.toFixed(2)} kr remaining
+                      </span>
+                    </div>
+
+                    {/* eSIM Credit Usage Breakdown */}
+                    <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-xl">
+                        <div className="text-sm text-purple-700 font-medium mb-1">eSIM Limit Set By Admin</div>
+                        <div className="text-2xl font-bold text-purple-900">{esimCreditLimit.toFixed(2)} kr</div>
+                      </div>
+                      <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl">
+                        <div className="text-sm text-orange-700 font-medium mb-1">eSIM Credit Consumed</div>
+                        <div className="text-2xl font-bold text-orange-900">{esimUsedCredit.toFixed(2)} kr</div>
+                      </div>
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl">
+                        <div className="text-sm text-green-700 font-medium mb-1">eSIM Remaining Balance</div>
+                        <div className="text-2xl font-bold text-green-900">{esimAvailableCredit.toFixed(2)} kr</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Smartphone className="text-gray-400" size={40} />
+                    </div>
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No eSIM Credit Limit Set</h4>
+                    <p className="text-gray-600">
+                      Your administrator hasn't set an eSIM credit limit yet. Contact them to enable eSIM sales.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Kickback Bonus Limit Section */}
+            <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                  <span className="text-3xl">🎁</span>
+                  Kickback Bonus Limit
+                </h3>
+                <p className="text-gray-600 mt-2">Track your kickback rewards and bonus limit usage</p>
+              </div>
+
+              <KickbackLimitIndicator
+                kickbackLimit={kickbackLimit}
+                usedKickback={usedKickback}
+                availableKickback={availableKickback}
+                usagePercentage={kickbackUsagePercentage}
+                status={kickbackStatus}
+              />
+
+              {kickbackStatus !== 'NOT_SET' && (
+                <div className="mt-6 bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-6 border border-orange-200">
+                  <h4 className="font-bold text-orange-900 text-lg mb-3 flex items-center gap-2">
+                    <span className="text-2xl">💡</span>
+                    About Kickback Bonuses
+                  </h4>
+                  <div className="space-y-2 text-orange-800">
+                    <p>• Kickback bonuses are rewards you earn through promotional programs</p>
+                    <p>• Your kickback limit is managed separately from credit limits</p>
+                    <p>• Contact admin if you need a kickback limit adjustment</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Help Section */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-200">
               <h4 className="font-bold text-blue-900 text-lg mb-3 flex items-center gap-2">
                 <span className="text-2xl">💡</span>
                 About Credit Levels
               </h4>
-              <div className="space-y-2 text-blue-800">
-                <p>• Your credit limit is set by the administrator and determines how much you can sell on credit</p>
-                <p>• Each sale reduces your available credit by the sale amount</p>
-                <p>• When your credit limit is reached, you won't be able to process new sales</p>
-                <p>• Contact the administrator to request a credit limit increase</p>
-                <p>• Monitor your usage regularly to avoid disruptions in your business operations</p>
+              <div className="space-y-3">
+                <div className="bg-white p-4 rounded-lg border border-blue-200">
+                  <h5 className="font-semibold text-blue-800 mb-2">General Credit</h5>
+                  <div className="space-y-1 text-blue-700 text-sm">
+                    <p>• Used for ePIN and bundle purchases</p>
+                    <p>• Each ePIN/bundle sale reduces your available credit</p>
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-lg border border-purple-200">
+                  <h5 className="font-semibold text-purple-800 mb-2">eSIM Credit (Separate)</h5>
+                  <div className="space-y-1 text-purple-700 text-sm">
+                    <p>• Dedicated credit limit specifically for eSIM sales</p>
+                    <p>• Independent from general credit - managed separately</p>
+                    <p>• Each eSIM sale reduces your eSIM available credit only</p>
+                  </div>
+                </div>
+                <div className="space-y-2 text-blue-800 text-sm pt-2 border-t border-blue-200">
+                  <p>• Both credit limits are set by the administrator</p>
+                  <p>• When any credit limit is reached, you won't be able to process that type of sale</p>
+                  <p>• Contact the administrator to request credit limit increases</p>
+                  <p>• Monitor both credit usages regularly to avoid disruptions</p>
+                </div>
               </div>
             </div>
           </div>

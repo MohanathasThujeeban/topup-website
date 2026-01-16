@@ -292,8 +292,16 @@ public class StockService {
                     // Handle QR code
                     item.setQrCodeUrl(dto.getQrCodeUrl());
                     if (dto.getQrCodeImage() != null) {
+                        // Log QR code size before and after encryption
+                        String originalQR = dto.getQrCodeImage();
+                        System.out.println("   🔐 Encrypting QR code for ICCID: " + dto.getItemData());
+                        System.out.println("      📏 QR Base64 length BEFORE encryption: " + originalQR.length() + " chars");
+                        
                         // Encrypt QR code image if provided
-                        item.setQrCodeImage(encryptData(dto.getQrCodeImage()));
+                        String encryptedQR = encryptData(originalQR);
+                        item.setQrCodeImage(encryptedQR);
+                        
+                        System.out.println("      📏 QR length AFTER encryption: " + encryptedQR.length() + " chars");
                     }
                     
                     item.setNotes(dto.getNotes());
@@ -700,6 +708,7 @@ public class StockService {
             // Find column indices for PIN ID and PINS (case insensitive)
             int pinIdIndex = -1;
             int pinsIndex = -1;
+            int serialNumberIndex = -1;
             
             for (int i = 0; i < headers.length; i++) {
                 String header = headers[i].trim().toLowerCase();
@@ -707,9 +716,12 @@ public class StockService {
                 if (header.equals("pin id") || header.equals("pin_id") || header.equals("pinid") || header.equals("pin-id")) {
                     pinIdIndex = i;
                     System.out.println("✓ Found PIN ID at index " + i);
-                } else if (header.equals("pins") || header.equals("pin") || header.equals("pinnumber") || header.equals("pin number")) {
+                } else if (header.equals("pins") || header.equals("pin") || header.equals("pinnumber") || header.equals("pin number") || header.equals("pin_number") || header.equals("pin-number")) {
                     pinsIndex = i;
                     System.out.println("✓ Found PINS at index " + i);
+                } else if (header.equals("serialnumber") || header.equals("serial number") || header.equals("serial_number") || header.equals("serial-number")) {
+                    serialNumberIndex = i;
+                    System.out.println("✓ Found Serial Number at index " + i);
                 }
             }
             
@@ -760,7 +772,17 @@ public class StockService {
                     if (!pinId.isEmpty()) {
                         pinId = convertScientificNotation(pinId);
                         item.setSerialNumber(pinId);
-                        System.out.println("    PIN ID: " + pinId);
+                        System.out.println("    PIN ID (Serial): " + pinId);
+                    }
+                }
+                
+                // Set Serial Number if available (takes precedence over PIN ID)
+                if (serialNumberIndex != -1 && values.length > serialNumberIndex) {
+                    String serialNum = values[serialNumberIndex].trim();
+                    if (!serialNum.isEmpty()) {
+                        serialNum = convertScientificNotation(serialNum);
+                        item.setSerialNumber(serialNum);
+                        System.out.println("    Serial Number: " + serialNum);
                     }
                 }
                 

@@ -41,6 +41,22 @@ export default function AdminDashboard() {
   const [showQrModal, setShowQrModal] = useState(false);
   const qrCodeRef = useRef(null);
   const [analytics, setAnalytics] = useState({});
+  const [esimAnalytics, setEsimAnalytics] = useState(null); // eSIM sales analytics (POS)
+  const [esimSalesHistory, setEsimSalesHistory] = useState([]); // Detailed eSIM sales records
+  const [esimSalesPagination, setEsimSalesPagination] = useState({
+    totalRecords: 0,
+    totalPages: 0,
+    currentPage: 0,
+    pageSize: 20,
+    totalUnits: 0,
+    totalRevenue: 0
+  });
+  const [esimFilters, setEsimFilters] = useState({
+    startDate: '',
+    endDate: '',
+    retailerId: '',
+    productType: ''
+  });
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting', 'connected', 'offline'
   const [sidebarOpen, setSidebarOpen] = useState(true); // Sidebar state
@@ -125,6 +141,92 @@ export default function AdminDashboard() {
       }
     } catch (error) {
       console.error('Error fetching analytics:', error);
+    }
+  };
+
+  // Fetch eSIM sales analytics for admin (POS-based)
+  const fetchEsimAnalyticsData = async (overrideFilters) => {
+    try {
+      const filtersToUse = overrideFilters || esimFilters;
+      const token = localStorage.getItem('token');
+
+      const params = new URLSearchParams();
+      if (filtersToUse.startDate) params.append('startDate', filtersToUse.startDate);
+      if (filtersToUse.endDate) params.append('endDate', filtersToUse.endDate);
+      if (filtersToUse.retailerId) params.append('retailerId', filtersToUse.retailerId);
+
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+
+      const response = await fetch(`${API_BASE_URL}/admin/analytics/esim-sales${queryString}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('eSIM analytics response:', result);
+
+        if (result.success && result.data) {
+          setEsimAnalytics(result.data);
+          setEsimFilters(filtersToUse);
+        }
+      } else {
+        console.error('Failed to fetch eSIM analytics:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching eSIM analytics:', error);
+    }
+  };
+
+  // Fetch detailed eSIM sales history
+  const fetchEsimSalesHistoryData = async (page, size, overrideFilters) => {
+    try {
+      const currentPage = typeof page === 'number' ? page : esimSalesPagination.currentPage;
+      const pageSize = typeof size === 'number' ? size : esimSalesPagination.pageSize;
+      const filtersToUse = overrideFilters || esimFilters;
+
+      const token = localStorage.getItem('token');
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('size', pageSize.toString());
+      if (filtersToUse.startDate) params.append('startDate', filtersToUse.startDate);
+      if (filtersToUse.endDate) params.append('endDate', filtersToUse.endDate);
+      if (filtersToUse.retailerId) params.append('retailerId', filtersToUse.retailerId);
+      if (filtersToUse.productType) params.append('productType', filtersToUse.productType);
+
+      const response = await fetch(`${API_BASE_URL}/admin/analytics/esim-sales/history?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('eSIM sales history response:', result);
+
+        const data = result.data || result;
+        const sales = Array.isArray(data.sales) ? data.sales : [];
+
+        setEsimSalesHistory(sales);
+        setEsimSalesPagination({
+          totalRecords: data.totalRecords || sales.length || 0,
+          totalPages: data.totalPages != null ? data.totalPages : 0,
+          currentPage: data.currentPage != null ? data.currentPage : currentPage,
+          pageSize: data.pageSize != null ? data.pageSize : pageSize,
+          totalUnits: data.totalUnits || 0,
+          totalRevenue: data.totalRevenue || 0
+        });
+        setEsimFilters(filtersToUse);
+      } else {
+        console.error('Failed to fetch eSIM sales history:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching eSIM sales history:', error);
     }
   };
 
@@ -485,6 +587,10 @@ export default function AdminDashboard() {
       
       // Fetch stock bundles (CSV uploaded bundles)
       fetchStockBundles();
+
+      // Fetch eSIM sales analytics and history for analytics tab
+      fetchEsimAnalyticsData();
+      fetchEsimSalesHistoryData();
 
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -2290,6 +2396,7 @@ export default function AdminDashboard() {
 
   const renderAnalytics = () => (
     <div className="space-y-6">
+      {/* High-level platform analytics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Daily Revenue"
@@ -2380,6 +2487,201 @@ export default function AdminDashboard() {
               <p className="text-sm text-gray-400">Performance metrics will appear here once data is available</p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* eSIM sales analytics (POS-based) */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Globe2 className="text-green-600" size={20} />
+            eSIM Sales (POS)
+          </h3>
+          <button
+            onClick={() => {
+              fetchEsimAnalyticsData();
+              fetchEsimSalesHistoryData();
+            }}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
+          >
+            <RefreshCw size={16} />
+            Refresh eSIM Data
+          </button>
+        </div>
+
+        {/* Summary cards for eSIM sales */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Total eSIMs Sold"
+            value={esimAnalytics?.totalEsimsSold?.toLocaleString() || '0'}
+            icon={Globe2}
+            color="bg-gradient-to-br from-emerald-600 to-green-700"
+          />
+          <StatCard
+            title="Total eSIM Earnings"
+            value={`NOK ${(esimAnalytics?.totalEsimEarnings || 0).toLocaleString()}`}
+            icon={DollarSign}
+            color="bg-gradient-to-br from-amber-600 to-orange-700"
+          />
+          <StatCard
+            title="Orders With eSIMs"
+            value={esimAnalytics?.ordersWithEsim?.toLocaleString() || '0'}
+            icon={ShoppingCart}
+            color="bg-gradient-to-br from-indigo-600 to-purple-700"
+          />
+          <StatCard
+            title="Avg. eSIM Order Value"
+            value={`NOK ${(esimAnalytics?.averageOrderValue || 0).toLocaleString()}`}
+            icon={BarChart3}
+            color="bg-gradient-to-br from-sky-600 to-cyan-700"
+          />
+        </div>
+
+        {/* Filters and sales history table */}
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h4 className="text-md font-semibold text-gray-900">eSIM Sales History</h4>
+              <p className="text-sm text-gray-500">Sales recorded via point of sales with detailed eSIM information.</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Total units: {esimSalesPagination.totalUnits?.toLocaleString() || 0} ·
+                {' '}Total revenue: NOK {(esimSalesPagination.totalRevenue || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={esimFilters.startDate}
+                  onChange={(e) => setEsimFilters(prev => ({ ...prev, startDate: e.target.value }))}
+                  className="px-2 py-1 text-sm border border-gray-300 rounded-lg"
+                />
+                <span className="text-gray-500 text-sm">to</span>
+                <input
+                  type="date"
+                  value={esimFilters.endDate}
+                  onChange={(e) => setEsimFilters(prev => ({ ...prev, endDate: e.target.value }))}
+                  className="px-2 py-1 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="Retailer ID (optional)"
+                value={esimFilters.retailerId}
+                onChange={(e) => setEsimFilters(prev => ({ ...prev, retailerId: e.target.value }))}
+                className="px-2 py-1 text-sm border border-gray-300 rounded-lg"
+              />
+              <button
+                onClick={() => {
+                  fetchEsimAnalyticsData(esimFilters);
+                  fetchEsimSalesHistoryData(0, esimSalesPagination.pageSize, esimFilters);
+                }}
+                className="px-3 py-1.5 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-1"
+              >
+                <Filter size={14} />
+                Apply
+              </button>
+              <button
+                onClick={() => {
+                  const cleared = { startDate: '', endDate: '', retailerId: '', productType: '' };
+                  setEsimFilters(cleared);
+                  fetchEsimAnalyticsData(cleared);
+                  fetchEsimSalesHistoryData(0, esimSalesPagination.pageSize, cleared);
+                }}
+                className="px-3 py-1.5 text-sm rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Retailer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {esimSalesHistory && esimSalesHistory.length > 0 ? (
+                  esimSalesHistory.map((sale, index) => (
+                    <tr key={`${sale.orderId}-${index}`} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {sale.orderDate ? new Date(sale.orderDate).toLocaleString() : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <div className="font-mono font-medium text-gray-900">{sale.orderNumber}</div>
+                        <div className="text-xs text-gray-400">{sale.orderStatus} · {sale.paymentStatus}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <div className="font-medium">{sale.retailerName || 'N/A'}</div>
+                        <div className="text-xs text-gray-400">{sale.retailerEmail}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <div className="font-medium">{sale.productName}</div>
+                        <div className="text-xs text-gray-400">{sale.productType} · {sale.category}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <div className="text-xs text-gray-500">{sale.dataAmount || '-'} · {sale.validity || '-'}</div>
+                        {sale.serialNumbers && sale.serialNumbers.length > 0 && (
+                          <div className="text-xs text-gray-400 truncate max-w-[220px]" title={sale.serialNumbers.join(', ')}>
+                            Serial(s): {sale.serialNumbers.join(', ')}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{sale.quantity}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">NOK {sale.unitPrice}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">NOK {sale.totalAmount}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-500">
+                      No eSIM sales found for the selected period.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
+            <span>
+              Page {esimSalesPagination.currentPage + 1} of {esimSalesPagination.totalPages || 1}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (esimSalesPagination.currentPage > 0) {
+                    fetchEsimSalesHistoryData(esimSalesPagination.currentPage - 1);
+                  }
+                }}
+                disabled={esimSalesPagination.currentPage <= 0}
+                className="px-3 py-1.5 rounded-lg border border-gray-300 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => {
+                  if (esimSalesPagination.currentPage + 1 < esimSalesPagination.totalPages) {
+                    fetchEsimSalesHistoryData(esimSalesPagination.currentPage + 1);
+                  }
+                }}
+                disabled={esimSalesPagination.currentPage + 1 >= esimSalesPagination.totalPages}
+                className="px-3 py-1.5 rounded-lg border border-gray-300 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

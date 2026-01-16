@@ -40,6 +40,16 @@ public class RetailerLimit {
     @Max(value = 365, message = "Payment terms cannot exceed 365 days")
     private Integer paymentTermsDays = 30; // Default 30 days
 
+    // eSIM Credit Limit Management (separate from general credit)
+    @DecimalMin(value = "0.0", message = "eSIM credit limit must be non-negative")
+    private BigDecimal esimCreditLimit = BigDecimal.ZERO;
+
+    @DecimalMin(value = "0.0", message = "eSIM available credit must be non-negative")
+    private BigDecimal esimAvailableCredit = BigDecimal.ZERO;
+
+    @DecimalMin(value = "0.0", message = "eSIM used credit must be non-negative")
+    private BigDecimal esimUsedCredit = BigDecimal.ZERO;
+
     // Unit Limit Management
     @Min(value = 0, message = "Unit limit must be non-negative")
     private Integer unitLimit = 0; // Maximum units retailer can purchase
@@ -199,6 +209,65 @@ public class RetailerLimit {
     // Business Logic Methods
     public boolean hasAvailableCredit(BigDecimal amount) {
         return availableCredit.compareTo(amount) >= 0;
+    }
+
+    // eSIM Credit Methods
+    public boolean hasAvailableEsimCredit(BigDecimal amount) {
+        BigDecimal available = this.esimAvailableCredit != null ? this.esimAvailableCredit : BigDecimal.ZERO;
+        return available.compareTo(amount) >= 0;
+    }
+
+    public void useEsimCredit(BigDecimal amount, String orderId, String description) {
+        // Initialize null fields to prevent NullPointerException
+        if (this.esimUsedCredit == null) {
+            this.esimUsedCredit = BigDecimal.ZERO;
+        }
+        if (this.esimAvailableCredit == null) {
+            this.esimAvailableCredit = this.esimCreditLimit != null ? this.esimCreditLimit : BigDecimal.ZERO;
+        }
+        
+        if (!hasAvailableEsimCredit(amount)) {
+            throw new IllegalStateException("Insufficient eSIM credit available. Required: " + amount + ", Available: " + this.esimAvailableCredit);
+        }
+
+        this.esimUsedCredit = this.esimUsedCredit.add(amount);
+        this.esimAvailableCredit = this.esimAvailableCredit.subtract(amount);
+
+        // Record transaction
+        CreditTransaction transaction = new CreditTransaction(
+            CreditTransaction.TransactionType.ORDER_PLACED,
+            amount,
+            this.esimAvailableCredit,
+            "eSIM: " + description
+        );
+        transaction.setReferenceOrderId(orderId);
+        this.transactions.add(transaction);
+    }
+
+    public void adjustEsimCreditLimit(BigDecimal newLimit, String adminId, String reason) {
+        // Initialize null fields to prevent NullPointerException
+        if (this.esimCreditLimit == null) {
+            this.esimCreditLimit = BigDecimal.ZERO;
+        }
+        if (this.esimUsedCredit == null) {
+            this.esimUsedCredit = BigDecimal.ZERO;
+        }
+        
+        BigDecimal difference = newLimit.subtract(this.esimCreditLimit);
+        this.esimCreditLimit = newLimit;
+        this.esimAvailableCredit = this.esimCreditLimit.subtract(this.esimUsedCredit);
+
+        // Record transaction
+        CreditTransaction transaction = new CreditTransaction(
+            difference.compareTo(BigDecimal.ZERO) > 0 ? 
+                CreditTransaction.TransactionType.CREDIT_INCREASE :
+                CreditTransaction.TransactionType.CREDIT_DECREASE,
+            difference.abs(),
+            this.esimAvailableCredit,
+            "eSIM Credit: " + reason
+        );
+        transaction.setProcessedBy(adminId);
+        this.transactions.add(transaction);
     }
 
     public void useCredit(BigDecimal amount, String orderId, String description) {
@@ -365,6 +434,31 @@ public class RetailerLimit {
 
     public void setPaymentTermsDays(Integer paymentTermsDays) {
         this.paymentTermsDays = paymentTermsDays;
+    }
+
+    // eSIM Credit Limit Getters and Setters
+    public BigDecimal getEsimCreditLimit() {
+        return esimCreditLimit;
+    }
+
+    public void setEsimCreditLimit(BigDecimal esimCreditLimit) {
+        this.esimCreditLimit = esimCreditLimit;
+    }
+
+    public BigDecimal getEsimAvailableCredit() {
+        return esimAvailableCredit;
+    }
+
+    public void setEsimAvailableCredit(BigDecimal esimAvailableCredit) {
+        this.esimAvailableCredit = esimAvailableCredit;
+    }
+
+    public BigDecimal getEsimUsedCredit() {
+        return esimUsedCredit;
+    }
+
+    public void setEsimUsedCredit(BigDecimal esimUsedCredit) {
+        this.esimUsedCredit = esimUsedCredit;
     }
 
     // Unit Limit Getters and Setters

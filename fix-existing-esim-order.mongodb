@@ -1,0 +1,105 @@
+// MongoDB script to fix existing eSIM order for analytics
+
+use('topupdb');
+
+// Find the existing eSIM order
+const existingOrder = db.retailer_orders.findOne({ orderNumber: "eSIM-1768517429436" });
+
+if (existingOrder) {
+    print("Found order:", existingOrder.orderNumber);
+    print("Current items:", JSON.stringify(existingOrder.items));
+    
+    // Update the order to have correct productType and category for analytics
+    db.retailer_orders.updateOne(
+        { orderNumber: "eSIM-1768517429436" },
+        {
+            $set: {
+                "items.$[].productType": "ESIM",
+                "items.$[].category": "esim",
+                "lastModifiedDate": new Date()
+            }
+        }
+    );
+    
+    print("✅ Order updated with productType=ESIM and category=esim");
+    
+    // Verify the update
+    const updatedOrder = db.retailer_orders.findOne({ orderNumber: "eSIM-1768517429436" });
+    print("Updated items:", JSON.stringify(updatedOrder.items));
+} else {
+    print("❌ Order not found");
+}
+
+// Also update ALL retailer orders that don't have productType/category set
+print("\n=== Fixing all orders without proper types ===");
+
+// Fix orders with items that have esim in productName
+const esimResult = db.retailer_orders.updateMany(
+    {
+        "items.productName": /esim/i,
+        $or: [
+            { "items.productType": { $exists: false } },
+            { "items.productType": null },
+            { "items.productType": "" }
+        ]
+    },
+    {
+        $set: {
+            "items.$[elem].productType": "ESIM",
+            "items.$[elem].category": "esim",
+            "lastModifiedDate": new Date()
+        }
+    },
+    {
+        arrayFilters: [
+            { 
+                $or: [
+                    { "elem.productType": { $exists: false } },
+                    { "elem.productType": null },
+                    { "elem.productType": "" }
+                ]
+            }
+        ]
+    }
+);
+
+print("Fixed", esimResult.modifiedCount, "eSIM orders");
+
+// Fix orders with items that have epin or pin in productName
+const epinResult = db.retailer_orders.updateMany(
+    {
+        "items.productName": /e?pin|bundle/i,
+        "items.productName": { $not: /esim/i },
+        $or: [
+            { "items.productType": { $exists: false } },
+            { "items.productType": null },
+            { "items.productType": "" }
+        ]
+    },
+    {
+        $set: {
+            "items.$[elem].productType": "EPIN",
+            "items.$[elem].category": "bundle",
+            "lastModifiedDate": new Date()
+        }
+    },
+    {
+        arrayFilters: [
+            { 
+                $or: [
+                    { "elem.productType": { $exists: false } },
+                    { "elem.productType": null },
+                    { "elem.productType": "" }
+                ]
+            }
+        ]
+    }
+);
+
+print("Fixed", epinResult.modifiedCount, "ePIN orders");
+
+print("\n=== Summary ===");
+const totalEsimOrders = db.retailer_orders.countDocuments({ "items.category": "esim" });
+const totalEpinOrders = db.retailer_orders.countDocuments({ "items.category": { $nin: ["esim"] } });
+print("Total eSIM orders:", totalEsimOrders);
+print("Total ePIN orders:", totalEpinOrders);

@@ -5,16 +5,24 @@ import com.example.topup.demo.entity.BusinessDetails;
 import com.example.topup.demo.entity.Order;
 import com.example.topup.demo.entity.RetailerOrder;
 import com.example.topup.demo.entity.RetailerLimit;
+import com.example.topup.demo.entity.RetailerEsimCredit;
 import com.example.topup.demo.entity.EsimOrderRequest;
+import com.example.topup.demo.entity.StockPool;
+import com.example.topup.demo.entity.RetailerKickbackLimit;
 import com.example.topup.demo.dto.RetailerCreditLimitDTO;
 import com.example.topup.demo.dto.UpdateCreditLimitRequest;
 import com.example.topup.demo.dto.UpdateUnitLimitRequest;
+import com.example.topup.demo.dto.UpdateKickbackLimitRequest;
+import com.example.topup.demo.dto.RetailerKickbackLimitDTO;
 import com.example.topup.demo.repository.UserRepository;
 import com.example.topup.demo.repository.BusinessDetailsRepository;
 import com.example.topup.demo.repository.OrderRepository;
 import com.example.topup.demo.repository.RetailerOrderRepository;
 import com.example.topup.demo.repository.RetailerLimitRepository;
+import com.example.topup.demo.repository.RetailerEsimCreditRepository;
 import com.example.topup.demo.repository.EsimOrderRequestRepository;
+import com.example.topup.demo.repository.StockPoolRepository;
+import com.example.topup.demo.repository.RetailerKickbackLimitRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -46,7 +54,16 @@ public class AdminService {
     private RetailerLimitRepository retailerLimitRepository;
 
     @Autowired
+    private RetailerEsimCreditRepository retailerEsimCreditRepository;
+
+    @Autowired
     private EsimOrderRequestRepository esimOrderRequestRepository;
+
+    @Autowired
+    private StockPoolRepository stockPoolRepository;
+
+    @Autowired
+    private RetailerKickbackLimitRepository retailerKickbackLimitRepository;
 
     @Autowired
     private EmailService emailService;
@@ -840,6 +857,56 @@ public class AdminService {
     }
     
     /**
+     * Update retailer eSIM credit limit specifically
+     * This data is stored in a SEPARATE collection: retailer_esim_credits
+     */
+    public RetailerCreditLimitDTO updateRetailerEsimCreditLimit(com.example.topup.demo.dto.UpdateEsimCreditLimitRequest request) {
+        try {
+            User retailer = userRepository.findById(request.getRetailerId())
+                .orElseThrow(() -> new RuntimeException("Retailer not found"));
+                
+            if (retailer.getAccountType() != User.AccountType.BUSINESS) {
+                throw new RuntimeException("User is not a business/retailer account");
+            }
+            
+            // Get or create eSIM credit record from SEPARATE collection
+            RetailerEsimCredit esimCredit = retailerEsimCreditRepository.findByRetailer(retailer)
+                .orElse(new RetailerEsimCredit(retailer));
+            
+            // Track old limit for logging
+            BigDecimal oldEsimLimit = esimCredit.getCreditLimit() != null ? esimCredit.getCreditLimit() : BigDecimal.ZERO;
+            BigDecimal newEsimLimit = request.getEsimCreditLimit();
+            
+            // Update eSIM credit limit using the entity method
+            esimCredit.adjustCreditLimit(newEsimLimit, "admin", 
+                request.getNotes() != null ? request.getNotes() : "Admin updated eSIM credit limit");
+            
+            // Set notes if provided
+            if (request.getNotes() != null) {
+                esimCredit.setNotes(request.getNotes());
+            }
+            
+            // Set audit fields
+            esimCredit.setLastModifiedBy("admin");
+            
+            // Save to the SEPARATE retailer_esim_credits collection
+            retailerEsimCreditRepository.save(esimCredit);
+            
+            System.out.println("✅ Updated eSIM credit limit in retailer_esim_credits collection for retailer " + retailer.getEmail() + 
+                             " from " + oldEsimLimit + " to " + newEsimLimit);
+            System.out.println("📊 eSIM Credit ID: " + esimCredit.getId());
+            System.out.println("📊 Available Credit: " + esimCredit.getAvailableCredit());
+            System.out.println("📊 Used Credit: " + esimCredit.getUsedCredit());
+            
+            return convertToRetailerCreditLimitDTO(retailer);
+        } catch (Exception e) {
+            System.err.println("Error updating retailer eSIM credit limit: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to update eSIM credit limit: " + e.getMessage());
+        }
+    }
+    
+    /**
      * Convert User entity to RetailerCreditLimitDTO
      */
     private RetailerCreditLimitDTO convertToRetailerCreditLimitDTO(User retailer) {
@@ -851,6 +918,9 @@ public class AdminService {
         
         // Get retailer limit if exists
         Optional<RetailerLimit> limitOpt = retailerLimitRepository.findByRetailer(retailer);
+        
+        // Get eSIM credit from SEPARATE collection
+        Optional<RetailerEsimCredit> esimCreditOpt = retailerEsimCreditRepository.findByRetailer(retailer);
         
         if (limitOpt.isPresent()) {
             RetailerLimit limit = limitOpt.get();
@@ -899,6 +969,31 @@ public class AdminService {
             dto.setUsedUnits(0);
             dto.setAvailableUnits(0);
             dto.setUnitUsagePercentage(0.0);
+        }
+        
+        // Set eSIM credit limit fields from SEPARATE collection
+        if (esimCreditOpt.isPresent()) {
+            RetailerEsimCredit esimCredit = esimCreditOpt.get();
+            dto.setEsimCreditLimit(esimCredit.getCreditLimit() != null ? esimCredit.getCreditLimit() : BigDecimal.ZERO);
+            dto.setEsimAvailableCredit(esimCredit.getAvailableCredit() != null ? esimCredit.getAvailableCredit() : BigDecimal.ZERO);
+            dto.setEsimUsedCredit(esimCredit.getUsedCredit() != null ? esimCredit.getUsedCredit() : BigDecimal.ZERO);
+            
+            // Calculate eSIM credit usage percentage
+            if (esimCredit.getCreditLimit() != null && esimCredit.getCreditLimit().compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal esimUsed = esimCredit.getUsedCredit() != null ? esimCredit.getUsedCredit() : BigDecimal.ZERO;
+                double esimPercentage = esimUsed.divide(esimCredit.getCreditLimit(), 4, java.math.RoundingMode.HALF_UP)
+                                             .multiply(BigDecimal.valueOf(100))
+                                             .doubleValue();
+                dto.setEsimCreditUsagePercentage(esimPercentage);
+            } else {
+                dto.setEsimCreditUsagePercentage(0.0);
+            }
+        } else {
+            // Default eSIM credit limit values
+            dto.setEsimCreditLimit(BigDecimal.ZERO);
+            dto.setEsimAvailableCredit(BigDecimal.ZERO);
+            dto.setEsimUsedCredit(BigDecimal.ZERO);
+            dto.setEsimCreditUsagePercentage(0.0);
         }
         
         return dto;
@@ -1551,4 +1646,773 @@ public class AdminService {
         }
         
         return productMarginRates;
-    }}
+    }
+    
+    /**
+     * Get retailer's sales details with eSIM and ePIN information
+     */
+    public Map<String, Object> getRetailerSalesDetails(String retailerId) {
+        Map<String, Object> salesDetails = new HashMap<>();
+        
+        try {
+            // Get retailer information
+            User retailer = userRepository.findById(retailerId)
+                .orElseThrow(() -> new RuntimeException("Retailer not found with ID: " + retailerId));
+            
+            salesDetails.put("retailerId", retailerId);
+            salesDetails.put("retailerName", retailer.getFullName());
+            salesDetails.put("retailerEmail", retailer.getEmail());
+            
+            // Get all orders for this retailer
+            List<RetailerOrder> orders = retailerOrderRepository.findByRetailerIdOrderByCreatedDateDesc(retailerId);
+            
+            List<Map<String, Object>> ordersList = new ArrayList<>();
+            
+            for (RetailerOrder order : orders) {
+                Map<String, Object> orderData = new HashMap<>();
+                orderData.put("orderId", order.getId());
+                orderData.put("orderNumber", order.getOrderNumber());
+                orderData.put("date", order.getCreatedDate());
+                orderData.put("totalAmount", order.getTotalAmount());
+                orderData.put("currency", order.getCurrency());
+                orderData.put("status", order.getStatus().toString());
+                orderData.put("paymentStatus", order.getPaymentStatus().toString());
+                
+                // Process order items
+                List<Map<String, Object>> itemsList = new ArrayList<>();
+                if (order.getItems() != null) {
+                    for (RetailerOrder.OrderItem item : order.getItems()) {
+                        Map<String, Object> itemData = new HashMap<>();
+                        itemData.put("productId", item.getProductId());
+                        itemData.put("productName", item.getProductName());
+                        itemData.put("productType", item.getProductType() != null ? item.getProductType() : "N/A");
+                        itemData.put("quantity", item.getQuantity());
+                        itemData.put("unitPrice", item.getUnitPrice());
+                        
+                        // Determine if it's eSIM or ePIN based on product type or category
+                        String productCategory = item.getCategory() != null ? item.getCategory() : "";
+                        String productType = item.getProductType() != null ? item.getProductType() : "";
+                        String type = "ePIN"; // default
+                        StockPool.StockType stockType = StockPool.StockType.EPIN;
+                        
+                        if (productCategory.toLowerCase().contains("esim") || 
+                            productType.toLowerCase().contains("esim")) {
+                            type = "eSIM";
+                            stockType = StockPool.StockType.ESIM;
+                        }
+                        itemData.put("type", type);
+                        
+                        // First check if serial numbers are already stored in the OrderItem
+                        List<String> serialNumbers = new ArrayList<>();
+                        if (item.getSerialNumbers() != null && !item.getSerialNumbers().isEmpty()) {
+                            // Use serial numbers from the order item (POS sales)
+                            serialNumbers = item.getSerialNumbers();
+                        } else {
+                            // Fallback: Fetch serial numbers from StockPool (for older orders)
+                            try {
+                                // Find stock pool for this product
+                                List<StockPool> stockPools = stockPoolRepository.findByProductId(item.getProductId());
+                                
+                                for (StockPool pool : stockPools) {
+                                    if (pool.getStockType() == stockType && pool.getItems() != null) {
+                                        // Try matching with order number first (POS orders)
+                                        for (StockPool.StockItem stockItem : pool.getItems()) {
+                                            String assignedTo = stockItem.getAssignedToOrderId();
+                                            if (assignedTo != null && 
+                                                (assignedTo.equals(order.getId()) || assignedTo.equals(order.getOrderNumber()))) {
+                                                String serial = stockItem.getSerialNumber();
+                                                if (serial != null && !serial.isEmpty()) {
+                                                    serialNumbers.add(serial);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                System.err.println("Error fetching serial numbers for product " + item.getProductId() + ": " + e.getMessage());
+                            }
+                        }
+                        
+                        // Add serial numbers to item data
+                        if (!serialNumbers.isEmpty()) {
+                            itemData.put("serialNumbers", serialNumbers);
+                            itemData.put("serialNumber", String.join(", ", serialNumbers));
+                        } else {
+                            itemData.put("serialNumbers", new ArrayList<>());
+                            itemData.put("serialNumber", "Not assigned yet");
+                        }
+                        
+                        itemsList.add(itemData);
+                    }
+                }
+                
+                orderData.put("items", itemsList);
+                ordersList.add(orderData);
+            }
+            
+            salesDetails.put("orders", ordersList);
+            salesDetails.put("totalOrders", ordersList.size());
+            
+            // Calculate summary statistics
+            BigDecimal totalSales = orders.stream()
+                .map(RetailerOrder::getTotalAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            long esimCount = orders.stream()
+                .flatMap(order -> order.getItems().stream())
+                .filter(item -> {
+                    String cat = item.getCategory() != null ? item.getCategory() : "";
+                    String type = item.getProductType() != null ? item.getProductType() : "";
+                    return cat.toLowerCase().contains("esim") || type.toLowerCase().contains("esim");
+                })
+                .mapToInt(RetailerOrder.OrderItem::getQuantity)
+                .sum();
+            
+            long epinCount = orders.stream()
+                .flatMap(order -> order.getItems().stream())
+                .filter(item -> {
+                    String cat = item.getCategory() != null ? item.getCategory() : "";
+                    String type = item.getProductType() != null ? item.getProductType() : "";
+                    return !cat.toLowerCase().contains("esim") && !type.toLowerCase().contains("esim");
+                })
+                .mapToInt(RetailerOrder.OrderItem::getQuantity)
+                .sum();
+            
+            // Calculate earnings by type
+            BigDecimal esimEarnings = orders.stream()
+                .flatMap(order -> order.getItems().stream())
+                .filter(item -> {
+                    String cat = item.getCategory() != null ? item.getCategory() : "";
+                    String type = item.getProductType() != null ? item.getProductType() : "";
+                    return cat.toLowerCase().contains("esim") || type.toLowerCase().contains("esim");
+                })
+                .map(item -> item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            BigDecimal epinEarnings = orders.stream()
+                .flatMap(order -> order.getItems().stream())
+                .filter(item -> {
+                    String cat = item.getCategory() != null ? item.getCategory() : "";
+                    String type = item.getProductType() != null ? item.getProductType() : "";
+                    return !cat.toLowerCase().contains("esim") && !type.toLowerCase().contains("esim");
+                })
+                .map(item -> item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            salesDetails.put("totalSales", totalSales);
+            salesDetails.put("totalEsimSold", esimCount);
+            salesDetails.put("totalEpinSold", epinCount);
+            salesDetails.put("esimEarnings", esimEarnings);
+            salesDetails.put("epinEarnings", epinEarnings);
+            
+        } catch (Exception e) {
+            throw new RuntimeException("Error fetching retailer sales details: " + e.getMessage());
+        }
+        
+        return salesDetails;
+    }
+
+    /**
+     * Get eSIM sales analytics
+     * Returns total eSIMs sold, total earnings, and summary statistics
+     */
+    public Map<String, Object> getEsimSalesAnalytics(String startDate, String endDate, String retailerId) {
+        Map<String, Object> analytics = new HashMap<>();
+        
+        try {
+            // Parse date range
+            LocalDateTime start = null;
+            LocalDateTime end = null;
+            
+            if (startDate != null && !startDate.isEmpty()) {
+                start = LocalDateTime.parse(startDate + "T00:00:00");
+            }
+            if (endDate != null && !endDate.isEmpty()) {
+                end = LocalDateTime.parse(endDate + "T23:59:59");
+            }
+            
+            // Fetch orders based on filters
+            List<RetailerOrder> orders;
+            if (retailerId != null && !retailerId.isEmpty()) {
+                if (start != null && end != null) {
+                    orders = retailerOrderRepository.findByRetailerIdAndCreatedDateBetween(retailerId, start, end);
+                } else {
+                    orders = retailerOrderRepository.findByRetailerId(retailerId);
+                }
+            } else {
+                if (start != null && end != null) {
+                    orders = retailerOrderRepository.findByCreatedDateBetween(start, end);
+                } else {
+                    orders = retailerOrderRepository.findAll();
+                }
+            }
+            
+            // Filter to only include completed/delivered orders
+            orders = orders.stream()
+                .filter(order -> order.getStatus() == RetailerOrder.OrderStatus.COMPLETED || 
+                               order.getStatus() == RetailerOrder.OrderStatus.DELIVERED)
+                .collect(Collectors.toList());
+            
+            // Calculate eSIM specific analytics
+            long totalEsimsSold = 0;
+            BigDecimal totalEsimEarnings = BigDecimal.ZERO;
+            Map<String, Integer> esimProductSales = new HashMap<>();
+            Map<String, BigDecimal> esimProductRevenue = new HashMap<>();
+            
+            for (RetailerOrder order : orders) {
+                for (RetailerOrder.OrderItem item : order.getItems()) {
+                    String cat = item.getCategory() != null ? item.getCategory() : "";
+                    String type = item.getProductType() != null ? item.getProductType() : "";
+                    
+                    // Check if it's an eSIM product
+                    if (cat.toLowerCase().contains("esim") || type.toLowerCase().contains("esim")) {
+                        int quantity = item.getQuantity();
+                        BigDecimal itemTotal = item.getUnitPrice().multiply(BigDecimal.valueOf(quantity));
+                        
+                        totalEsimsSold += quantity;
+                        totalEsimEarnings = totalEsimEarnings.add(itemTotal);
+                        
+                        // Track by product
+                        String productName = item.getProductName();
+                        esimProductSales.put(productName, esimProductSales.getOrDefault(productName, 0) + quantity);
+                        esimProductRevenue.put(productName, esimProductRevenue.getOrDefault(productName, BigDecimal.ZERO).add(itemTotal));
+                    }
+                }
+            }
+            
+            // Build top products list
+            List<Map<String, Object>> topProducts = esimProductSales.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                .limit(10)
+                .map(entry -> {
+                    Map<String, Object> product = new HashMap<>();
+                    product.put("productName", entry.getKey());
+                    product.put("unitsSold", entry.getValue());
+                    product.put("revenue", esimProductRevenue.get(entry.getKey()));
+                    return product;
+                })
+                .collect(Collectors.toList());
+            
+            // Calculate daily sales trend (last 30 days)
+            List<Map<String, Object>> dailyTrend = new ArrayList<>();
+            LocalDateTime now = LocalDateTime.now();
+            for (int i = 29; i >= 0; i--) {
+                LocalDateTime date = now.minusDays(i);
+                LocalDateTime dayStart = date.withHour(0).withMinute(0).withSecond(0);
+                LocalDateTime dayEnd = date.withHour(23).withMinute(59).withSecond(59);
+                
+                long dailyEsimSales = orders.stream()
+                    .filter(o -> o.getCreatedDate().isAfter(dayStart) && o.getCreatedDate().isBefore(dayEnd))
+                    .flatMap(o -> o.getItems().stream())
+                    .filter(item -> {
+                        String cat = item.getCategory() != null ? item.getCategory() : "";
+                        String type = item.getProductType() != null ? item.getProductType() : "";
+                        return cat.toLowerCase().contains("esim") || type.toLowerCase().contains("esim");
+                    })
+                    .mapToInt(RetailerOrder.OrderItem::getQuantity)
+                    .sum();
+                
+                BigDecimal dailyEsimRevenue = orders.stream()
+                    .filter(o -> o.getCreatedDate().isAfter(dayStart) && o.getCreatedDate().isBefore(dayEnd))
+                    .flatMap(o -> o.getItems().stream())
+                    .filter(item -> {
+                        String cat = item.getCategory() != null ? item.getCategory() : "";
+                        String type = item.getProductType() != null ? item.getProductType() : "";
+                        return cat.toLowerCase().contains("esim") || type.toLowerCase().contains("esim");
+                    })
+                    .map(item -> item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                
+                Map<String, Object> dayData = new HashMap<>();
+                dayData.put("date", date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+                dayData.put("unitsSold", dailyEsimSales);
+                dayData.put("revenue", dailyEsimRevenue);
+                dailyTrend.add(dayData);
+            }
+            
+            // Total orders containing eSIMs
+            long ordersWithEsim = orders.stream()
+                .filter(order -> order.getItems().stream()
+                    .anyMatch(item -> {
+                        String cat = item.getCategory() != null ? item.getCategory() : "";
+                        String type = item.getProductType() != null ? item.getProductType() : "";
+                        return cat.toLowerCase().contains("esim") || type.toLowerCase().contains("esim");
+                    }))
+                .count();
+            
+            // Build response
+            analytics.put("totalEsimsSold", totalEsimsSold);
+            analytics.put("totalEsimEarnings", totalEsimEarnings);
+            analytics.put("ordersWithEsim", ordersWithEsim);
+            analytics.put("topProducts", topProducts);
+            analytics.put("dailyTrend", dailyTrend);
+            analytics.put("averageOrderValue", ordersWithEsim > 0 ? totalEsimEarnings.divide(BigDecimal.valueOf(ordersWithEsim), 2, BigDecimal.ROUND_HALF_UP) : BigDecimal.ZERO);
+            
+        } catch (Exception e) {
+            throw new RuntimeException("Error calculating eSIM analytics: " + e.getMessage());
+        }
+        
+        return analytics;
+    }
+
+    /**
+     * Get detailed eSIM sales history with pagination
+     */
+    public Map<String, Object> getEsimSalesHistory(int page, int size, String startDate, String endDate, String retailerId, String productType) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // Parse date range
+            LocalDateTime start = null;
+            LocalDateTime end = null;
+            
+            if (startDate != null && !startDate.isEmpty()) {
+                start = LocalDateTime.parse(startDate + "T00:00:00");
+            }
+            if (endDate != null && !endDate.isEmpty()) {
+                end = LocalDateTime.parse(endDate + "T23:59:59");
+            }
+            
+            // Fetch orders based on filters
+            List<RetailerOrder> allOrders;
+            if (retailerId != null && !retailerId.isEmpty()) {
+                if (start != null && end != null) {
+                    allOrders = retailerOrderRepository.findByRetailerIdAndCreatedDateBetween(retailerId, start, end);
+                } else {
+                    allOrders = retailerOrderRepository.findByRetailerId(retailerId);
+                }
+            } else {
+                if (start != null && end != null) {
+                    allOrders = retailerOrderRepository.findByCreatedDateBetween(start, end);
+                } else {
+                    allOrders = retailerOrderRepository.findAll();
+                }
+            }
+            
+            // Filter to only include orders with eSIM items
+            List<Map<String, Object>> salesHistory = new ArrayList<>();
+            
+            for (RetailerOrder order : allOrders) {
+                // Get retailer info
+                String retailerName = "Unknown";
+                String retailerEmail = "";
+                try {
+                    Optional<User> retailerOpt = userRepository.findById(order.getRetailerId());
+                    if (retailerOpt.isPresent()) {
+                        User retailer = retailerOpt.get();
+                        retailerName = retailer.getFirstName() + " " + retailer.getLastName();
+                        retailerEmail = retailer.getEmail();
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error fetching retailer info: " + e.getMessage());
+                }
+                
+                // Process each item in the order
+                for (RetailerOrder.OrderItem item : order.getItems()) {
+                    String cat = item.getCategory() != null ? item.getCategory() : "";
+                    String type = item.getProductType() != null ? item.getProductType() : "";
+                    
+                    // Check if it's an eSIM product
+                    boolean isEsim = cat.toLowerCase().contains("esim") || type.toLowerCase().contains("esim");
+                    
+                    // Apply product type filter if specified
+                    if (productType != null && !productType.isEmpty() && !isEsim) {
+                        continue;
+                    }
+                    
+                    if (isEsim) {
+                        Map<String, Object> saleRecord = new HashMap<>();
+                        saleRecord.put("orderId", order.getId());
+                        saleRecord.put("orderNumber", order.getOrderNumber());
+                        saleRecord.put("orderDate", order.getCreatedDate());
+                        saleRecord.put("orderStatus", order.getStatus().name());
+                        saleRecord.put("paymentStatus", order.getPaymentStatus().name());
+                        
+                        // Retailer info
+                        saleRecord.put("retailerId", order.getRetailerId());
+                        saleRecord.put("retailerName", retailerName);
+                        saleRecord.put("retailerEmail", retailerEmail);
+                        
+                        // Product details
+                        saleRecord.put("productId", item.getProductId());
+                        saleRecord.put("productName", item.getProductName());
+                        saleRecord.put("productType", item.getProductType());
+                        saleRecord.put("category", item.getCategory());
+                        saleRecord.put("dataAmount", item.getDataAmount());
+                        saleRecord.put("validity", item.getValidity());
+                        
+                        // Quantities and pricing
+                        saleRecord.put("quantity", item.getQuantity());
+                        saleRecord.put("unitPrice", item.getUnitPrice());
+                        saleRecord.put("retailPrice", item.getRetailPrice());
+                        saleRecord.put("totalAmount", item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
+                        
+                        // Serial numbers if available
+                        if (item.getSerialNumbers() != null && !item.getSerialNumbers().isEmpty()) {
+                            saleRecord.put("serialNumbers", item.getSerialNumbers());
+                        } else {
+                            saleRecord.put("serialNumbers", new ArrayList<>());
+                        }
+                        
+                        salesHistory.add(saleRecord);
+                    }
+                }
+            }
+            
+            // Sort by date descending
+            salesHistory.sort((a, b) -> {
+                LocalDateTime dateA = (LocalDateTime) a.get("orderDate");
+                LocalDateTime dateB = (LocalDateTime) b.get("orderDate");
+                return dateB.compareTo(dateA);
+            });
+            
+            // Apply pagination
+            int totalRecords = salesHistory.size();
+            int totalPages = (int) Math.ceil((double) totalRecords / size);
+            int fromIndex = page * size;
+            int toIndex = Math.min(fromIndex + size, totalRecords);
+            
+            List<Map<String, Object>> paginatedSales = fromIndex < totalRecords ? 
+                salesHistory.subList(fromIndex, toIndex) : new ArrayList<>();
+            
+            result.put("sales", paginatedSales);
+            result.put("totalRecords", totalRecords);
+            result.put("totalPages", totalPages);
+            result.put("currentPage", page);
+            result.put("pageSize", size);
+            
+            // Summary for filtered results
+            long totalUnits = salesHistory.stream()
+                .mapToLong(s -> ((Number) s.get("quantity")).longValue())
+                .sum();
+            
+            BigDecimal totalRevenue = salesHistory.stream()
+                .map(s -> (BigDecimal) s.get("totalAmount"))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            result.put("totalUnits", totalUnits);
+            result.put("totalRevenue", totalRevenue);
+            
+        } catch (Exception e) {
+            throw new RuntimeException("Error fetching eSIM sales history: " + e.getMessage());
+        }
+        
+        return result;
+    }
+
+    /**
+     * Get retailer-specific eSIM POS sales report
+     * Includes ICCID (serial), customer name/email, order date, order id,
+     * total earnings through POINT_OF_SALE eSIM sales and total eSIM count.
+     */
+    public Map<String, Object> getRetailerEsimSalesReport(String retailerId, String startDate, String endDate) {
+        Map<String, Object> report = new HashMap<>();
+
+        System.out.println("=== eSIM Sales Report Debug ===");
+        System.out.println("Retailer ID: " + retailerId);
+        System.out.println("Start Date: " + startDate);
+        System.out.println("End Date: " + endDate);
+
+        try {
+            LocalDateTime start = null;
+            LocalDateTime end = null;
+
+            if (startDate != null && !startDate.isEmpty() && !"undefined".equalsIgnoreCase(startDate)) {
+                try {
+                    start = LocalDateTime.parse(startDate + "T00:00:00");
+                } catch (Exception e) {
+                    System.err.println("Invalid startDate for eSIM sales report: " + startDate + " - " + e.getMessage());
+                    start = null;
+                }
+            }
+            if (endDate != null && !endDate.isEmpty() && !"undefined".equalsIgnoreCase(endDate)) {
+                try {
+                    end = LocalDateTime.parse(endDate + "T23:59:59");
+                } catch (Exception e) {
+                    System.err.println("Invalid endDate for eSIM sales report: " + endDate + " - " + e.getMessage());
+                    end = null;
+                }
+            }
+
+            List<RetailerOrder> allOrders;
+            if (start != null && end != null) {
+                allOrders = retailerOrderRepository.findByRetailerIdAndCreatedDateBetween(retailerId, start, end);
+            } else {
+                allOrders = retailerOrderRepository.findByRetailerId(retailerId);
+            }
+
+            if (allOrders == null) {
+                allOrders = new ArrayList<>();
+            }
+
+            System.out.println("Total orders found for retailer: " + allOrders.size());
+
+            List<Map<String, Object>> sales = new ArrayList<>();
+            long totalEsimsSold = 0L;
+            BigDecimal totalEarnings = BigDecimal.ZERO;
+            long totalOrdersWithEsim = 0L;
+
+            for (RetailerOrder order : allOrders) {
+                if (order == null) {
+                    continue;
+                }
+
+                System.out.println("Processing order: " + order.getOrderNumber() + ", status: " + order.getStatus());
+
+                try {
+                    // Only include completed/delivered orders
+                    if (order.getStatus() != RetailerOrder.OrderStatus.COMPLETED &&
+                        order.getStatus() != RetailerOrder.OrderStatus.DELIVERED) {
+                        System.out.println("  Skipped - status not COMPLETED/DELIVERED");
+                        continue;
+                    }
+
+                    String paymentMethod = order.getPaymentMethod() != null ? order.getPaymentMethod() : "";
+
+                    boolean orderHasEsim = false;
+
+                    if (order.getItems() == null || order.getItems().isEmpty()) {
+                        System.out.println("  Skipped - no items");
+                        continue;
+                    }
+
+                    for (RetailerOrder.OrderItem item : order.getItems()) {
+                        if (item == null) {
+                            continue;
+                        }
+
+                        String cat = item.getCategory() != null ? item.getCategory() : "";
+                        String type = item.getProductType() != null ? item.getProductType() : "";
+
+                        System.out.println("  Item - category: '" + cat + "', productType: '" + type + "'");
+
+                        boolean isEsim = cat.toLowerCase().contains("esim") || type.toLowerCase().contains("esim");
+                        if (!isEsim) {
+                            System.out.println("  Skipped item - not eSIM");
+                            continue;
+                        }
+
+                        System.out.println("  ✅ Found eSIM item!");
+                        orderHasEsim = true;
+
+                        int quantity = item.getQuantity() != null ? item.getQuantity() : 0;
+                        BigDecimal itemTotal = item.getUnitPrice() != null
+                            ? item.getUnitPrice().multiply(BigDecimal.valueOf(quantity))
+                            : BigDecimal.ZERO;
+
+                        totalEsimsSold += quantity;
+                        totalEarnings = totalEarnings.add(itemTotal);
+
+                        // Try to fetch customer details and ICCID from EsimOrderRequest
+                        EsimOrderRequest esimOrder = null;
+                        try {
+                            esimOrder = esimOrderRequestRepository.findByOrderNumber(order.getOrderNumber());
+                        } catch (Exception ignored) {
+                            // If lookup fails, continue without breaking the report
+                        }
+
+                        String customerName = esimOrder != null ? esimOrder.getCustomerFullName() : null;
+                        String customerEmail = esimOrder != null ? esimOrder.getCustomerEmail() : null;
+                        String iccidFromRequest = esimOrder != null ? esimOrder.getAssignedEsimSerial() : null;
+
+                        // Collect ICCIDs/serials
+                        List<String> iccids = new ArrayList<>();
+                        if (iccidFromRequest != null && !iccidFromRequest.isEmpty()) {
+                            iccids.add(iccidFromRequest);
+                        }
+
+                        // Fallback: check serialNumbers on the order item
+                        if (iccids.isEmpty() && item.getSerialNumbers() != null && !item.getSerialNumbers().isEmpty()) {
+                            iccids.addAll(item.getSerialNumbers());
+                        }
+
+                        // Fallback: lookup in stock pool by product and order reference
+                        if (iccids.isEmpty()) {
+                            try {
+                                List<StockPool> stockPools = stockPoolRepository.findByProductId(item.getProductId());
+                                if (stockPools != null) {
+                                    for (StockPool pool : stockPools) {
+                                        if (pool != null && pool.getStockType() == StockPool.StockType.ESIM && pool.getItems() != null) {
+                                            for (StockPool.StockItem stockItem : pool.getItems()) {
+                                                if (stockItem == null) {
+                                                    continue;
+                                                }
+                                                String assignedTo = stockItem.getAssignedToOrderId();
+                                                if (assignedTo != null &&
+                                                    (assignedTo.equals(order.getId()) || assignedTo.equals(order.getOrderNumber()))) {
+                                                    String serial = stockItem.getSerialNumber();
+                                                    if (serial != null && !serial.isEmpty()) {
+                                                        iccids.add(serial);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                System.err.println("Error fetching ICCID/serials for order " + order.getOrderNumber() + ": " + e.getMessage());
+                            }
+                        }
+
+                        Map<String, Object> sale = new HashMap<>();
+                        sale.put("orderId", order.getId());
+                        sale.put("orderNumber", order.getOrderNumber());
+                        sale.put("orderDate", order.getCreatedDate());
+                        sale.put("productName", item.getProductName());
+                        sale.put("quantity", quantity);
+                        sale.put("totalAmount", itemTotal);
+                        sale.put("paymentMethod", paymentMethod);
+                        sale.put("customerName", customerName);
+                        sale.put("customerEmail", customerEmail);
+                        sale.put("iccids", iccids);
+                        if (!iccids.isEmpty()) {
+                            sale.put("iccid", iccids.get(0));
+                        }
+
+                        sales.add(sale);
+                    }
+
+                    if (orderHasEsim) {
+                        totalOrdersWithEsim++;
+                    }
+                } catch (Exception ex) {
+                    System.err.println("Error processing retailer eSIM sales report for order " + order.getOrderNumber() + ": " + ex.getMessage());
+                }
+            }
+
+            // Sort by order date descending (null-safe)
+            sales.sort((a, b) -> {
+                LocalDateTime dateA = (LocalDateTime) a.get("orderDate");
+                LocalDateTime dateB = (LocalDateTime) b.get("orderDate");
+
+                if (dateA == null && dateB == null) return 0;
+                if (dateA == null) return 1; // nulls last
+                if (dateB == null) return -1;
+                return dateB.compareTo(dateA);
+            });
+
+            report.put("totalEsimsSold", totalEsimsSold);
+            report.put("totalEarnings", totalEarnings);
+            report.put("totalOrders", totalOrdersWithEsim);
+            report.put("sales", sales);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Error fetching retailer eSIM sales report: " + e.getMessage());
+        }
+
+        return report;
+    }
+
+    /**
+     * Get all retailers with their kickback limits
+     */
+    public List<RetailerKickbackLimitDTO> getAllRetailersWithKickbackLimits() {
+        List<User> businessUsers = userRepository.findByAccountType(User.AccountType.BUSINESS);
+        List<RetailerKickbackLimitDTO> kickbackLimits = new ArrayList<>();
+
+        for (User retailer : businessUsers) {
+            RetailerKickbackLimitDTO dto = new RetailerKickbackLimitDTO();
+            dto.setRetailerId(retailer.getId());
+            dto.setRetailerEmail(retailer.getEmail());
+            dto.setRetailerName(retailer.getFullName());
+
+            Optional<RetailerKickbackLimit> kickbackLimitOpt = retailerKickbackLimitRepository.findByRetailer(retailer);
+            
+            if (kickbackLimitOpt.isPresent()) {
+                RetailerKickbackLimit kickbackLimit = kickbackLimitOpt.get();
+                dto.setKickbackLimit(kickbackLimit.getKickbackLimit());
+                dto.setUsedKickback(kickbackLimit.getUsedKickback());
+                dto.setAvailableKickback(kickbackLimit.getAvailableKickback());
+                dto.setUsagePercentage(kickbackLimit.getUsagePercentage());
+                dto.setStatus(kickbackLimit.getStatus().toString());
+                dto.setNotes(kickbackLimit.getNotes());
+            } else {
+                dto.setKickbackLimit(BigDecimal.ZERO);
+                dto.setUsedKickback(BigDecimal.ZERO);
+                dto.setAvailableKickback(BigDecimal.ZERO);
+                dto.setUsagePercentage(0.0);
+                dto.setStatus("NOT_SET");
+                dto.setNotes("No kickback limit set");
+            }
+
+            kickbackLimits.add(dto);
+        }
+
+        return kickbackLimits;
+    }
+
+    /**
+     * Get specific retailer's kickback limit information
+     */
+    public RetailerKickbackLimitDTO getRetailerKickbackLimit(String retailerId) {
+        User retailer = userRepository.findById(retailerId)
+                .orElseThrow(() -> new RuntimeException("Retailer not found with ID: " + retailerId));
+
+        RetailerKickbackLimitDTO dto = new RetailerKickbackLimitDTO();
+        dto.setRetailerId(retailer.getId());
+        dto.setRetailerEmail(retailer.getEmail());
+        dto.setRetailerName(retailer.getFullName());
+
+        Optional<RetailerKickbackLimit> kickbackLimitOpt = retailerKickbackLimitRepository.findByRetailer(retailer);
+        
+        if (kickbackLimitOpt.isPresent()) {
+            RetailerKickbackLimit kickbackLimit = kickbackLimitOpt.get();
+            dto.setKickbackLimit(kickbackLimit.getKickbackLimit());
+            dto.setUsedKickback(kickbackLimit.getUsedKickback());
+            dto.setAvailableKickback(kickbackLimit.getAvailableKickback());
+            dto.setUsagePercentage(kickbackLimit.getUsagePercentage());
+            dto.setStatus(kickbackLimit.getStatus().toString());
+            dto.setNotes(kickbackLimit.getNotes());
+        } else {
+            dto.setKickbackLimit(BigDecimal.ZERO);
+            dto.setUsedKickback(BigDecimal.ZERO);
+            dto.setAvailableKickback(BigDecimal.ZERO);
+            dto.setUsagePercentage(0.0);
+            dto.setStatus("NOT_SET");
+            dto.setNotes("No kickback limit set");
+        }
+
+        return dto;
+    }
+
+    /**
+     * Update retailer kickback limit
+     */
+    public RetailerKickbackLimitDTO updateRetailerKickbackLimit(UpdateKickbackLimitRequest request) {
+        User retailer = userRepository.findByEmailIgnoreCase(request.getRetailerEmail())
+                .orElseThrow(() -> new RuntimeException("Retailer not found with email: " + request.getRetailerEmail()));
+
+        if (retailer.getAccountType() != User.AccountType.BUSINESS) {
+            throw new RuntimeException("User is not a business account");
+        }
+
+        Optional<RetailerKickbackLimit> existingLimitOpt = retailerKickbackLimitRepository.findByRetailer(retailer);
+        
+        RetailerKickbackLimit kickbackLimit;
+        if (existingLimitOpt.isPresent()) {
+            kickbackLimit = existingLimitOpt.get();
+            kickbackLimit.updateLimit(request.getKickbackLimit());
+            kickbackLimit.setNotes(request.getNotes());
+            kickbackLimit.setLastModifiedDate(LocalDateTime.now());
+        } else {
+            kickbackLimit = new RetailerKickbackLimit(retailer, request.getKickbackLimit());
+            kickbackLimit.setNotes(request.getNotes());
+        }
+
+        kickbackLimit = retailerKickbackLimitRepository.save(kickbackLimit);
+
+        // Build response DTO
+        RetailerKickbackLimitDTO dto = new RetailerKickbackLimitDTO();
+        dto.setRetailerId(retailer.getId());
+        dto.setRetailerEmail(retailer.getEmail());
+        dto.setRetailerName(retailer.getFullName());
+        dto.setKickbackLimit(kickbackLimit.getKickbackLimit());
+        dto.setUsedKickback(kickbackLimit.getUsedKickback());
+        dto.setAvailableKickback(kickbackLimit.getAvailableKickback());
+        dto.setUsagePercentage(kickbackLimit.getUsagePercentage());
+        dto.setStatus(kickbackLimit.getStatus().toString());
+        dto.setNotes(kickbackLimit.getNotes());
+
+        return dto;
+    }
+}

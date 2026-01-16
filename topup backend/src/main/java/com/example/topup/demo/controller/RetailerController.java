@@ -9,11 +9,16 @@ import com.example.topup.demo.service.RetailerService;
 import com.example.topup.demo.service.UserService;
 import com.example.topup.demo.service.BundleService;
 import com.example.topup.demo.service.StockService;
+import com.example.topup.demo.service.AdminService;
 import com.example.topup.demo.entity.StockPool;
 import com.example.topup.demo.entity.RetailerLimit;
+import com.example.topup.demo.entity.RetailerEsimCredit;
+import com.example.topup.demo.entity.RetailerKickbackLimit;
 import com.example.topup.demo.repository.RetailerOrderRepository;
 import com.example.topup.demo.repository.OrderRepository;
 import com.example.topup.demo.repository.RetailerLimitRepository;
+import com.example.topup.demo.repository.RetailerEsimCreditRepository;
+import com.example.topup.demo.repository.RetailerKickbackLimitRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -24,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -51,6 +57,9 @@ public class RetailerController {
     private StockService stockService;
     
     @Autowired
+    private AdminService adminService;
+    
+    @Autowired
     private RetailerOrderRepository retailerOrderRepository;
     
     @Autowired
@@ -58,6 +67,12 @@ public class RetailerController {
     
     @Autowired
     private RetailerLimitRepository retailerLimitRepository;
+
+    @Autowired
+    private RetailerEsimCreditRepository retailerEsimCreditRepository;
+
+    @Autowired
+    private RetailerKickbackLimitRepository retailerKickbackLimitRepository;
 
     // Get all orders for the authenticated retailer
     @GetMapping("/orders")
@@ -254,6 +269,20 @@ public class RetailerController {
         }
     }
 
+    // Get sales summary (count of sold items and total earnings)
+    @GetMapping("/sales-summary")
+    public ResponseEntity<?> getSalesSummary(Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            Map<String, Object> salesSummary = retailerService.getSalesSummary(retailer);
+            
+            return ResponseEntity.ok(salesSummary);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to fetch sales summary: " + e.getMessage()));
+        }
+    }
+
     // Get dashboard summary
     @GetMapping("/dashboard")
     public ResponseEntity<?> getDashboard(Authentication authentication) {
@@ -288,19 +317,44 @@ public class RetailerController {
 
     // Helper method to get user from authentication
     private User getUserFromAuthentication(Authentication authentication) {
-        // Handle null authentication (development mode)
+        // Handle null authentication
         if (authentication == null || authentication.getName() == null) {
-            System.out.println("⚠️ Authentication is null, using development fallback");
-            // For development: get first BUSINESS user
-            return userService.findByAccountType(User.AccountType.BUSINESS).stream()
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("No BUSINESS user found for development"));
+            System.err.println("⚠️ Authentication is null - checking for any BUSINESS user");
+            // Try to find any BUSINESS user as fallback
+            Optional<User> businessUser = userService.findByAccountType(User.AccountType.BUSINESS).stream()
+                .findFirst();
+            if (businessUser.isPresent()) {
+                System.out.println("⚠️ Using fallback BUSINESS user: " + businessUser.get().getEmail());
+                return businessUser.get();
+            }
+            throw new RuntimeException("Authentication required and no BUSINESS user found");
         }
         
+        // Get retailer by email from authentication
         String email = authentication.getName();
         System.out.println("✅ Authenticated user: " + email);
-        return userService.findByEmail(email)
-            .orElseThrow(() -> new RuntimeException("User not found: " + email));
+        
+        Optional<User> retailerOpt = userService.findByEmail(email);
+        if (retailerOpt.isPresent()) {
+            User user = retailerOpt.get();
+            if (user.getAccountType() == User.AccountType.BUSINESS) {
+                System.out.println("✅ Authenticated retailer ID: " + user.getId());
+                return user;
+            } else {
+                System.err.println("⚠️ User is not a BUSINESS account: " + email + " (type: " + user.getAccountType() + ")");
+                // Try to find a BUSINESS user as fallback
+                Optional<User> businessUser = userService.findByAccountType(User.AccountType.BUSINESS).stream()
+                    .findFirst();
+                if (businessUser.isPresent()) {
+                    System.out.println("⚠️ Using fallback BUSINESS user: " + businessUser.get().getEmail());
+                    return businessUser.get();
+                }
+            }
+        }
+        
+        // If not found, throw error with details
+        System.err.println("❌ User not found: " + email);
+        throw new RuntimeException("User not found or not a business account: " + email);
     }
 
     // Request DTOs
@@ -559,53 +613,6 @@ public class RetailerController {
         }
     }
 
-    // Get sales data summary (for dashboard)
-    @GetMapping("/sales")
-    public ResponseEntity<?> getSalesData(Authentication authentication) {
-        try {
-            // Handle anonymous/unauthenticated requests
-            if (authentication == null || !authentication.isAuthenticated() || 
-                authentication.getPrincipal().equals("anonymousUser")) {
-                return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", Map.of(
-                        "customerSales", 0,
-                        "totalSales", 0,
-                        "totalRevenue", 0,
-                        "revenue", 0
-                    )
-                ));
-            }
-            
-            User retailer = getUserFromAuthentication(authentication);
-            
-            // Get all SOLD orders (customer sales / POS sales)
-            List<Order> customerSales = orderRepository.findByRetailerAndStatusOrderByCreatedDateDesc(
-                retailer, Order.OrderStatus.SOLD);
-            
-            // Calculate totals
-            BigDecimal totalRevenue = customerSales.stream()
-                .map(Order::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-            
-            int totalSales = customerSales.size();
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("data", Map.of(
-                "customerSales", totalSales,
-                "totalSales", totalSales,
-                "totalRevenue", totalRevenue,
-                "revenue", totalRevenue
-            ));
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("success", false, "message", "Failed to fetch sales data: " + e.getMessage()));
-        }
-    }
-
     // Get retailer's margin rate
     @GetMapping("/margin-rate")
     public ResponseEntity<?> getMarginRate(Authentication authentication) {
@@ -663,6 +670,30 @@ public class RetailerController {
             // Fetch credit limit from retailer_limits collection
             Optional<RetailerLimit> limitOpt = retailerLimitRepository.findByRetailer_Id(retailer.getId());
             
+            // Fetch eSIM credit from SEPARATE retailer_esim_credits collection
+            Optional<RetailerEsimCredit> esimCreditOpt = retailerEsimCreditRepository.findByRetailer_Id(retailer.getId());
+            
+            // If no eSIM credit in new collection, check old collection and migrate
+            if (!esimCreditOpt.isPresent() && limitOpt.isPresent()) {
+                RetailerLimit oldLimit = limitOpt.get();
+                BigDecimal oldEsimCreditLimit = oldLimit.getEsimCreditLimit();
+                
+                if (oldEsimCreditLimit != null && oldEsimCreditLimit.compareTo(BigDecimal.ZERO) > 0) {
+                    System.out.println("📊 Migrating eSIM credit from OLD collection to NEW collection...");
+                    
+                    // Create new record in retailer_esim_credits collection
+                    RetailerEsimCredit newEsimCredit = new RetailerEsimCredit(retailer);
+                    newEsimCredit.setCreditLimit(oldEsimCreditLimit);
+                    newEsimCredit.setUsedCredit(oldLimit.getEsimUsedCredit() != null ? oldLimit.getEsimUsedCredit() : BigDecimal.ZERO);
+                    newEsimCredit.setAvailableCredit(oldLimit.getEsimAvailableCredit() != null ? oldLimit.getEsimAvailableCredit() : oldEsimCreditLimit);
+                    newEsimCredit.setCreatedBy("system-migration");
+                    RetailerEsimCredit savedCredit = retailerEsimCreditRepository.save(newEsimCredit);
+                    esimCreditOpt = Optional.of(savedCredit);
+                    
+                    System.out.println("✅ Migrated eSIM credit to NEW collection. ID: " + savedCredit.getId());
+                }
+            }
+            
             Map<String, Object> response = new HashMap<>();
             
             if (limitOpt.isPresent()) {
@@ -694,8 +725,6 @@ public class RetailerController {
                 System.out.println("   Credit Limit: " + limit.getCreditLimit());
                 System.out.println("   Used Credit: " + limit.getUsedCredit());
                 System.out.println("   Available Credit: " + limit.getAvailableCredit());
-                
-                return ResponseEntity.ok(response);
             } else {
                 // No credit limit set - return zeros
                 System.out.println("⚠️ No credit limit found for retailer: " + retailer.getId());
@@ -705,15 +734,95 @@ public class RetailerController {
                 response.put("availableCredit", 0.0);
                 response.put("creditUsagePercentage", 0.0);
                 response.put("status", "NOT_SET");
+                response.put("outstandingAmount", 0.0);
                 response.put("message", "No credit limit set by admin yet");
-                
-                return ResponseEntity.ok(response);
             }
+            
+            // eSIM Credit fields from SEPARATE collection
+            if (esimCreditOpt.isPresent()) {
+                RetailerEsimCredit esimCredit = esimCreditOpt.get();
+                response.put("esimCreditLimit", esimCredit.getCreditLimit() != null ? esimCredit.getCreditLimit().doubleValue() : 0.0);
+                response.put("esimUsedCredit", esimCredit.getUsedCredit() != null ? esimCredit.getUsedCredit().doubleValue() : 0.0);
+                response.put("esimAvailableCredit", esimCredit.getAvailableCredit() != null ? esimCredit.getAvailableCredit().doubleValue() : 0.0);
+                
+                // Calculate eSIM credit usage percentage
+                BigDecimal esimUsagePercentage = BigDecimal.ZERO;
+                if (esimCredit.getCreditLimit() != null && esimCredit.getCreditLimit().compareTo(BigDecimal.ZERO) > 0) {
+                    BigDecimal esimUsed = esimCredit.getUsedCredit() != null ? esimCredit.getUsedCredit() : BigDecimal.ZERO;
+                    esimUsagePercentage = esimUsed
+                        .multiply(BigDecimal.valueOf(100))
+                        .divide(esimCredit.getCreditLimit(), 2, RoundingMode.HALF_UP);
+                }
+                response.put("esimCreditUsagePercentage", esimUsagePercentage.doubleValue());
+                
+                // Include eSIM transactions if available
+                if (esimCredit.getTransactions() != null && !esimCredit.getTransactions().isEmpty()) {
+                    response.put("esimTransactions", esimCredit.getTransactions());
+                }
+                
+                System.out.println("   eSIM Credit Limit: " + esimCredit.getCreditLimit());
+                System.out.println("   eSIM Used Credit: " + esimCredit.getUsedCredit());
+                System.out.println("   eSIM Available Credit: " + esimCredit.getAvailableCredit());
+            } else {
+                response.put("esimCreditLimit", 0.0);
+                response.put("esimUsedCredit", 0.0);
+                response.put("esimAvailableCredit", 0.0);
+                response.put("esimCreditUsagePercentage", 0.0);
+            }
+            
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             System.err.println("❌ Error fetching credit level: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("success", false, "message", "Failed to fetch credit level: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get kickback bonus limit for the authenticated retailer
+     */
+    @GetMapping("/kickback-limit")
+    public ResponseEntity<?> getKickbackLimit(Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            
+            Optional<RetailerKickbackLimit> kickbackLimitOpt = retailerKickbackLimitRepository.findByRetailerId(retailer.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            
+            if (kickbackLimitOpt.isPresent()) {
+                RetailerKickbackLimit kickbackLimit = kickbackLimitOpt.get();
+                
+                response.put("success", true);
+                response.put("kickbackLimit", kickbackLimit.getKickbackLimit() != null ? kickbackLimit.getKickbackLimit().doubleValue() : 0.0);
+                response.put("usedKickback", kickbackLimit.getUsedKickback() != null ? kickbackLimit.getUsedKickback().doubleValue() : 0.0);
+                response.put("availableKickback", kickbackLimit.getAvailableKickback() != null ? kickbackLimit.getAvailableKickback().doubleValue() : 0.0);
+                response.put("usagePercentage", kickbackLimit.getUsagePercentage());
+                response.put("status", kickbackLimit.getStatus() != null ? kickbackLimit.getStatus().toString() : "ACTIVE");
+                
+                System.out.println("✅ Kickback limit fetched for retailer: " + retailer.getId());
+                System.out.println("   Kickback Limit: " + kickbackLimit.getKickbackLimit());
+                System.out.println("   Used Kickback: " + kickbackLimit.getUsedKickback());
+                System.out.println("   Available Kickback: " + kickbackLimit.getAvailableKickback());
+            } else {
+                // No kickback limit set - return zeros
+                System.out.println("⚠️ No kickback limit found for retailer: " + retailer.getId());
+                response.put("success", true);
+                response.put("kickbackLimit", 0.0);
+                response.put("usedKickback", 0.0);
+                response.put("availableKickback", 0.0);
+                response.put("usagePercentage", 0.0);
+                response.put("status", "NOT_SET");
+                response.put("message", "No kickback limit set by admin yet");
+            }
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching kickback limit: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to fetch kickback limit: " + e.getMessage()));
         }
     }
 
@@ -995,6 +1104,12 @@ public class RetailerController {
             String customerName = (String) saleRequest.getOrDefault("customerName", "Walk-in Customer");
             String customerPhone = (String) saleRequest.getOrDefault("customerPhone", "");
             String customerEmail = (String) saleRequest.getOrDefault("customerEmail", "");
+            String saleType = (String) saleRequest.getOrDefault("saleType", "EPIN"); // EPIN or ESIM
+            String paymentMode = (String) saleRequest.getOrDefault("paymentMode", "credit"); // 'credit' or 'kickback'
+            
+            System.out.println("🔍 DEBUG - Received saleType from frontend: '" + saleType + "'");
+            System.out.println("🔍 DEBUG - Received paymentMode from frontend: '" + paymentMode + "'");
+            System.out.println("🔍 DEBUG - saleType.equalsIgnoreCase(ESIM): " + saleType.equalsIgnoreCase("ESIM"));
             
             // Handle numeric values that might come as Double or Integer
             double unitPrice = 0;
@@ -1014,48 +1129,175 @@ public class RetailerController {
                 return ResponseEntity.badRequest().body(error);
             }
             
-            System.out.println("🛒 Processing sale: " + quantity + "x " + bundleName + " (" + bundleId + ")");
+            System.out.println("🛒 Processing " + saleType + " sale: " + quantity + "x " + bundleName + " (" + bundleId + ")");
             
             // Assign stock items from admin pool
-            List<Map<String, String>> assignedPins = new ArrayList<>();
+            List<Map<String, String>> assignedItems = new ArrayList<>();
             String orderId = "POS-" + System.currentTimeMillis();
+            StockPool.StockType stockType = saleType.equalsIgnoreCase("ESIM") ? StockPool.StockType.ESIM : StockPool.StockType.EPIN;
             
             for (int i = 0; i < quantity; i++) {
                 try {
                     // Assign stock from admin pool
                     StockPool.StockItem item = stockService.assignStockToOrder(
                         bundleId, 
-                        StockPool.StockType.EPIN, 
+                        stockType, 
                         orderId,
                         retailer.getId(),
                         retailer.getEmail()
                     );
                     
-                    // Decrypt the PIN for customer
-                    String decryptedPin = stockService.decryptData(item.getItemData());
+                    // Create item object with details
+                    Map<String, String> itemData = new HashMap<>();
                     
-                    // Create PIN object with details
-                    Map<String, String> pinData = new HashMap<>();
-                    pinData.put("pin", decryptedPin);
-                    pinData.put("serialNumber", item.getSerialNumber() != null ? item.getSerialNumber() : "N/A");
-                    pinData.put("expiryDate", item.getExpiryDate() != null ? item.getExpiryDate().toString() : null);
+                    if (stockType == StockPool.StockType.ESIM) {
+                        // For eSIM, don't decrypt - just store the reference
+                        itemData.put("serialNumber", item.getSerialNumber() != null ? item.getSerialNumber() : "N/A");
+                        itemData.put("iccid", item.getItemData() != null ? item.getItemData() : "N/A");
+                    } else {
+                        // For ePIN, decrypt the PIN
+                        String decryptedPin = stockService.decryptData(item.getItemData());
+                        itemData.put("pin", decryptedPin);
+                        
+                        // Generate serial number: use item's serial number, or itemId, or create from PIN
+                        String serialNumber;
+                        if (item.getSerialNumber() != null && !item.getSerialNumber().isEmpty()) {
+                            serialNumber = item.getSerialNumber();
+                        } else if (item.getItemId() != null && !item.getItemId().isEmpty()) {
+                            serialNumber = item.getItemId();
+                        } else {
+                            // Create serial number from PIN (e.g., first 15 digits + last 4)
+                            serialNumber = decryptedPin.length() >= 16 
+                                ? "OFF" + decryptedPin.substring(0, Math.min(13, decryptedPin.length())) + decryptedPin.substring(Math.max(0, decryptedPin.length() - 4))
+                                : "SN-" + decryptedPin;
+                        }
+                        itemData.put("serialNumber", serialNumber);
+                    }
                     
-                    assignedPins.add(pinData);
+                    itemData.put("expiryDate", item.getExpiryDate() != null ? item.getExpiryDate().toString() : null);
+                    assignedItems.add(itemData);
                     
-                    System.out.println("✅ Assigned PIN " + (i + 1) + "/" + quantity + ": " + decryptedPin);
+                    System.out.println("✅ Assigned " + saleType + " " + (i + 1) + "/" + quantity);
                 } catch (Exception e) {
-                    System.err.println("❌ Failed to assign PIN " + (i + 1) + ": " + e.getMessage());
-                    // Rollback would happen here in a transactional context
+                    System.err.println("❌ Failed to assign " + saleType + " " + (i + 1) + ": " + e.getMessage());
                     throw new RuntimeException("Failed to allocate stock: " + e.getMessage());
                 }
             }
             
-            System.out.println("✅ Sale completed - " + assignedPins.size() + " PINs assigned");
+            System.out.println("✅ Sale completed - " + assignedItems.size() + " items assigned");
+            
+            // Create RetailerOrder record for this sale
+            try {
+                RetailerOrder order = new RetailerOrder();
+                order.setRetailerId(retailer.getId());
+                order.setOrderNumber(orderId);
+                order.setTotalAmount(BigDecimal.valueOf(totalAmount));
+                order.setCurrency("NOK");
+                order.setStatus(RetailerOrder.OrderStatus.COMPLETED);
+                order.setPaymentStatus(RetailerOrder.PaymentStatus.COMPLETED);
+                order.setPaymentMethod("CREDIT");
+                order.setCreatedBy(retailer.getEmail());
+                order.setCreatedDate(LocalDateTime.now());
+                
+                // Create order item
+                RetailerOrder.OrderItem orderItem = new RetailerOrder.OrderItem();
+                orderItem.setProductId(bundleId);
+                orderItem.setProductName(bundleName);
+                orderItem.setProductType(saleType);
+                orderItem.setCategory(saleType.equalsIgnoreCase("ESIM") ? "ESIM" : "EPIN");
+                orderItem.setQuantity(quantity);
+                orderItem.setUnitPrice(BigDecimal.valueOf(unitPrice));
+                
+                // Add serial numbers to order item
+                List<String> serialNumbers = assignedItems.stream()
+                    .map(item -> item.get("serialNumber"))
+                    .collect(Collectors.toList());
+                orderItem.setSerialNumbers(serialNumbers);
+                
+                order.setItems(Arrays.asList(orderItem));
+                
+                // Save order
+                RetailerOrder savedOrder = retailerOrderRepository.save(order);
+                System.out.println("📝 Order record created: " + orderId);
+                System.out.println("📝 Order ID (MongoDB): " + savedOrder.getId());
+                System.out.println("📝 Order Type: " + saleType);
+                System.out.println("📝 Order Category: " + orderItem.getCategory());
+                System.out.println("📝 Order Items Count: " + savedOrder.getItems().size());
+                System.out.println("📝 First Item Type: " + savedOrder.getItems().get(0).getProductType());
+                System.out.println("📝 First Item Category: " + savedOrder.getItems().get(0).getCategory());
+            } catch (Exception e) {
+                System.err.println("⚠️ Failed to create order record: " + e.getMessage());
+                e.printStackTrace();
+                throw new RuntimeException("Failed to save order: " + e.getMessage());
+            }
+            
+            // Update retailer credit or kickback based on payment mode
+            // Note: eSIM sales are handled separately via /admin/stock/esims/send-qr endpoint
+            try {
+                System.out.println("🔍 Looking for limits for retailer ID: " + retailer.getId());
+                System.out.println("🔍 Payment mode: " + paymentMode);
+                System.out.println("🔍 Sale amount: " + totalAmount);
+                
+                BigDecimal saleAmount = BigDecimal.valueOf(totalAmount);
+                
+                if ("kickback".equalsIgnoreCase(paymentMode)) {
+                    // Deduct from Kickback Bonus Limit
+                    Optional<RetailerKickbackLimit> kickbackLimitOpt = retailerKickbackLimitRepository.findByRetailerId(retailer.getId());
+                    
+                    if (kickbackLimitOpt.isPresent()) {
+                        RetailerKickbackLimit kickbackLimit = kickbackLimitOpt.get();
+                        
+                        System.out.println("✅ Found RetailerKickbackLimit: " + kickbackLimit.getId());
+                        System.out.println("📊 Before update - Kickback Used: " + kickbackLimit.getUsedKickback() + ", Available: " + kickbackLimit.getAvailableKickback());
+                        
+                        // Use the entity's helper method to deduct kickback
+                        kickbackLimit.useKickback(saleAmount);
+                        
+                        // Save updated kickback limit
+                        RetailerKickbackLimit savedKickback = retailerKickbackLimitRepository.save(kickbackLimit);
+                        System.out.println("✅ Kickback limit updated successfully. ID: " + savedKickback.getId());
+                        System.out.println("📊 After save - Kickback Used: " + savedKickback.getUsedKickback() + ", Available: " + savedKickback.getAvailableKickback());
+                    } else {
+                        System.out.println("⚠️ No kickback limit found for retailer ID: " + retailer.getId());
+                    }
+                } else {
+                    // Deduct from Credit Limit (default)
+                    Optional<RetailerLimit> limitOpt = retailerLimitRepository.findByRetailer_Id(retailer.getId());
+                    
+                    if (limitOpt.isPresent()) {
+                        RetailerLimit limit = limitOpt.get();
+                        
+                        System.out.println("✅ Found RetailerLimit: " + limit.getId());
+                        System.out.println("📊 Before update - ePIN Used: " + limit.getUsedCredit() + ", ePIN Available: " + limit.getAvailableCredit());
+                        
+                        // Update regular credit
+                        BigDecimal currentUsed = limit.getUsedCredit() != null ? limit.getUsedCredit() : BigDecimal.ZERO;
+                        limit.setUsedCredit(currentUsed.add(saleAmount));
+                        
+                        BigDecimal currentAvailable = limit.getAvailableCredit() != null ? limit.getAvailableCredit() : BigDecimal.ZERO;
+                        limit.setAvailableCredit(currentAvailable.subtract(saleAmount));
+                        
+                        System.out.println("💰 ePIN Credit updated - Used: " + limit.getUsedCredit() + ", Available: " + limit.getAvailableCredit());
+                        
+                        // Save updated limit
+                        RetailerLimit savedLimit = retailerLimitRepository.save(limit);
+                        System.out.println("✅ RetailerLimit saved successfully. ID: " + savedLimit.getId());
+                        System.out.println("📊 After save - ePIN Used: " + savedLimit.getUsedCredit() + ", ePIN Available: " + savedLimit.getAvailableCredit());
+                    } else {
+                        System.out.println("⚠️ No credit limit found for retailer ID: " + retailer.getId() + " - skipping credit update");
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("⚠️ Failed to update payment limit: " + e.getMessage());
+                e.printStackTrace();
+                // Continue with the sale even if limit update fails
+            }
             
             // Prepare response
             Map<String, Object> saleData = new HashMap<>();
             saleData.put("saleId", orderId);
-            saleData.put("pins", assignedPins);
+            saleData.put("items", assignedItems);
+            saleData.put("pins", assignedItems); // Add pins alias for frontend compatibility
             saleData.put("bundleName", bundleName);
             saleData.put("quantity", quantity);
             saleData.put("totalAmount", totalAmount);
@@ -1065,6 +1307,7 @@ public class RetailerController {
             response.put("success", true);
             response.put("message", "Sale completed successfully");
             response.put("data", saleData);
+            response.put("pins", assignedItems); // Also add pins at root level for frontend compatibility
             
             return ResponseEntity.ok(response);
             
@@ -1079,6 +1322,420 @@ public class RetailerController {
             
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
+    }
+
+    /**
+     * Get retailer's own sales details with serial numbers
+     */
+    @GetMapping("/sales")
+    public ResponseEntity<Map<String, Object>> getMySales(Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            
+            Map<String, Object> salesData = adminService.getRetailerSalesDetails(retailer.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", salesData);
+            response.put("message", "Sales details fetched successfully");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to fetch sales: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Get retailer's eSIM POS sales report with ICCID and customer details
+     */
+    @GetMapping("/esim-sales-report")
+    public ResponseEntity<Map<String, Object>> getEsimSalesReport(
+            Authentication authentication,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+
+            Map<String, Object> reportData = adminService.getRetailerEsimSalesReport(retailer.getId(), startDate, endDate);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", reportData);
+            response.put("message", "eSIM sales report fetched successfully");
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to fetch eSIM sales report: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Print receipt for an order
+     */
+    @PostMapping("/orders/{orderId}/print")
+    public ResponseEntity<?> printReceipt(@PathVariable String orderId, Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            
+            Optional<Order> orderOptional = orderRepository.findById(orderId);
+            if (!orderOptional.isPresent()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("success", false, "message", "Order not found"));
+            }
+            
+            Order order = orderOptional.get();
+            
+            // Verify retailer owns this order
+            User retailerUser = order.getRetailer();
+            if (retailerUser == null || !retailerUser.getId().equals(retailer.getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("success", false, "message", "Unauthorized access to this order"));
+            }
+            
+            // Generate receipt data
+            Map<String, Object> receipt = new HashMap<>();
+            receipt.put("orderId", order.getId());
+            receipt.put("timestamp", order.getCreatedDate());
+            receipt.put("retailerName", retailer.getFullName() != null ? retailer.getFullName() : retailer.getUsername());
+            receipt.put("retailerEmail", retailer.getEmail());
+            receipt.put("retailerPhone", retailer.getMobileNumber());
+            receipt.put("customerName", order.getCustomerName());
+            receipt.put("customerEmail", order.getCustomerEmail());
+            receipt.put("customerPhone", order.getCustomerPhone());
+            receipt.put("productName", order.getProductName());
+            receipt.put("productId", order.getProduct() != null ? order.getProduct().getId() : "N/A");
+            receipt.put("quantity", order.getQuantity());
+            receipt.put("unitPrice", order.getAmount());
+            receipt.put("totalAmount", order.getAmount());
+            receipt.put("status", order.getStatus());
+            
+            // Add eSIM-specific fields if applicable
+            Map<String, Object> metadata = order.getMetadata() != null ? new HashMap<>(order.getMetadata()) : new HashMap<>();
+            if (!metadata.isEmpty() && metadata.containsKey("isEsim")) {
+                receipt.put("isEsim", true);
+                receipt.put("activationCode", metadata.getOrDefault("activationCode", "N/A"));
+                receipt.put("smDpAddress", metadata.getOrDefault("smDpAddress", "N/A"));
+                receipt.put("qrCodeUrl", metadata.getOrDefault("qrCodeUrl", ""));
+                receipt.put("iccid", metadata.getOrDefault("iccid", ""));
+                receipt.put("apnSettings", metadata.getOrDefault("apnSettings", ""));
+            }
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Receipt generated successfully");
+            response.put("receipt", receipt);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to generate receipt: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Print eSIM receipt with QR code and activation details
+     */
+    @PostMapping("/orders/{orderId}/print-esim")
+    public ResponseEntity<?> printEsimReceipt(@PathVariable String orderId, 
+                                             @RequestParam(required = false) String qrCodeBase64,
+                                             Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            
+            Optional<Order> orderOptional = orderRepository.findById(orderId);
+            if (!orderOptional.isPresent()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("success", false, "message", "Order not found"));
+            }
+            
+            Order order = orderOptional.get();
+            
+            // Verify retailer owns this order
+            User retailerUser = order.getRetailer();
+            if (retailerUser == null || !retailerUser.getId().equals(retailer.getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("success", false, "message", "Unauthorized access to this order"));
+            }
+            
+            // Generate eSIM receipt with full template
+            Map<String, Object> esimReceipt = new HashMap<>();
+            esimReceipt.put("orderId", order.getId());
+            esimReceipt.put("date", order.getCreatedDate());
+            esimReceipt.put("bundleName", order.getProductName());
+            esimReceipt.put("bundlePrice", order.getAmount());
+            esimReceipt.put("customerName", order.getCustomerName());
+            esimReceipt.put("customerEmail", order.getCustomerEmail());
+            esimReceipt.put("customerPhone", order.getCustomerPhone());
+            esimReceipt.put("retailerName", retailer.getFullName() != null ? retailer.getFullName() : retailer.getUsername());
+            esimReceipt.put("retailerEmail", retailer.getEmail());
+            esimReceipt.put("retailerPhone", retailer.getMobileNumber());
+            
+            // eSIM-specific details
+            Map<String, Object> metadata = order.getMetadata() != null ? new HashMap<>(order.getMetadata()) : new HashMap<>();
+            if (!metadata.isEmpty()) {
+                esimReceipt.put("activationCode", metadata.getOrDefault("activationCode", ""));
+                esimReceipt.put("smDpAddress", metadata.getOrDefault("smDpAddress", ""));
+                esimReceipt.put("iccid", metadata.getOrDefault("iccid", ""));
+                esimReceipt.put("apnSettings", metadata.getOrDefault("apnSettings", ""));
+                esimReceipt.put("qrCodeBase64", qrCodeBase64 != null ? qrCodeBase64 : metadata.getOrDefault("qrCodeUrl", ""));
+            }
+            
+            // Generate HTML content for printing
+            String htmlContent = generateEsimReceiptHTML(esimReceipt);
+            esimReceipt.put("htmlContent", htmlContent);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "eSIM receipt generated successfully");
+            response.put("receipt", esimReceipt);
+            response.put("htmlContent", htmlContent);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to generate eSIM receipt: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Print multiple receipts for bulk orders
+     */
+    @PostMapping("/orders/print-bulk")
+    public ResponseEntity<?> printBulkReceipts(@RequestBody List<String> orderIds, Authentication authentication) {
+        try {
+            User retailer = getUserFromAuthentication(authentication);
+            List<Map<String, Object>> receipts = new ArrayList<>();
+            
+            for (String orderId : orderIds) {
+                Optional<Order> orderOptional = orderRepository.findById(orderId);
+                if (orderOptional.isPresent()) {
+                    Order order = orderOptional.get();
+                    
+                    // Verify retailer owns this order
+                    User retailerUser = order.getRetailer();
+                    if (retailerUser == null || !retailerUser.getId().equals(retailer.getId())) {
+                        continue;
+                    }
+                    
+                    Map<String, Object> receipt = new HashMap<>();
+                    receipt.put("orderId", order.getId());
+                    receipt.put("timestamp", order.getCreatedDate());
+                    receipt.put("retailerName", retailer.getFullName() != null ? retailer.getFullName() : retailer.getUsername());
+                    receipt.put("customerName", order.getCustomerName());
+                    receipt.put("customerEmail", order.getCustomerEmail());
+                    receipt.put("customerPhone", order.getCustomerPhone());
+                    receipt.put("productName", order.getProductName());
+                    receipt.put("quantity", order.getQuantity());
+                    receipt.put("unitPrice", order.getAmount());
+                    receipt.put("totalAmount", order.getAmount());
+                    receipt.put("status", order.getStatus());
+                    
+                    receipts.add(receipt);
+                }
+            }
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Bulk receipts generated successfully");
+            response.put("count", receipts.size());
+            response.put("receipts", receipts);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", "Failed to generate receipts: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Helper method to generate eSIM receipt HTML with Telelys template
+     */
+    private String generateEsimReceiptHTML(Map<String, Object> receipt) {
+        String qrCodeHtml = "";
+        if (receipt.containsKey("qrCodeBase64") && receipt.get("qrCodeBase64") != null) {
+            String qrCode = receipt.get("qrCodeBase64").toString();
+            if (!qrCode.isEmpty()) {
+                qrCodeHtml = "<div style=\"background: #F9FAFB; border-radius: 8px; padding: 20px; margin: 30px 0; text-align: center;\">" +
+                            "<h3 style=\"color: #1F2937; margin-bottom: 15px;\">Your eSIM QR Code</h3>" +
+                            "<img src=\"" + qrCode + "\" alt=\"eSIM QR Code\" style=\"max-width: 300px; height: auto; border-radius: 8px;\">" +
+                            "</div>";
+            }
+        }
+        
+        return "<!DOCTYPE html>" +
+            "<html lang=\"no\">" +
+            "<head>" +
+            "<meta charset=\"UTF-8\">" +
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">" +
+            "<title>eSIM Receipt - Telelys</title>" +
+            "<style>" +
+            "body { font-family: 'Arial', sans-serif; margin: 0; padding: 20px; background: white; }" +
+            ".receipt { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border: 1px solid #ddd; border-radius: 8px; }" +
+            ".header { text-align: center; border-bottom: 2px solid #2563EB; padding-bottom: 20px; margin-bottom: 20px; }" +
+            ".logo { font-size: 28px; font-weight: bold; color: #2563EB; margin-bottom: 10px; }" +
+            ".company { font-size: 14px; color: #666; margin-bottom: 20px; }" +
+            ".title { font-size: 24px; font-weight: bold; color: #1F2937; margin: 20px 0; }" +
+            ".info-section { background: #F9FAFB; padding: 15px; margin: 15px 0; border-radius: 8px; }" +
+            ".info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #E5E7EB; }" +
+            ".info-label { color: #6B7280; font-weight: 600; }" +
+            ".info-value { color: #1F2937; font-weight: 600; }" +
+            ".activation { background: #FEF3C7; border: 1px solid #FCD34D; padding: 15px; margin: 20px 0; border-radius: 8px; }" +
+            ".activation h3 { margin-top: 0; color: #92400E; }" +
+            ".step { padding: 10px 0; margin: 10px 0; border-bottom: 1px solid #E5E7EB; }" +
+            ".step-title { font-weight: bold; color: #1F2937; }" +
+            ".step-content { color: #6B7280; font-size: 14px; margin-top: 5px; }" +
+            ".qr-section { text-align: center; margin: 30px 0; }" +
+            ".code-box { background: #F3F4F6; padding: 15px; margin: 10px 0; border-radius: 6px; font-family: monospace; font-size: 13px; word-break: break-all; }" +
+            ".footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB; color: #6B7280; font-size: 12px; }" +
+            ".print-only { display: none; }" +
+            "@media print { .print-only { display: block; } body { margin: 0; padding: 0; } .receipt { border: none; box-shadow: none; } }" +
+            "</style>" +
+            "</head>" +
+            "<body>" +
+            "<div class=\"receipt\">" +
+            "  <div class=\"header\">" +
+            "    <div class=\"logo\">Telelys</div>" +
+            "    <div class=\"company\">Thank you for choosing Telelys</div>" +
+            "  </div>" +
+            
+            "  <div class=\"title\">eSIM Activation Receipt</div>" +
+            
+            "  <div class=\"info-section\">" +
+            "    <h3 style=\"margin-top: 0; color: #1F2937;\">Your eSIM Information</h3>" +
+            "    <div class=\"info-row\">" +
+            "      <span class=\"info-label\">Date:</span>" +
+            "      <span class=\"info-value\">" + formatDate(receipt.get("date")) + "</span>" +
+            "    </div>" +
+            "    <div class=\"info-row\">" +
+            "      <span class=\"info-label\">Order ID:</span>" +
+            "      <span class=\"info-value\">" + receipt.getOrDefault("orderId", "N/A") + "</span>" +
+            "    </div>" +
+            "    <div class=\"info-row\">" +
+            "      <span class=\"info-label\">Bundle Name:</span>" +
+            "      <span class=\"info-value\">" + receipt.getOrDefault("bundleName", "N/A") + "</span>" +
+            "    </div>" +
+            "    <div class=\"info-row\">" +
+            "      <span class=\"info-label\">Bundle Price:</span>" +
+            "      <span class=\"info-value\">NOK " + receipt.getOrDefault("bundlePrice", "0") + "</span>" +
+            "    </div>" +
+            "  </div>" +
+            
+            "  <div class=\"info-section\">" +
+            "    <h3 style=\"margin-top: 0; color: #1F2937;\">Customer Details</h3>" +
+            "    <div class=\"info-row\">" +
+            "      <span class=\"info-label\">Name:</span>" +
+            "      <span class=\"info-value\">" + receipt.getOrDefault("customerName", "N/A") + "</span>" +
+            "    </div>" +
+            "    <div class=\"info-row\">" +
+            "      <span class=\"info-label\">Email:</span>" +
+            "      <span class=\"info-value\">" + receipt.getOrDefault("customerEmail", "N/A") + "</span>" +
+            "    </div>" +
+            "    <div class=\"info-row\" style=\"border-bottom: none;\">" +
+            "      <span class=\"info-label\">Phone:</span>" +
+            "      <span class=\"info-value\">" + receipt.getOrDefault("customerPhone", "N/A") + "</span>" +
+            "    </div>" +
+            "  </div>" +
+            
+            "  <div class=\"activation\">" +
+            "    <h3>⚠️ Important Notes Before Setting Up</h3>" +
+            "    <div class=\"step\">" +
+            "      <div class=\"step-title\">1. Internet Connection Required</div>" +
+            "      <div class=\"step-content\">eSIM can only be installed when there is an internet connection.</div>" +
+            "    </div>" +
+            "    <div class=\"step\">" +
+            "      <div class=\"step-title\">2. Do Not Delete eSIM</div>" +
+            "      <div class=\"step-content\">Please do not delete eSIM after activation. The eSIM QR code can only be activated once.</div>" +
+            "    </div>" +
+            "    <div class=\"step\">" +
+            "      <div class=\"step-title\">3. Single Device Installation</div>" +
+            "      <div class=\"step-content\">eSIM cannot be transferred to another device after installation.</div>" +
+            "    </div>" +
+            "  </div>" +
+            
+            "  <div class=\"info-section\">" +
+            "    <h3 style=\"margin-top: 0; color: #1F2937;\">Activation Information</h3>" +
+            "    <div class=\"info-row\">" +
+            "      <span class=\"info-label\">SM-DP+ Address:</span>" +
+            "    </div>" +
+            "    <div class=\"code-box\">" + receipt.getOrDefault("smDpAddress", "N/A") + "</div>" +
+            "    <div class=\"info-row\">" +
+            "      <span class=\"info-label\">Activation Code:</span>" +
+            "    </div>" +
+            "    <div class=\"code-box\">" + receipt.getOrDefault("activationCode", "N/A") + "</div>" +
+            "    <div class=\"info-row\">" +
+            "      <span class=\"info-label\">ICCID:</span>" +
+            "    </div>" +
+            "    <div class=\"code-box\">" + receipt.getOrDefault("iccid", "N/A") + "</div>" +
+            "  </div>" +
+            
+            qrCodeHtml +
+            
+            "  <div class=\"info-section\">" +
+            "    <h3 style=\"margin-top: 0; color: #1F2937;\">Setup Instructions</h3>" +
+            "    <div style=\"margin: 15px 0;\">" +
+            "      <div class=\"step-title\" style=\"color: #2563EB;\">For iOS:</div>" +
+            "      <div class=\"step-content\">1. Go to Settings > Cellular (or Mobile Data)<br>" +
+            "      2. Click Add eSIM or Add Cellular Plan > Choose Use QR Code<br>" +
+            "      3. Scan the QR code above or enter details manually<br>" +
+            "      4. Click Next to finish installation<br>" +
+            "      5. Register your SIM: <a href='https://www.lyca-mobile.no/en/registration/'>https://www.lyca-mobile.no/en/registration/</a></div>" +
+            "    </div>" +
+            "    <div style=\"margin: 15px 0;\">" +
+            "      <div class=\"step-title\" style=\"color: #2563EB;\">For Android:</div>" +
+            "      <div class=\"step-content\">1. Go to Settings > Connections<br>" +
+            "      2. Choose Add eSIM > Choose Use QR Code<br>" +
+            "      3. Scan the QR code above or enter details manually<br>" +
+            "      4. Click Next to finish installation<br>" +
+            "      5. Register your SIM: <a href='https://www.lyca-mobile.no/en/registration/'>https://www.lyca-mobile.no/en/registration/</a></div>" +
+            "    </div>" +
+            "  </div>" +
+            
+            "  <div class=\"info-section\">" +
+            "    <h3 style=\"margin-top: 0; color: #1F2937;\">Troubleshooting</h3>" +
+            "    <div class=\"step\">" +
+            "      <div class=\"step-title\">Unable to Scan QR Code</div>" +
+            "      <div class=\"step-content\">Place your phone camera opposite the QR Code and ensure the camera captures the whole code.</div>" +
+            "    </div>" +
+            "    <div class=\"step\">" +
+            "      <div class=\"step-title\">eSIM in Activating Status</div>" +
+            "      <div class=\"step-content\">You need to travel to a country supported by your eSIM to start using it.</div>" +
+            "    </div>" +
+            "    <div class=\"step\">" +
+            "      <div class=\"step-title\">No Signal After Installation</div>" +
+            "      <div class=\"step-content\">Enable Data Roaming mode and Cellular Data mode on your phone.</div>" +
+            "    </div>" +
+            "    <div class=\"step\">" +
+            "      <div class=\"step-title\">Network Signal but No Internet</div>" +
+            "      <div class=\"step-content\">Check APN settings and configure:<br><code>" + receipt.getOrDefault("apnSettings", "Contact support") + "</code></div>" +
+            "    </div>" +
+            "  </div>" +
+            
+            "  <div class=\"footer\">" +
+            "    <p><strong>Need Help?</strong></p>" +
+            "    <p>💬 WhatsApp: " + receipt.getOrDefault("retailerPhone", "+47 XXX XXX XXX") + "</p>" +
+            "    <p>📧 Email: " + receipt.getOrDefault("retailerEmail", "support@telelys.no") + "</p>" +
+            "    <p style=\"margin-top: 20px; border-top: 1px solid #E5E7EB; padding-top: 15px;\">" +
+            "      Thank you for choosing Telelys!<br>" +
+            "      Please keep this receipt for your records." +
+            "    </p>" +
+            "  </div>" +
+            "</div>" +
+            "</body>" +
+            "</html>";
+    }
+
+    /**
+     * Helper method to format date
+     */
+    private String formatDate(Object dateObj) {
+        if (dateObj == null) return "N/A";
+        return dateObj.toString();
     }
 
     public static class UpdateOrderStatusRequest {

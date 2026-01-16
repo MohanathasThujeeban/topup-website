@@ -14,7 +14,10 @@ const InvoiceAndSales = () => {
   const [selectedRetailer, setSelectedRetailer] = useState(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showSalesModal, setShowSalesModal] = useState(false);
   const [invoiceData, setInvoiceData] = useState(null);
+  const [salesData, setSalesData] = useState(null);
+  const [loadingSalesData, setLoadingSalesData] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all'); // all, limit-reached, pending, paid
   const [sendingInvoice, setSendingInvoice] = useState(false);
@@ -206,6 +209,146 @@ const InvoiceAndSales = () => {
     const invoice = generateInvoice(retailer);
     setInvoiceData(invoice);
     setShowPreviewModal(true);
+  };
+
+  const handleViewSales = async (retailer) => {
+    try {
+      setLoadingSalesData(true);
+      setShowSalesModal(true);
+      setSelectedRetailer(retailer);
+      
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/admin/retailers/${retailer.retailerId}/sales`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        setSalesData(data.data);
+      } else {
+        // Demo data if API is not available
+        setSalesData({
+          retailerId: retailer.retailerId,
+          retailerName: retailer.retailerName,
+          retailerEmail: retailer.retailerEmail,
+          totalOrders: 0,
+          totalSales: 0,
+          totalEsimSold: 0,
+          totalEpinSold: 0,
+          orders: []
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching sales data:', error);
+      // Demo data on error
+      setSalesData({
+        retailerId: retailer.retailerId,
+        retailerName: retailer.retailerName,
+        retailerEmail: retailer.retailerEmail,
+        totalOrders: 0,
+        totalSales: 0,
+        totalEsimSold: 0,
+        totalEpinSold: 0,
+        orders: []
+      });
+    } finally {
+      setLoadingSalesData(false);
+    }
+  };
+
+  const handleDownloadSalesPDF = (data) => {
+    if (!data) return;
+    
+    const printWindow = window.open('', '_blank');
+    const html = generateSalesPDFHTML(data);
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const generateSalesPDFHTML = (data) => {
+    let itemsHTML = '';
+    
+    if (data.orders && data.orders.length > 0) {
+      data.orders.forEach(order => {
+        if (order.items && order.items.length > 0) {
+          order.items.forEach(item => {
+            const serialNums = item.serialNumbers && item.serialNumbers.length > 0 
+              ? item.serialNumbers.join(', ') 
+              : item.serialNumber || 'Not assigned';
+            
+            itemsHTML += `
+              <tr>
+                <td style="padding:8px;border:1px solid #ddd;">${new Date(order.date).toLocaleDateString()}</td>
+                <td style="padding:8px;border:1px solid #ddd;">${order.orderNumber}</td>
+                <td style="padding:8px;border:1px solid #ddd;">${item.productName}<br/><small>${item.productType}</small></td>
+                <td style="padding:8px;border:1px solid #ddd;"><span style="background:${item.type === 'eSIM' ? '#a855f7' : '#fb923c'};color:white;padding:2px 8px;border-radius:4px;">${item.type}</span></td>
+                <td style="padding:8px;border:1px solid #ddd;">${item.quantity}</td>
+                <td style="padding:8px;border:1px solid #ddd;font-family:monospace;font-size:11px;">${serialNums}</td>
+                <td style="padding:8px;border:1px solid #ddd;text-align:right;">NOK ${(item.unitPrice * item.quantity).toLocaleString()}</td>
+              </tr>
+            `;
+          });
+        }
+      });
+    }
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Sales Report - ${data.retailerName}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .company-name { font-size: 24px; font-weight: bold; color: #4F46E5; }
+          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          th { background: #4F46E5; color: white; padding: 10px; text-align: left; }
+          @media print { button { display: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="company-name">EasyTopup.no - Admin Report</div>
+          <h2>Retailer Sales Report</h2>
+          <p><strong>Retailer:</strong> ${data.retailerName}</p>
+          <p><strong>Email:</strong> ${data.retailerEmail}</p>
+          <p><strong>Report Date:</strong> ${new Date().toLocaleDateString()}</p>
+        </div>
+        
+        <div style="background:#f3f4f6;padding:15px;margin-bottom:20px;border-radius:8px;">
+          <h3 style="margin-top:0;">Summary</h3>
+          <p><strong>Total Orders:</strong> ${data.totalOrders}</p>
+          <p><strong>Total Sales:</strong> NOK ${typeof data.totalSales === 'number' ? data.totalSales.toLocaleString() : data.totalSales}</p>
+          <p><strong>eSIM Sold:</strong> ${data.totalEsimSold}</p>
+          <p><strong>ePIN Sold:</strong> ${data.totalEpinSold}</p>
+        </div>
+
+        <h3>Detailed Sales</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Order ID</th>
+              <th>Product</th>
+              <th>Type</th>
+              <th>Qty</th>
+              <th>Serial Number</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHTML || '<tr><td colspan="7" style="text-align:center;padding:20px;">No sales data</td></tr>'}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
   };
 
   const handleDownloadInvoice = () => {
@@ -466,7 +609,12 @@ const InvoiceAndSales = () => {
                 <tr key={retailer.retailerId} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <div>
-                      <p className="font-semibold text-gray-900">{retailer.retailerName}</p>
+                      <button
+                        onClick={() => handleViewSales(retailer)}
+                        className="font-semibold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer text-left"
+                      >
+                        {retailer.retailerName}
+                      </button>
                       <p className="text-sm text-gray-500">{retailer.retailerEmail}</p>
                     </div>
                   </td>
@@ -722,6 +870,191 @@ const InvoiceAndSales = () => {
               </button>
               <button
                 onClick={() => setShowPreviewModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sales Details Modal */}
+      {showSalesModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Package className="text-white" size={28} />
+                <div>
+                  <h2 className="text-xl font-bold text-white">Sales Details</h2>
+                  {salesData && (
+                    <p className="text-indigo-100 text-sm">{salesData.retailerName}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSalesModal(false);
+                  setSalesData(null);
+                }}
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
+              {loadingSalesData ? (
+                <div className="flex items-center justify-center py-20">
+                  <div className="text-center">
+                    <RefreshCw className="animate-spin mx-auto mb-4 text-indigo-600" size={48} />
+                    <p className="text-gray-600">Loading sales data...</p>
+                  </div>
+                </div>
+              ) : salesData ? (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                      <p className="text-sm text-blue-600 font-medium">Total Orders</p>
+                      <p className="text-2xl font-bold text-blue-900">{salesData.totalOrders}</p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                      <p className="text-sm text-green-600 font-medium">Total Sales</p>
+                      <p className="text-2xl font-bold text-green-900">
+                        NOK {typeof salesData.totalSales === 'number' 
+                          ? salesData.totalSales.toLocaleString() 
+                          : salesData.totalSales}
+                      </p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                      <p className="text-sm text-purple-600 font-medium">eSIM Sold</p>
+                      <p className="text-2xl font-bold text-purple-900">{salesData.totalEsimSold}</p>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                      <p className="text-sm text-orange-600 font-medium">ePIN Sold</p>
+                      <p className="text-2xl font-bold text-orange-900">{salesData.totalEpinSold}</p>
+                    </div>
+                  </div>
+
+                  {/* Orders Table */}
+                  <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                      <h3 className="font-bold text-gray-900">Order History</h3>
+                    </div>
+                    
+                    {salesData.orders && salesData.orders.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-100 border-b border-gray-200">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Date</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Order ID</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Product</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Type</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Qty</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Serial Number</th>
+                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {salesData.orders.map((order) => (
+                              order.items && order.items.length > 0 ? (
+                                order.items.map((item, itemIndex) => (
+                                  <tr key={`${order.orderId}-${itemIndex}`} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3 text-sm text-gray-700">
+                                      {new Date(order.date).toLocaleDateString('en-NO', {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric'
+                                      })}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <span className="text-sm font-mono text-indigo-600">
+                                        {order.orderNumber}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <div>
+                                        <p className="text-sm font-medium text-gray-900">{item.productName}</p>
+                                        <p className="text-xs text-gray-500">{item.productType}</p>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                        item.type === 'eSIM' 
+                                          ? 'bg-purple-100 text-purple-800' 
+                                          : 'bg-orange-100 text-orange-800'
+                                      }`}>
+                                        {item.type}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-700">{item.quantity}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">
+                                      {item.serialNumbers && item.serialNumbers.length > 0 ? (
+                                        <div className="font-mono text-xs space-y-1">
+                                          {item.serialNumbers.map((serial, idx) => (
+                                            <div key={idx} className="bg-gray-100 px-2 py-1 rounded">
+                                              {serial}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400">{item.serialNumber || 'Not assigned'}</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">
+                                      NOK {(item.unitPrice * item.quantity).toLocaleString()}
+                                    </td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr key={order.orderId}>
+                                  <td colSpan="7" className="px-4 py-3 text-sm text-gray-500 text-center">
+                                    No items in this order
+                                  </td>
+                                </tr>
+                              )
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="px-4 py-12 text-center">
+                        <Package className="mx-auto mb-3 text-gray-400" size={48} />
+                        <p className="text-gray-600 font-medium">No orders found</p>
+                        <p className="text-sm text-gray-500 mt-1">This retailer hasn't made any purchases yet.</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="px-4 py-12 text-center">
+                  <AlertCircle className="mx-auto mb-3 text-gray-400" size={48} />
+                  <p className="text-gray-600 font-medium">Unable to load sales data</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex gap-3 justify-end border-t border-gray-200">
+              {salesData && (
+                <button
+                  onClick={() => handleDownloadSalesPDF(salesData)}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                >
+                  <Download size={18} />
+                  Download PDF
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setShowSalesModal(false);
+                  setSalesData(null);
+                }}
                 className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
               >
                 Close

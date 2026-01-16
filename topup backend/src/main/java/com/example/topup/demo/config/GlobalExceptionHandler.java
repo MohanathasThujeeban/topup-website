@@ -2,6 +2,7 @@ package com.example.topup.demo.config;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -15,6 +16,27 @@ import java.util.*;
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
+        System.err.println("❌ JSON parsing error: " + ex.getMessage());
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", false);
+        response.put("message", "Invalid JSON request body");
+        response.put("error", ex.getMessage());
+        response.put("hint", "Ensure all required fields are properly formatted as JSON");
+        
+        // Log detailed error
+        Throwable cause = ex.getCause();
+        if (cause != null) {
+            System.err.println("   Root cause: " + cause.getMessage());
+            System.err.println("   Type: " + cause.getClass().getName());
+        }
+        ex.printStackTrace();
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+    
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ResponseEntity<Map<String, Object>> handleValidationExceptions(MethodArgumentNotValidException ex) {

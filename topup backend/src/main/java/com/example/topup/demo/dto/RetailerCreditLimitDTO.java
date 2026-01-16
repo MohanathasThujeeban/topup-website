@@ -22,6 +22,12 @@ public class RetailerCreditLimitDTO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     
+    // eSIM Credit Limit Management (separate from general credit)
+    private BigDecimal esimCreditLimit;
+    private BigDecimal esimAvailableCredit;
+    private BigDecimal esimUsedCredit;
+    private Double esimCreditUsagePercentage;
+    
     // Unit Limit Management
     private Integer unitLimit;
     private Integer usedUnits;
@@ -158,6 +164,39 @@ public class RetailerCreditLimitDTO {
     
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+    
+    // eSIM Credit Limit Getters and Setters
+    public BigDecimal getEsimCreditLimit() {
+        return esimCreditLimit;
+    }
+    
+    public void setEsimCreditLimit(BigDecimal esimCreditLimit) {
+        this.esimCreditLimit = esimCreditLimit;
+    }
+    
+    public BigDecimal getEsimAvailableCredit() {
+        return esimAvailableCredit;
+    }
+    
+    public void setEsimAvailableCredit(BigDecimal esimAvailableCredit) {
+        this.esimAvailableCredit = esimAvailableCredit;
+    }
+    
+    public BigDecimal getEsimUsedCredit() {
+        return esimUsedCredit;
+    }
+    
+    public void setEsimUsedCredit(BigDecimal esimUsedCredit) {
+        this.esimUsedCredit = esimUsedCredit;
+    }
+    
+    public Double getEsimCreditUsagePercentage() {
+        return esimCreditUsagePercentage;
+    }
+    
+    public void setEsimCreditUsagePercentage(Double esimCreditUsagePercentage) {
+        this.esimCreditUsagePercentage = esimCreditUsagePercentage;
     }
     
     // Unit Limit Getters and Setters

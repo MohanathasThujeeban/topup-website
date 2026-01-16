@@ -126,6 +126,9 @@ public class RetailerOrder {
         
         private BigDecimal retailPrice; // Original retail price
         
+        // Serial numbers for ePINs/eSIMs
+        private List<String> serialNumbers;
+        
         // Product specifications
         private String dataAmount;
         private String validity;
@@ -167,6 +170,9 @@ public class RetailerOrder {
         
         public String getValidity() { return validity; }
         public void setValidity(String validity) { this.validity = validity; }
+        
+        public List<String> getSerialNumbers() { return serialNumbers; }
+        public void setSerialNumbers(List<String> serialNumbers) { this.serialNumbers = serialNumbers; }
         
         public BigDecimal getTotalPrice() {
             return unitPrice.multiply(BigDecimal.valueOf(quantity));

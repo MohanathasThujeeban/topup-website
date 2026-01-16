@@ -1,358 +1,437 @@
 <!DOCTYPE html>
-<html lang="no">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Lycamobile PIN</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    body {
-      font-family: 'Arial', 'Helvetica', sans-serif;
-      line-height: 1.6;
-      color: #1F2937;
-      background-color: #F9FAFB;
-    }
-    .email-container {
-      max-width: 600px;
-      margin: 0 auto;
-      background: linear-gradient(135deg, #2563EB 0%, #10B981 100%);
-      padding: 20px;
-    }
-    .email-content {
-      background: white;
-      border-radius: 12px;
-      overflow: hidden;
-    }
-    .email-header {
-      background: linear-gradient(135deg, #2563EB 0%, #10B981 100%);
-      padding: 30px;
-      text-align: center;
-    }
-    .logo {
-      background: white;
-      width: 60px;
-      height: 60px;
-      border-radius: 12px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 32px;
-      font-weight: bold;
-      color: #2563EB;
-      margin-bottom: 15px;
-    }
-    .logo-text {
-      color: white;
-      font-size: 28px;
-      font-weight: bold;
-      margin-top: 10px;
-    }
-    .email-body {
-      padding: 40px 30px;
-    }
-    h1 {
-      color: #1F2937;
-      font-size: 24px;
-      margin-bottom: 20px;
-    }
-    p {
-      color: #4B5563;
-      margin-bottom: 15px;
-      font-size: 16px;
-    }
-    .pin-box {
-      background: linear-gradient(135deg, #2563EB 0%, #10B981 100%);
-      border-radius: 12px;
-      padding: 30px;
-      text-align: center;
-      margin: 30px 0;
-    }
-    .pin-label {
-      color: white;
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 15px;
-    }
-    .pin-code {
-      background: white;
-      color: #2563EB;
-      font-size: 32px;
-      font-weight: bold;
-      font-family: 'Courier New', monospace;
-      padding: 20px;
-      border-radius: 8px;
-      letter-spacing: 2px;
-      margin: 15px 0;
-      word-break: break-all;
-    }
-    .copy-button {
-      background: white;
-      color: #2563EB;
-      border: none;
-      padding: 12px 30px;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-block;
-      margin-top: 10px;
-    }
-    .activation-steps {
-      background: #F9FAFB;
-      border-left: 4px solid #2563EB;
-      padding: 20px;
-      margin: 30px 0;
-      border-radius: 8px;
-    }
-    .activation-steps h2 {
-      color: #1F2937;
-      font-size: 20px;
-      margin-bottom: 15px;
-    }
-    .step {
-      margin-bottom: 15px;
-      padding-left: 30px;
-      position: relative;
-    }
-    .step-number {
-      position: absolute;
-      left: 0;
-      top: 0;
-      background: #2563EB;
-      color: white;
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      font-weight: bold;
-    }
-    .quick-links {
-      background: #FEF3C7;
-      border-radius: 8px;
-      padding: 20px;
-      margin: 30px 0;
-    }
-    .quick-links h3 {
-      color: #92400E;
-      font-size: 18px;
-      margin-bottom: 15px;
-    }
-    .link-item {
-      display: block;
-      color: #2563EB;
-      text-decoration: none;
-      padding: 10px 0;
-      font-weight: 500;
-    }
-    .link-item:hover {
-      text-decoration: underline;
-    }
-    .whatsapp-button {
-      background: #25D366;
-      color: white;
-      text-decoration: none;
-      padding: 15px 30px;
-      border-radius: 8px;
-      display: inline-block;
-      font-weight: 600;
-      margin: 10px 0;
-      font-size: 16px;
-    }
-    .order-details {
-      background: #F9FAFB;
-      border-radius: 8px;
-      padding: 20px;
-      margin: 30px 0;
-    }
-    .order-details h3 {
-      color: #1F2937;
-      font-size: 18px;
-      margin-bottom: 15px;
-    }
-    .order-item {
-      display: flex;
-      justify-content: space-between;
-      padding: 8px 0;
-      border-bottom: 1px solid #E5E7EB;
-    }
-    .order-item:last-child {
-      border-bottom: none;
-    }
-    .order-label {
-      color: #6B7280;
-      font-size: 14px;
-    }
-    .order-value {
-      color: #1F2937;
-      font-weight: 600;
-      font-size: 14px;
-    }
-    .email-footer {
-      background: #1F2937;
-      color: #9CA3AF;
-      padding: 30px;
-      text-align: center;
-    }
-    .footer-links {
-      margin: 20px 0;
-    }
-    .footer-link {
-      color: #9CA3AF;
-      text-decoration: none;
-      margin: 0 15px;
-      font-size: 14px;
-    }
-    .footer-link:hover {
-      color: #fff;
-    }
-    .social-icons {
-      margin: 20px 0;
-    }
-    .social-icon {
-      display: inline-block;
-      width: 36px;
-      height: 36px;
-      background: #374151;
-      border-radius: 50%;
-      margin: 0 8px;
-      line-height: 36px;
-      color: white;
-      text-decoration: none;
-    }
-    .social-icon:hover {
-      background: #2563EB;
-    }
-    @media only screen and (max-width: 600px) {
-      .email-body {
-        padding: 30px 20px;
-      }
-      .pin-code {
-        font-size: 24px;
-        padding: 15px;
-      }
-      h1 {
-        font-size: 20px;
-      }
-    }
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Your eSIM is Ready - Telelys</title>
+  <!--[if mso]>
+  <style type="text/css">
+    body, table, td {font-family: Arial, Helvetica, sans-serif !important;}
   </style>
+  <![endif]-->
 </head>
-<body>
-  <div class="email-container">
-    <div class="email-content">
-      <!-- Email Header -->
-      <div class="email-header">
-        <div class="logo">E</div>
-        <div class="logo-text">EasyTopup.no</div>
-      </div>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  
+  <!-- Wrapper Table -->
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f3f4f6;">
+    <tr>
+      <td style="padding: 20px 0;">
+        
+        <!-- Main Container -->
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" align="center" style="margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 36px; font-weight: 700; letter-spacing: -0.5px;">
+                Telelys
+              </h1>
+              <p style="margin: 15px 0 0; color: #e0e7ff; font-size: 18px; font-weight: 400;">
+                🎉 Your eSIM is Ready!
+              </p>
+            </td>
+          </tr>
 
-      <!-- Email Body -->
-      <div class="email-body">
-        <h1>Hi [Customer Name],</h1>
-        <p>Thank you for your order! Your Lycamobile ePIN is ready and waiting for you.</p>
+          <!-- Welcome Section -->
+          <tr>
+            <td style="padding: 40px 30px 30px;">
+              <h2 style="margin: 0 0 15px; color: #111827; font-size: 24px; font-weight: 600;">
+                Thank You for Choosing Telelys
+              </h2>
+              <p style="margin: 0; color: #6b7280; font-size: 16px; line-height: 1.6;">
+                Your eSIM has been successfully activated! Below you'll find all the details you need to set up your eSIM and start enjoying seamless connectivity.
+              </p>
+            </td>
+          </tr>
 
-        <!-- PIN Code Box -->
-        <div class="pin-box">
-          <div class="pin-label">Your PIN Code:</div>
-          <div class="pin-code">1234-5678-9101-1121</div>
-          <a href="#" class="copy-button">📋 Copy PIN</a>
-        </div>
+          <!-- Order Information -->
+          <tr>
+            <td style="padding: 0 30px 30px;">
+              <div style="background-color: #f9fafb; border-left: 4px solid #2563eb; border-radius: 8px; padding: 20px;">
+                <h3 style="margin: 0 0 15px; color: #111827; font-size: 18px; font-weight: 600;">
+                  📋 Your eSIM Information
+                </h3>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                  <tr>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                      <span style="color: #6b7280; font-size: 14px; font-weight: 500;">Date:</span>
+                    </td>
+                    <td style="padding: 8px 0; text-align: right; border-bottom: 1px solid #e5e7eb;">
+                      <span style="color: #111827; font-size: 14px; font-weight: 600;">{{DATE}}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                      <span style="color: #6b7280; font-size: 14px; font-weight: 500;">Order ID:</span>
+                    </td>
+                    <td style="padding: 8px 0; text-align: right; border-bottom: 1px solid #e5e7eb;">
+                      <span style="color: #111827; font-size: 14px; font-weight: 600;">{{ORDER_ID}}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                      <span style="color: #6b7280; font-size: 14px; font-weight: 500;">Bundle Name:</span>
+                    </td>
+                    <td style="padding: 8px 0; text-align: right; border-bottom: 1px solid #e5e7eb;">
+                      <span style="color: #111827; font-size: 14px; font-weight: 600;">{{BUNDLE_NAME}}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0;">
+                      <span style="color: #6b7280; font-size: 14px; font-weight: 500;">Bundle Price:</span>
+                    </td>
+                    <td style="padding: 8px 0; text-align: right;">
+                      <span style="color: #2563eb; font-size: 16px; font-weight: 700;">{{BUNDLE_PRICE}}</span>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            </td>
+          </tr>
 
-        <!-- Activation Instructions -->
-        <div class="activation-steps">
-          <h2>How to Activate:</h2>
-          <div class="step">
-            <div class="step-number">1</div>
-            <strong>Insert your Lycamobile SIM</strong><br>
-            <span style="color: #6B7280; font-size: 14px;">Make sure your Lycamobile SIM is inserted in your phone</span>
-          </div>
-          <div class="step">
-            <div class="step-number">2</div>
-            <strong>Dial *123*1234567891011121#</strong><br>
-            <span style="color: #6B7280; font-size: 14px;">Replace with your actual PIN code</span>
-          </div>
-          <div class="step">
-            <div class="step-number">3</div>
-            <strong>Press Call</strong><br>
-            <span style="color: #6B7280; font-size: 14px;">Wait for the activation to complete</span>
-          </div>
-          <div class="step">
-            <div class="step-number">4</div>
-            <strong>Wait for confirmation SMS</strong><br>
-            <span style="color: #6B7280; font-size: 14px;">You'll receive confirmation within 2 minutes</span>
-          </div>
-        </div>
+          <!-- QR Code Section -->
+          <tr>
+            <td style="padding: 0 30px 30px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #eff6ff; border-radius: 12px; border: 2px solid #93c5fd;">
+                <tr>
+                  <td style="padding: 30px; text-align: center;">
+                    <h3 style="margin: 0 0 10px; color: #1e40af; font-size: 20px; font-weight: 700;">
+                      📱 Scan Your eSIM QR Code
+                    </h3>
+                    <p style="margin: 0 0 20px; color: #3b82f6; font-size: 14px; font-weight: 500;">
+                      Use your device camera to scan this code and activate your eSIM
+                    </p>
+                    
+                    <!-- QR Code Container -->
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin: 0 auto;">
+                      <tr>
+                        <td style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 2px solid #2563eb;">
+                          {{QR_CODE_IMAGE}}
+                        </td>
+                      </tr>
+                    </table>
+                    
+                    <p style="margin: 20px 0 0; color: #6b7280; font-size: 12px; font-style: italic;">
+                      💡 Tip: Save this QR code to your photos for easier access during setup
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-        <!-- Quick Links -->
-        <div class="quick-links">
-          <h3>Need Help?</h3>
-          <a href="#" class="link-item">📱 Activation Help Guide</a>
-          <a href="#" class="link-item">📞 Call Support: +47 XXX XXX XXX</a>
-          <br>
-          <a href="https://wa.me/47XXXXXXXXX" class="whatsapp-button">
-            💬 Chat with us on WhatsApp
-          </a>
-        </div>
+          <!-- Activation Details -->
+          <tr>
+            <td style="padding: 0 30px 30px;">
+              <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 20px;">
+                <h3 style="margin: 0 0 15px; color: #92400e; font-size: 18px; font-weight: 600;">
+                  🔑 Manual Activation Details
+                </h3>
+                <p style="margin: 0 0 15px; color: #78350f; font-size: 14px;">
+                  If you can't scan the QR code, use these details to activate manually:
+                </p>
+                <div style="background-color: #ffffff; border-radius: 6px; padding: 15px; margin-bottom: 10px;">
+                  <p style="margin: 0 0 8px; color: #92400e; font-size: 13px; font-weight: 600;">
+                    SM-DP+ Address:
+                  </p>
+                  <p style="margin: 0; color: #451a03; font-size: 12px; font-family: 'Courier New', monospace; word-break: break-all; background-color: #fef3c7; padding: 8px; border-radius: 4px;">
+                    {{SM_DP_ADDRESS}}
+                  </p>
+                </div>
+                <div style="background-color: #ffffff; border-radius: 6px; padding: 15px;">
+                  <p style="margin: 0 0 8px; color: #92400e; font-size: 13px; font-weight: 600;">
+                    Activation Code:
+                  </p>
+                  <p style="margin: 0; color: #451a03; font-size: 12px; font-family: 'Courier New', monospace; word-break: break-all; background-color: #fef3c7; padding: 8px; border-radius: 4px;">
+                    {{ACTIVATION_CODE}}
+                  </p>
+                </div>
+              </div>
+            </td>
+          </tr>
 
-        <!-- Order Details -->
-        <div class="order-details">
-          <h3>Order Details</h3>
-          <div class="order-item">
-            <span class="order-label">Product:</span>
-            <span class="order-value">Lycamobile 5GB ePIN</span>
-          </div>
-          <div class="order-item">
-            <span class="order-label">Amount:</span>
-            <span class="order-value">NOK 99</span>
-          </div>
-          <div class="order-item">
-            <span class="order-label">Order Date:</span>
-            <span class="order-value">08/10/2025</span>
-          </div>
-          <div class="order-item">
-            <span class="order-label">Order Number:</span>
-            <span class="order-value">#ET-12345</span>
-          </div>
-        </div>
+          <!-- Important Notes -->
+          <tr>
+            <td style="padding: 0 30px 30px;">
+              <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; border-radius: 8px; padding: 20px;">
+                <h3 style="margin: 0 0 15px; color: #991b1b; font-size: 18px; font-weight: 600;">
+                  ⚠️ Important: Read Before Setup
+                </h3>
+                <ul style="margin: 0; padding-left: 20px; color: #7f1d1d;">
+                  <li style="margin-bottom: 10px; font-size: 14px; line-height: 1.6;">
+                    <strong>Internet Required:</strong> You need an active internet connection to install the eSIM
+                  </li>
+                  <li style="margin-bottom: 10px; font-size: 14px; line-height: 1.6;">
+                    <strong>One-Time Use:</strong> The QR code can only be scanned once. Do not delete the eSIM after installation
+                  </li>
+                  <li style="margin-bottom: 10px; font-size: 14px; line-height: 1.6;">
+                    <strong>Device Locked:</strong> Once installed, the eSIM cannot be transferred to another device
+                  </li>
+                  <li style="margin-bottom: 0; font-size: 14px; line-height: 1.6;">
+                    <strong>Registration Required:</strong> You must register your SIM after installation
+                  </li>
+                </ul>
+              </div>
+            </td>
+          </tr>
 
-        <p style="color: #6B7280; font-size: 14px; margin-top: 30px;">
-          If you have any questions or need assistance, our support team is available 24/7 via WhatsApp, email, or phone.
-        </p>
-      </div>
+          <!-- iOS Setup Guide -->
+          <tr>
+            <td style="padding: 0 30px 30px;">
+              <h3 style="margin: 0 0 20px; color: #111827; font-size: 20px; font-weight: 600; padding-bottom: 10px; border-bottom: 3px solid #2563eb;">
+                📱 iOS Setup Guide
+              </h3>
+              
+              <!-- Step 1 -->
+              <div style="margin-bottom: 20px; padding-left: 40px; position: relative;">
+                <div style="position: absolute; left: 0; top: 0; width: 28px; height: 28px; background-color: #2563eb; color: #ffffff; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px;">1</div>
+                <h4 style="margin: 0 0 8px; color: #111827; font-size: 16px; font-weight: 600;">
+                  Open Settings
+                </h4>
+                <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                  Go to <strong>Settings → Cellular</strong> (or <strong>Mobile Data</strong>)
+                </p>
+              </div>
 
-      <!-- Email Footer -->
-      <div class="email-footer">
-        <div class="footer-links">
-          <a href="#" class="footer-link">Help Center</a>
-          <a href="#" class="footer-link">Contact Us</a>
-          <a href="#" class="footer-link">Terms & Conditions</a>
-        </div>
+              <!-- Step 2 -->
+              <div style="margin-bottom: 20px; padding-left: 40px; position: relative;">
+                <div style="position: absolute; left: 0; top: 0; width: 28px; height: 28px; background-color: #2563eb; color: #ffffff; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px;">2</div>
+                <h4 style="margin: 0 0 8px; color: #111827; font-size: 16px; font-weight: 600;">
+                  Add eSIM
+                </h4>
+                <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                  Tap <strong>Add eSIM</strong> or <strong>Add Cellular Plan</strong> → Choose <strong>Use QR Code</strong>
+                </p>
+              </div>
 
-        <div class="social-icons">
-          <a href="#" class="social-icon">f</a>
-          <a href="#" class="social-icon">in</a>
-          <a href="#" class="social-icon">t</a>
-        </div>
+              <!-- Step 3 -->
+              <div style="margin-bottom: 20px; padding-left: 40px; position: relative;">
+                <div style="position: absolute; left: 0; top: 0; width: 28px; height: 28px; background-color: #2563eb; color: #ffffff; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px;">3</div>
+                <h4 style="margin: 0 0 8px; color: #111827; font-size: 16px; font-weight: 600;">
+                  Scan QR Code
+                </h4>
+                <p style="margin: 0 0 10px; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                  Point your camera at the QR code above. If you can't scan, tap <strong>Enter Details Manually</strong> and use the activation details provided.
+                </p>
+                <p style="margin: 0; color: #9ca3af; font-size: 12px; font-style: italic;">
+                  💡 iOS 17+ allows uploading QR codes from Photos
+                </p>
+              </div>
 
-        <p style="font-size: 12px; margin: 20px 0;">
-          EasyTopup.no<br>
-          Oslo, Norway<br>
-          Org. Nr: XXXXXXXXX
-        </p>
+              <!-- Step 4 -->
+              <div style="margin-bottom: 20px; padding-left: 40px; position: relative;">
+                <div style="position: absolute; left: 0; top: 0; width: 28px; height: 28px; background-color: #2563eb; color: #ffffff; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px;">4</div>
+                <h4 style="margin: 0 0 8px; color: #111827; font-size: 16px; font-weight: 600;">
+                  Complete Installation
+                </h4>
+                <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                  Tap <strong>Continue</strong> and follow the on-screen instructions to complete the setup
+                </p>
+              </div>
 
-        <p style="font-size: 11px; color: #6B7280;">
-          You are receiving this email because you made a purchase at EasyTopup.no<br>
-          <a href="#" style="color: #6B7280;">Unsubscribe</a>
-        </p>
-      </div>
-    </div>
-  </div>
+              <!-- Step 5 -->
+              <div style="margin-bottom: 0; padding-left: 40px; position: relative;">
+                <div style="position: absolute; left: 0; top: 0; width: 28px; height: 28px; background-color: #2563eb; color: #ffffff; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px;">5</div>
+                <h4 style="margin: 0 0 8px; color: #111827; font-size: 16px; font-weight: 600;">
+                  Register Your SIM
+                </h4>
+                <p style="margin: 0 0 10px; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                  <strong style="color: #dc2626;">Required:</strong> You must register your SIM to use it
+                </p>
+                <a href="https://www.lyca-mobile.no/en/registration/" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; font-size: 14px;">
+                  Register Now →
+                </a>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Android Setup Guide -->
+          <tr>
+            <td style="padding: 0 30px 30px;">
+              <h3 style="margin: 0 0 20px; color: #111827; font-size: 20px; font-weight: 600; padding-bottom: 10px; border-bottom: 3px solid #10b981;">
+                🤖 Android Setup Guide
+              </h3>
+              
+              <!-- Step 1 -->
+              <div style="margin-bottom: 20px; padding-left: 40px; position: relative;">
+                <div style="position: absolute; left: 0; top: 0; width: 28px; height: 28px; background-color: #10b981; color: #ffffff; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px;">1</div>
+                <h4 style="margin: 0 0 8px; color: #111827; font-size: 16px; font-weight: 600;">
+                  Open Settings
+                </h4>
+                <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                  Go to <strong>Settings → Connections</strong> (or <strong>Network & Internet</strong>)
+                </p>
+              </div>
+
+              <!-- Step 2 -->
+              <div style="margin-bottom: 20px; padding-left: 40px; position: relative;">
+                <div style="position: absolute; left: 0; top: 0; width: 28px; height: 28px; background-color: #10b981; color: #ffffff; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px;">2</div>
+                <h4 style="margin: 0 0 8px; color: #111827; font-size: 16px; font-weight: 600;">
+                  Add eSIM
+                </h4>
+                <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                  Tap <strong>SIM Manager</strong> → <strong>Add eSIM</strong> → Choose <strong>Scan QR Code</strong>
+                </p>
+              </div>
+
+              <!-- Step 3 -->
+              <div style="margin-bottom: 20px; padding-left: 40px; position: relative;">
+                <div style="position: absolute; left: 0; top: 0; width: 28px; height: 28px; background-color: #10b981; color: #ffffff; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px;">3</div>
+                <h4 style="margin: 0 0 8px; color: #111827; font-size: 16px; font-weight: 600;">
+                  Scan QR Code
+                </h4>
+                <p style="margin: 0 0 10px; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                  Scan the QR code above or tap <strong>Enter Details Manually</strong> to use the activation code.
+                </p>
+                <p style="margin: 0; color: #9ca3af; font-size: 12px; font-style: italic;">
+                  💡 Samsung Galaxy S20+ and newer models support QR image upload
+                </p>
+              </div>
+
+              <!-- Step 4 -->
+              <div style="margin-bottom: 20px; padding-left: 40px; position: relative;">
+                <div style="position: absolute; left: 0; top: 0; width: 28px; height: 28px; background-color: #10b981; color: #ffffff; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px;">4</div>
+                <h4 style="margin: 0 0 8px; color: #111827; font-size: 16px; font-weight: 600;">
+                  Activate eSIM
+                </h4>
+                <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                  Tap <strong>Add</strong> or <strong>Download</strong> to complete the eSIM installation
+                </p>
+              </div>
+
+              <!-- Step 5 -->
+              <div style="margin-bottom: 0; padding-left: 40px; position: relative;">
+                <div style="position: absolute; left: 0; top: 0; width: 28px; height: 28px; background-color: #10b981; color: #ffffff; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px;">5</div>
+                <h4 style="margin: 0 0 8px; color: #111827; font-size: 16px; font-weight: 600;">
+                  Register Your SIM
+                </h4>
+                <p style="margin: 0 0 10px; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                  <strong style="color: #dc2626;">Required:</strong> Complete SIM registration to activate service
+                </p>
+                <a href="https://www.lyca-mobile.no/en/registration/" style="display: inline-block; background-color: #10b981; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; font-size: 14px;">
+                  Register Now →
+                </a>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Troubleshooting Section -->
+          <tr>
+            <td style="padding: 0 30px 30px;">
+              <h3 style="margin: 0 0 20px; color: #111827; font-size: 20px; font-weight: 600; padding-bottom: 10px; border-bottom: 3px solid #f59e0b;">
+                🔧 Troubleshooting Guide
+              </h3>
+
+              <div style="margin-bottom: 15px; padding: 15px; background-color: #fef9f5; border-left: 3px solid #f59e0b; border-radius: 6px;">
+                <h4 style="margin: 0 0 8px; color: #92400e; font-size: 15px; font-weight: 600;">
+                  ❌ Can't Scan QR Code
+                </h4>
+                <p style="margin: 0; color: #78350f; font-size: 14px; line-height: 1.6;">
+                  Ensure proper lighting and hold your phone steady. Try moving closer or farther from the screen. Alternatively, use the manual activation details provided above.
+                </p>
+              </div>
+
+              <div style="margin-bottom: 15px; padding: 15px; background-color: #fef9f5; border-left: 3px solid #f59e0b; border-radius: 6px;">
+                <h4 style="margin: 0 0 8px; color: #92400e; font-size: 15px; font-weight: 600;">
+                  ⏳ eSIM Shows "Activating"
+                </h4>
+                <p style="margin: 0; color: #78350f; font-size: 14px; line-height: 1.6;">
+                  This is normal. Your eSIM will fully activate when you arrive in the coverage area. Ensure you've completed SIM registration.
+                </p>
+              </div>
+
+              <div style="margin-bottom: 15px; padding: 15px; background-color: #fef9f5; border-left: 3px solid #f59e0b; border-radius: 6px;">
+                <h4 style="margin: 0 0 8px; color: #92400e; font-size: 15px; font-weight: 600;">
+                  📶 No Signal or Internet
+                </h4>
+                <p style="margin: 0; color: #78350f; font-size: 14px; line-height: 1.6;">
+                  Enable <strong>Data Roaming</strong> and <strong>Mobile Data</strong> in your device settings. Make sure the eSIM is selected as your active data line.
+                </p>
+              </div>
+
+              <div style="margin-bottom: 0; padding: 15px; background-color: #fef9f5; border-left: 3px solid #f59e0b; border-radius: 6px;">
+                <h4 style="margin: 0 0 8px; color: #92400e; font-size: 15px; font-weight: 600;">
+                  🌐 Signal but No Internet
+                </h4>
+                <p style="margin: 0; color: #78350f; font-size: 14px; line-height: 1.6;">
+                  This may be an APN issue. Go to <strong>Settings → Mobile Network → Access Point Names</strong> and set APN to: <strong>{{APN_SETTINGS}}</strong>
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Support Section -->
+          <tr>
+            <td style="padding: 0 30px 40px;">
+              <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 12px; padding: 25px; text-align: center;">
+                <h3 style="margin: 0 0 15px; color: #ffffff; font-size: 20px; font-weight: 700;">
+                  💬 Need Help? We're Here for You!
+                </h3>
+                <p style="margin: 0 0 20px; color: #d1fae5; font-size: 14px;">
+                  Our support team is ready to assist you with any questions or issues
+                </p>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
+                  <tr>
+                    <td style="padding-right: 20px;">
+                      <div style="background-color: rgba(255, 255, 255, 0.2); border-radius: 8px; padding: 12px 20px;">
+                        <p style="margin: 0 0 5px; color: #d1fae5; font-size: 12px;">WhatsApp</p>
+                        <p style="margin: 0; color: #ffffff; font-weight: 700; font-size: 15px;">{{WHATSAPP_NUMBER}}</p>
+                      </div>
+                    </td>
+                    <td>
+                      <div style="background-color: rgba(255, 255, 255, 0.2); border-radius: 8px; padding: 12px 20px;">
+                        <p style="margin: 0 0 5px; color: #d1fae5; font-size: 12px;">Email</p>
+                        <p style="margin: 0; color: #ffffff; font-weight: 700; font-size: 15px;">{{SUPPORT_EMAIL}}</p>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #111827; padding: 30px; text-align: center; border-radius: 0 0 12px 12px;">
+              <p style="margin: 0 0 15px; color: #9ca3af; font-size: 14px;">
+                &copy; 2026 Telelys. All rights reserved.
+              </p>
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
+                <tr>
+                  <td style="padding: 0 10px;">
+                    <a href="https://www.lyca-mobile.no/" style="color: #60a5fa; text-decoration: none; font-size: 13px; font-weight: 500;">
+                      Visit Website
+                    </a>
+                  </td>
+                  <td style="color: #4b5563;">|</td>
+                  <td style="padding: 0 10px;">
+                    <a href="https://www.lyca-mobile.no/en/registration/" style="color: #60a5fa; text-decoration: none; font-size: 13px; font-weight: 500;">
+                      Register SIM
+                    </a>
+                  </td>
+                  <td style="color: #4b5563;">|</td>
+                  <td style="padding: 0 10px;">
+                    <a href="mailto:{{SUPPORT_EMAIL}}" style="color: #60a5fa; text-decoration: none; font-size: 13px; font-weight: 500;">
+                      Contact Support
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 15px 0 0; color: #6b7280; font-size: 11px;">
+                This email was sent because you ordered an eSIM from Telelys.<br>
+                Please do not reply to this email. For support, use the contact details above.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- End Main Container -->
+
+      </td>
+    </tr>
+  </table>
+  <!-- End Wrapper Table -->
+
 </body>
 </html>

@@ -249,24 +249,66 @@ public class EmailService {
      * Send eSIM approval email with QR code
      */
     public void sendEsimApprovalEmail(String toEmail, String customerName, String orderNumber, 
-                                      String esimSerial, String qrCodeBase64, String activationUrl) {
+                                      String esimSerial, String qrCodeBase64, String activationCode, String smDpAddress) {
+        sendEsimApprovalEmail(toEmail, customerName, orderNumber, esimSerial, qrCodeBase64, activationCode, smDpAddress, null);
+    }
+
+    public void sendEsimApprovalEmail(String toEmail, String customerName, String orderNumber, 
+                                      String esimSerial, String qrCodeBase64, String activationCode, String smDpAddress, String bundlePrice) {
         try {
+            System.out.println("\n🔍 === sendEsimApprovalEmail DEBUG ===");
+            System.out.println("   toEmail: " + toEmail);
+            System.out.println("   customerName: " + customerName);
+            System.out.println("   orderNumber: " + orderNumber);
+            System.out.println("   esimSerial: " + esimSerial);
+            System.out.println("   qrCodeBase64 length: " + (qrCodeBase64 != null ? qrCodeBase64.length() : 0));
+            System.out.println("   qrCodeBase64 is null: " + (qrCodeBase64 == null));
+            System.out.println("   qrCodeBase64 is empty: " + (qrCodeBase64 != null && qrCodeBase64.isEmpty()));
+            System.out.println("   qrCodeBase64 starts with iVBOR: " + (qrCodeBase64 != null && qrCodeBase64.startsWith("iVBORw0KGgo")));
+            
+            if (qrCodeBase64 != null && qrCodeBase64.length() > 100) {
+                System.out.println("   QR Code Preview (first 100 chars): " + qrCodeBase64.substring(0, 100));
+            } else if (qrCodeBase64 != null) {
+                System.out.println("   QR Code Full: " + qrCodeBase64);
+            } else {
+                System.out.println("   ❌ QR Code is NULL!");
+            }
+            
+            System.out.println("   activationCode: " + (activationCode != null ? activationCode.substring(0, Math.min(50, activationCode.length())) + "..." : "null"));
+            System.out.println("   smDpAddress: " + smDpAddress);
+            System.out.println("   bundlePrice: " + bundlePrice);
+            
             String htmlContent = generateEsimApprovalHtml(
                 customerName, 
                 orderNumber, 
                 esimSerial, 
                 qrCodeBase64, 
-                activationUrl
+                activationCode,
+                smDpAddress,
+                bundlePrice
             );
             
-            sendHtmlEmail(
+            System.out.println("   HTML content length: " + htmlContent.length());
+            System.out.println("   HTML contains QR_CODE_IMAGE placeholder: " + htmlContent.contains("{{QR_CODE_IMAGE}}"));
+            System.out.println("   HTML contains data:image/png: " + htmlContent.contains("data:image/png;base64,"));
+            
+            // Find the QR code image tag in HTML
+            int qrImageIndex = htmlContent.indexOf("data:image/png;base64,");
+            if (qrImageIndex > 0) {
+                int endIndex = Math.min(qrImageIndex + 100, htmlContent.length());
+                System.out.println("   QR image tag preview: " + htmlContent.substring(qrImageIndex, endIndex));
+            }
+            
+            sendHtmlEmailWithQrCode(
                 toEmail,
                 "Your eSIM is Ready! - Order #" + orderNumber + " - " + appName,
-                htmlContent
+                htmlContent,
+                qrCodeBase64
             );
             log.info("eSIM approval email sent successfully to: {}", toEmail);
         } catch (Exception e) {
             log.error("Failed to send eSIM approval email to: {}", toEmail, e);
+            e.printStackTrace();
             throw new RuntimeException("Failed to send eSIM approval email", e);
         }
     }
@@ -325,6 +367,71 @@ public class EmailService {
         helper.setText(htmlContent, true);
         
         mailSender.send(message);
+    }
+
+    /**
+     * Send HTML email with QR code as inline attachment (Gmail compatible)
+     */
+    private void sendHtmlEmailWithQrCode(String toEmail, String subject, String htmlContent, String qrCodeBase64) throws MessagingException {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            helper.setFrom(supportEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            
+            System.out.println("\n🔍 === Email Sending Debug ===");
+            System.out.println("   To: " + toEmail);
+            System.out.println("   Subject: " + subject);
+            System.out.println("   QR Code Base64 length: " + (qrCodeBase64 != null ? qrCodeBase64.length() : 0));
+            System.out.println("   HTML content length: " + htmlContent.length());
+            System.out.println("   HTML contains data URI: " + htmlContent.contains("data:image/png;base64,"));
+            
+            // For Gmail compatibility, try both data URI and CID attachment
+            String htmlToSend = htmlContent;
+            
+            // Add QR code as inline attachment if available
+            if (qrCodeBase64 != null && !qrCodeBase64.isEmpty() && qrCodeBase64.startsWith("iVBORw0KGgo")) {
+                try {
+                    // Decode base64 to bytes
+                    byte[] qrCodeBytes = java.util.Base64.getDecoder().decode(qrCodeBase64);
+                    
+                    System.out.println("   Decoded QR bytes length: " + qrCodeBytes.length);
+                    
+                    // Replace data URI with CID for better Gmail compatibility
+                    htmlToSend = htmlContent.replace(
+                        "data:image/png;base64," + qrCodeBase64,
+                        "cid:qrCodeImage"
+                    );
+                    
+                    System.out.println("   Replaced data URI with CID: " + htmlToSend.contains("cid:qrCodeImage"));
+                    
+                    // Set HTML content
+                    helper.setText(htmlToSend, true);
+                    
+                    // Add as inline attachment with Content-ID
+                    helper.addInline("qrCodeImage", new jakarta.mail.util.ByteArrayDataSource(qrCodeBytes, "image/png"));
+                    
+                    System.out.println("   ✅ QR code added as inline CID attachment (qrCodeImage)");
+                } catch (Exception e) {
+                    System.err.println("   ⚠️ Failed to attach QR code as CID, using data URI fallback: " + e.getMessage());
+                    e.printStackTrace();
+                    // Fallback: use data URI if CID fails
+                    helper.setText(htmlContent, true);
+                }
+            } else {
+                System.out.println("   ⚠️ QR code not attached - invalid or missing data");
+                helper.setText(htmlContent, true);
+            }
+            
+            mailSender.send(message);
+            System.out.println("   ✅ Email sent successfully!");
+            System.out.println("=================================\n");
+        } catch (Exception e) {
+            log.error("Error sending email with QR code attachment", e);
+            throw new MessagingException("Failed to send email with QR code", e);
+        }
     }
 
     /**
@@ -771,96 +878,506 @@ public class EmailService {
     }
 
     /**
-     * Generate HTML for eSIM approval email with QR code
+     * Generate HTML for eSIM approval email with QR code using Telelys template
      */
     private String generateEsimApprovalHtml(String customerName, String orderNumber, 
-                                           String esimSerial, String qrCodeBase64, String activationUrl) {
-        return String.format("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Your eSIM is Ready!</title>
-            </head>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-                <div style="background: linear-gradient(135deg, #10b981 0%%, #059669 100%%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                    <h1 style="color: white; margin: 0; font-size: 28px;">✅ Your eSIM is Ready!</h1>
-                </div>
-                
-                <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                    <h2 style="color: #333; margin-bottom: 20px;">Hi %s!</h2>
-                    
-                    <div style="background: #d1fae5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 5px;">
-                        <p style="margin: 0; color: #065f46; font-weight: bold;">
-                            🎉 Great news! Your eSIM order has been approved and is ready to activate!
-                        </p>
-                    </div>
-                    
-                    <div style="background: #f9fafb; border: 2px solid #e5e7eb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                        <h3 style="margin-top: 0; color: #1f2937; text-align: center;">📱 Order Details</h3>
-                        <p style="margin: 5px 0;"><strong>Order Number:</strong> #%s</p>
-                        <p style="margin: 5px 0;"><strong>eSIM Serial:</strong> <span style="font-family: monospace; background: #fee2e2; padding: 5px 10px; border-radius: 4px; color: #991b1b;">%s</span></p>
-                    </div>
-                    
-                    <div style="background: #eff6ff; border: 2px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-                        <h3 style="margin-top: 0; color: #1e40af;">📲 Scan to Activate</h3>
-                        <p style="color: #1e3a8a; margin-bottom: 15px;">Scan this QR code with your device camera to activate your eSIM</p>
-                        <div style="background: white; padding: 20px; display: inline-block; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                            <img src="data:image/png;base64,%s" alt="eSIM QR Code" style="width: 250px; height: 250px; display: block;" />
-                        </div>
-                    </div>
-                    
-                    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 5px;">
-                        <h3 style="margin-top: 0; color: #92400e;">📋 Activation Instructions</h3>
-                        <ol style="color: #78350f; margin: 10px 0; padding-left: 20px;">
-                            <li style="margin: 10px 0;"><strong>iPhone:</strong> Go to Settings → Cellular → Add eSIM → Use QR Code</li>
-                            <li style="margin: 10px 0;"><strong>Android:</strong> Go to Settings → Network & Internet → SIMs → Add eSIM → Scan QR Code</li>
-                            <li style="margin: 10px 0;">Point your camera at the QR code above</li>
-                            <li style="margin: 10px 0;">Follow the on-screen instructions to complete activation</li>
-                        </ol>
-                    </div>
-                    
-                    %s
-                    
-                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 15px; margin: 20px 0; border-radius: 5px;">
-                        <p style="margin: 0; color: #166534; font-size: 14px;">
-                            ℹ️ <strong>Important:</strong> Save this email or take a screenshot of the QR code. You'll need it to activate your eSIM.
-                        </p>
-                    </div>
-                    
-                    <div style="text-align: center; margin: 30px 0;">
-                        <a href="%s/support" style="background: linear-gradient(135deg, #3b82f6 0%%, #2563eb 100%%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; box-shadow: 0 2px 8px rgba(59,130,246,0.3);">Need Help? Contact Support</a>
-                    </div>
-                    
-                    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-                    
-                    <p style="color: #6b7280; font-size: 14px; text-align: center; margin: 0;">
-                        Thank you for choosing %s!<br>
-                        Questions? Email us at <a href="mailto:%s" style="color: #3b82f6; text-decoration: none;">%s</a>
-                    </p>
-                </div>
-            </body>
-            </html>
-            """, 
-            customerName, 
-            orderNumber, 
-            esimSerial, 
-            qrCodeBase64,
-            activationUrl != null && !activationUrl.isEmpty() ? 
-                String.format("""
-                    <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 15px; margin: 20px 0; border-radius: 5px;">
-                        <p style="margin: 5px 0; color: #991b1b;"><strong>Alternative Activation:</strong></p>
-                        <p style="margin: 5px 0; color: #7f1d1d; word-break: break-all;">
-                            <a href="%s" style="color: #dc2626; text-decoration: underline;">%s</a>
-                        </p>
-                    </div>
-                    """, activationUrl, activationUrl) : "",
-            appUrl,
-            appName,
-            supportEmail, 
-            supportEmail
-        );
+                                           String esimSerial, String qrCodeBase64,
+                                           String activationCode, String smDpAddress) {
+        return generateEsimApprovalHtml(customerName, orderNumber, esimSerial, qrCodeBase64, activationCode, smDpAddress, null);
+    }
+
+    private String generateEsimApprovalHtml(String customerName, String orderNumber, 
+                                           String esimSerial, String qrCodeBase64,
+                                           String activationCode, String smDpAddress, String bundlePrice) {
+        // Telelys template with placeholders
+        String template = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your eSIM is Ready - Telelys</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Arial', 'Helvetica', sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f5f5f5;
+    }
+    .container {
+      max-width: 600px;
+      margin: 20px auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .header {
+      background-color: #2563EB;
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    .logo-text {
+      font-size: 32px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    .subheader {
+      font-size: 18px;
+      font-weight: 300;
+    }
+    .content {
+      padding: 30px;
+    }
+    h1 {
+      color: #1F2937;
+      font-size: 24px;
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+    .intro {
+      color: #666;
+      margin-bottom: 25px;
+      font-size: 16px;
+    }
+    h2 {
+      color: #1F2937;
+      font-size: 18px;
+      margin-top: 25px;
+      margin-bottom: 15px;
+      font-weight: bold;
+      border-bottom: 2px solid #2563EB;
+      padding-bottom: 10px;
+    }
+    .info-box {
+      background-color: #f9fafb;
+      border-left: 4px solid #2563EB;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+    }
+    .info-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .info-item:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      color: #6B7280;
+      font-weight: 500;
+    }
+    .info-value {
+      color: #1F2937;
+      font-weight: bold;
+    }
+    .important-list {
+      list-style: none;
+      margin: 15px 0;
+    }
+    .important-list li {
+      padding: 10px 0;
+      padding-left: 25px;
+      position: relative;
+      color: #555;
+    }
+    .important-list li:before {
+      content: "•";
+      color: #2563EB;
+      font-weight: bold;
+      position: absolute;
+      left: 0;
+    }
+    .steps {
+      margin: 20px 0;
+    }
+    .step {
+      margin-bottom: 20px;
+      padding-left: 30px;
+      position: relative;
+    }
+    .step-number {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 24px;
+      height: 24px;
+      background: #2563EB;
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .step-title {
+      font-weight: bold;
+      color: #1F2937;
+      margin-bottom: 5px;
+    }
+    .step-desc {
+      color: #666;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .activation-info {
+      background-color: #f9fafb;
+      border: 1px solid #e5e7eb;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .activation-info p {
+      margin: 8px 0;
+    }
+    .activation-label {
+      font-weight: bold;
+      color: #1F2937;
+    }
+    .activation-value {
+      color: #666;
+      word-break: break-all;
+      font-family: monospace;
+      background: white;
+      padding: 5px;
+      border-radius: 3px;
+      display: inline-block;
+      margin-top: 3px;
+    }
+    .warning {
+      color: #D32F2F;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    .qr-section {
+      text-align: center;
+      margin: 25px 0;
+      padding: 20px;
+      background-color: #f9fafb;
+      border-radius: 8px;
+    }
+    .qr-label {
+      font-weight: bold;
+      color: #1F2937;
+      margin-bottom: 15px;
+      display: block;
+      font-size: 16px;
+    }
+    .qr-image {
+      width: 200px !important;
+      height: 200px !important;
+      max-width: 200px !important;
+      max-height: 200px !important;
+      border: 2px solid #2563EB;
+      padding: 10px;
+      border-radius: 8px;
+      background: white;
+      display: inline-block;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .footer-note {
+      color: #9CA3AF;
+      font-size: 12px;
+      margin-top: 15px;
+      font-style: italic;
+    }
+    .support-box {
+      background-color: #FEF3C7;
+      border-left: 4px solid #F59E0B;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .support-title {
+      font-weight: bold;
+      color: #92400E;
+      margin-bottom: 10px;
+    }
+    .support-item {
+      color: #78350F;
+      margin: 5px 0;
+    }
+    .troubleshooting-item {
+      margin-bottom: 15px;
+      padding-left: 20px;
+      position: relative;
+    }
+    .troubleshooting-item:before {
+      content: "→";
+      color: #2563EB;
+      font-weight: bold;
+      position: absolute;
+      left: 0;
+    }
+    .troubleshooting-title {
+      font-weight: bold;
+      color: #1F2937;
+      margin-bottom: 5px;
+    }
+    .troubleshooting-desc {
+      color: #666;
+      font-size: 14px;
+    }
+    .email-footer {
+      background-color: #1F2937;
+      color: #9CA3AF;
+      padding: 20px;
+      text-align: center;
+      font-size: 13px;
+    }
+    .footer-text {
+      margin: 10px 0;
+    }
+    a {
+      color: #2563EB;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    @media only screen and (max-width: 600px) {
+      .container {
+        margin: 10px;
+      }
+      .content {
+        padding: 20px;
+      }
+      .qr-image {
+        max-width: 200px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo-text">Telelys</div>
+      <div class="subheader">Your eSIM is Ready!</div>
+    </div>
+
+    <div class="content">
+      <h1>Thank you for choosing Telelys</h1>
+      <p class="intro">You can find details of your eSIM and setup instructions below.</p>
+
+      <h2>Your eSIM Information</h2>
+      <div class="info-box">
+        <div class="info-item">
+          <span class="info-label">Date:</span>
+          <span class="info-value">{{DATE}}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Order ID:</span>
+          <span class="info-value">{{ORDER_ID}}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Bundle Name:</span>
+          <span class="info-value">{{BUNDLE_NAME}}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Bundle Price:</span>
+          <span class="info-value">{{BUNDLE_PRICE}}</span>
+        </div>
+      </div>
+
+      <h2>Important Notes Before Setting Up</h2>
+      <ul class="important-list">
+        <li>eSIM can only be installed when there is an internet connection.</li>
+        <li>Please do not delete eSIM after activation. The eSIM QR code can only be activated once.</li>
+        <li>eSIM cannot be transferred to another device after installation.</li>
+      </ul>
+
+      <h2>eSIM Setup Guide - For iOS</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <div class="step-title">Go to Settings > Cellular (or Mobile Data)</div>
+        </div>
+
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-title">Click Add eSIM or Add Cellular Plan > Choose Use QR Code</div>
+          <div class="step-desc">Scan the below QR or tap Enter Details Manually and enter the activation code if you cannot use your device to scan your QR. Besides, you can choose Open Photos to upload the image of QR code.</div>
+        </div>
+
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-title">Activation Information</div>
+          <div class="activation-info">
+            <p><span class="activation-label">SM-DP+ Address:</span><br><span class="activation-value">{{SM_DP_ADDRESS}}</span></p>
+            <p><span class="activation-label">Activation Code:</span><br><span class="activation-value">{{ACTIVATION_CODE}}</span></p>
+          </div>
+          <div class="warning">Don't delete eSIM after setting up</div>
+        </div>
+
+        <div class="step">
+          <div class="step-number">4</div>
+          <div class="step-title">Click Next to finish the installation</div>
+        </div>
+
+        <div class="step">
+          <div class="step-number">5</div>
+          <div class="step-title">SIM Registration Required</div>
+          <div class="step-desc">Please <a href="https://www.lyca-mobile.no/en/registration/">click here to register your SIM</a></div>
+        </div>
+      </div>
+
+      <p class="footer-note">Only iOS 17 and above allows users to open QR codes from the "Photos".</p>
+
+      <!-- QR Code Section -->
+      <div class="qr-section">
+        <span class="qr-label">📱 Scan this QR Code to Activate Your eSIM</span>
+        {{QR_CODE_IMAGE}}
+        <p style="color: #6B7280; font-size: 12px; margin-top: 15px; font-style: italic;">
+          Point your camera at the QR code above to install the eSIM on your device
+        </p>
+      </div>
+
+      <h2>eSIM Setup Guide - For Android</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <div class="step-title">Go to Settings > Connections</div>
+        </div>
+
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-title">Choose Add eSIM > Choose Use QR Code</div>
+          <div class="step-desc">Scan the below QR or tap Enter Details Manually and enter the activation code if you cannot use your device to scan your QR. Besides, you can upload the image of QR code.</div>
+        </div>
+
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-title">Activation Information</div>
+          <div class="activation-info">
+            <p><span class="activation-label">SM-DP+ Address:</span><br><span class="activation-value">{{SM_DP_ADDRESS}}</span></p>
+            <p><span class="activation-label">Activation Code:</span><br><span class="activation-value">{{ACTIVATION_CODE}}</span></p>
+          </div>
+          <div class="warning">Don't delete eSIM after setting up</div>
+        </div>
+
+        <div class="step">
+          <div class="step-number">4</div>
+          <div class="step-title">Click Next to finish the installation</div>
+        </div>
+
+        <div class="step">
+          <div class="step-number">5</div>
+          <div class="step-title">SIM Registration Required</div>
+          <div class="step-desc">Please <a href="https://www.lyca-mobile.no/en/registration/">click here to register your SIM</a></div>
+        </div>
+      </div>
+
+      <p class="footer-note">Only Samsung Galaxy S20 (and above) and some Android Phones allow users to upload QR image to set up eSIM.</p>
+
+      <div class="support-box">
+        <div class="support-title">Need Help?</div>
+        <div class="support-item"><strong>WhatsApp:</strong> {{WHATSAPP_NUMBER}}</div>
+        <div class="support-item"><strong>Email:</strong> {{SUPPORT_EMAIL}}</div>
+        <p style="margin-top: 10px; color: #78350F; font-size: 14px;">If you encounter any problems, please contact Telelys for timely support.</p>
+      </div>
+
+      <h2>If You Encounter Problems When Setting Up</h2>
+      
+      <div class="troubleshooting-item">
+        <div class="troubleshooting-title">Unable to Scan the QR Code</div>
+        <div class="troubleshooting-desc">Please try to place your phone camera opposite the QR Code and start scanning to ensure the camera captures the whole QR Code.</div>
+      </div>
+
+      <div class="troubleshooting-item">
+        <div class="troubleshooting-title">eSIM in Activating Status</div>
+        <div class="troubleshooting-desc">Successfully installed eSIM, you need to go to the country supported by your eSIM in order to start using it.</div>
+      </div>
+
+      <div class="troubleshooting-item">
+        <div class="troubleshooting-title">eSIM Installed but No Signal (3G/4G)</div>
+        <div class="troubleshooting-desc">Please check that you have enabled Data Roaming mode and Cellular Data mode on your phone.</div>
+      </div>
+
+      <div class="troubleshooting-item">
+        <div class="troubleshooting-title">Network Signal Shows but Internet Not Available</div>
+        <div class="troubleshooting-desc">It might be an APN issue. Please read the instruction to check APN and change the APN section on your device to: {{APN_SETTINGS}}</div>
+      </div>
+    </div>
+
+    <div class="email-footer">
+      <div class="footer-text">&copy; 2026 Telelys. All rights reserved.</div>
+      <div class="footer-text">
+        <a href="https://www.lyca-mobile.no/" style="color: #9CA3AF;">Visit our website</a> | 
+        <a href="https://www.lyca-mobile.no/en/registration/" style="color: #9CA3AF;">Register SIM</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+            """;
+
+        // Replace placeholders with actual values
+        System.out.println("\n🔍 === generateEsimApprovalHtml DEBUG ===");
+        System.out.println("   qrCodeBase64 input length: " + (qrCodeBase64 != null ? qrCodeBase64.length() : 0));
+        System.out.println("   qrCodeBase64 is null: " + (qrCodeBase64 == null));
+        System.out.println("   Template contains {{QR_CODE_IMAGE}}: " + template.contains("{{QR_CODE_IMAGE}}"));
+        
+        String qrCodeToUse = "";
+        if (qrCodeBase64 != null && !qrCodeBase64.isEmpty()) {
+            // Verify it's valid base64 PNG
+            if (qrCodeBase64.startsWith("iVBORw0KGgo")) {
+                // Simple img tag for maximum Gmail compatibility - no wrapper divs
+                qrCodeToUse = "<img src=\"data:image/png;base64," + qrCodeBase64 + "\" " +
+                             "alt=\"eSIM QR Code\" " +
+                             "width=\"220\" " +
+                             "height=\"220\" " +
+                             "border=\"0\" " +
+                             "style=\"display: block; width: 220px; height: 220px; max-width: 220px; max-height: 220px; margin: 0 auto;\" " +
+                             "/>";
+                System.out.println("   ✅ QR code image tag created successfully (Gmail-optimized)");
+            } else {
+                qrCodeToUse = "<p style=\"color: #dc2626; text-align: center; font-weight: bold;\">⚠️ QR Code format invalid (doesn't start with PNG signature)</p>";
+                System.out.println("   ⚠️ QR code doesn't start with PNG signature: " + qrCodeBase64.substring(0, Math.min(50, qrCodeBase64.length())));
+            }
+        } else {
+            qrCodeToUse = "<p style=\"color: #dc2626; text-align: center; font-weight: bold;\">⚠️ QR Code not available - please contact support</p>";
+            System.out.println("   ❌ QR code is null or empty!");
+        }
+        System.out.println("   qrCodeToUse length: " + qrCodeToUse.length());
+        
+        String bundlePriceDisplay = (bundlePrice != null && !bundlePrice.isEmpty()) ? bundlePrice : "N/A";
+        
+        String htmlContent = template
+            .replace("{{DATE}}", java.time.LocalDate.now().toString())
+            .replace("{{ORDER_ID}}", orderNumber)
+            .replace("{{BUNDLE_NAME}}", "eSIM Bundle")
+            .replace("{{BUNDLE_PRICE}}", bundlePriceDisplay)
+            .replace("{{SM_DP_ADDRESS}}", smDpAddress != null && !smDpAddress.isEmpty() ? smDpAddress : "N/A")
+            .replace("{{ACTIVATION_CODE}}", activationCode != null && !activationCode.isEmpty() ? activationCode : "N/A")
+            .replace("{{QR_CODE_IMAGE}}", qrCodeToUse)
+            .replace("{{WHATSAPP_NUMBER}}", "+47 123 456 789")
+            .replace("{{SUPPORT_EMAIL}}", supportEmail)
+            .replace("{{APN_SETTINGS}}", "internet");
+
+        System.out.println("   After replacement, HTML contains {{QR_CODE_IMAGE}}: " + htmlContent.contains("{{QR_CODE_IMAGE}}"));
+        System.out.println("   After replacement, HTML contains data:image/png: " + htmlContent.contains("data:image/png;base64,"));
+        
+        // Check if QR code is in the final HTML
+        int qrIndex = htmlContent.indexOf("data:image/png;base64,");
+        if (qrIndex > 0) {
+            int afterBase64 = qrIndex + "data:image/png;base64,".length();
+            int previewEnd = Math.min(afterBase64 + 50, htmlContent.length());
+            System.out.println("   QR base64 in HTML starts with: " + htmlContent.substring(afterBase64, previewEnd));
+        } else {
+            System.out.println("   ⚠️ WARNING: QR code not found in final HTML!");
+        }
+        
+        return htmlContent;
     }
 
     /**
@@ -1266,116 +1783,373 @@ public class EmailService {
             
             helper.setFrom(fromEmail);
             helper.setTo(toEmail);
-            helper.setSubject("Your eSIM QR Code - " + networkProvider);
+            helper.setSubject("Your eSIM is Ready - Telelys");
             
             // Decode base64 QR code to bytes
             byte[] qrCodeBytes = java.util.Base64.getDecoder().decode(qrCodeBase64);
             
-            // Create HTML email with CID reference for QR code
+            // Create HTML email using Telelys template
             String htmlContent = String.format("""
                 <!DOCTYPE html>
-                <html>
+                <html lang="en">
                 <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <style>
-                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                        .header { background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-                        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-                        .qr-container { text-align: center; background: white; padding: 20px; margin: 20px 0; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                        .qr-code { max-width: 300px; width: 100%%; height: auto; }
-                        .info-box { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #667eea; }
-                        .info-label { font-weight: bold; color: #667eea; font-size: 12px; text-transform: uppercase; }
-                        .info-value { font-family: 'Courier New', monospace; font-size: 14px; color: #333; margin-top: 5px; word-break: break-all; }
-                        .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 8px; }
-                        .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-                        .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 10px 0; }
-                    </style>
+                  <meta charset="UTF-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <title>Your eSIM is Ready - Telelys</title>
+                  <style>
+                    * {
+                      margin: 0;
+                      padding: 0;
+                      box-sizing: border-box;
+                    }
+                    body {
+                      font-family: 'Arial', 'Helvetica', sans-serif;
+                      line-height: 1.6;
+                      color: #333;
+                      background-color: #f5f5f5;
+                    }
+                    .container {
+                      max-width: 600px;
+                      margin: 20px auto;
+                      background: white;
+                      border-radius: 8px;
+                      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                      overflow: hidden;
+                    }
+                    .header {
+                      background-color: #2563EB;
+                      color: white;
+                      padding: 30px;
+                      text-align: center;
+                    }
+                    .logo-text {
+                      font-size: 32px;
+                      font-weight: bold;
+                      margin-bottom: 10px;
+                    }
+                    .subheader {
+                      font-size: 18px;
+                      font-weight: 300;
+                    }
+                    .content {
+                      padding: 30px;
+                    }
+                    h1 {
+                      color: #1F2937;
+                      font-size: 24px;
+                      margin-bottom: 10px;
+                      font-weight: bold;
+                    }
+                    .intro {
+                      color: #666;
+                      margin-bottom: 25px;
+                      font-size: 16px;
+                    }
+                    h2 {
+                      color: #1F2937;
+                      font-size: 18px;
+                      margin-top: 25px;
+                      margin-bottom: 15px;
+                      font-weight: bold;
+                      border-bottom: 2px solid #2563EB;
+                      padding-bottom: 10px;
+                    }
+                    .info-box {
+                      background-color: #f9fafb;
+                      border-left: 4px solid #2563EB;
+                      padding: 15px;
+                      margin-bottom: 20px;
+                      border-radius: 4px;
+                    }
+                    .info-item {
+                      display: flex;
+                      justify-content: space-between;
+                      padding: 8px 0;
+                      border-bottom: 1px solid #e5e7eb;
+                    }
+                    .info-item:last-child {
+                      border-bottom: none;
+                    }
+                    .info-label {
+                      color: #6B7280;
+                      font-weight: 500;
+                    }
+                    .info-value {
+                      color: #1F2937;
+                      font-weight: bold;
+                      font-family: monospace;
+                    }
+                    .qr-section {
+                      text-align: center;
+                      margin: 25px 0;
+                    }
+                    .qr-label {
+                      font-weight: bold;
+                      color: #1F2937;
+                      margin-bottom: 15px;
+                      display: block;
+                    }
+                    .qr-image {
+                      max-width: 300px;
+                      border: 1px solid #e5e7eb;
+                      padding: 10px;
+                      border-radius: 4px;
+                    }
+                    .important-list {
+                      list-style: none;
+                      margin: 15px 0;
+                    }
+                    .important-list li {
+                      padding: 10px 0;
+                      padding-left: 25px;
+                      position: relative;
+                      color: #555;
+                    }
+                    .important-list li:before {
+                      content: "•";
+                      color: #2563EB;
+                      font-weight: bold;
+                      position: absolute;
+                      left: 0;
+                    }
+                    .steps {
+                      margin: 20px 0;
+                    }
+                    .step {
+                      margin-bottom: 20px;
+                      padding-left: 30px;
+                      position: relative;
+                    }
+                    .step-number {
+                      position: absolute;
+                      left: 0;
+                      top: 0;
+                      width: 24px;
+                      height: 24px;
+                      background: #2563EB;
+                      color: white;
+                      border-radius: 50%;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      font-size: 14px;
+                      font-weight: bold;
+                    }
+                    .step-title {
+                      font-weight: bold;
+                      color: #1F2937;
+                      margin-bottom: 5px;
+                    }
+                    .step-desc {
+                      color: #666;
+                      font-size: 14px;
+                      line-height: 1.5;
+                    }
+                    .activation-info {
+                      background-color: #f9fafb;
+                      border: 1px solid #e5e7eb;
+                      padding: 15px;
+                      margin: 15px 0;
+                      border-radius: 4px;
+                      font-size: 14px;
+                    }
+                    .activation-info p {
+                      margin: 8px 0;
+                    }
+                    .activation-label {
+                      font-weight: bold;
+                      color: #1F2937;
+                    }
+                    .activation-value {
+                      color: #666;
+                      word-break: break-all;
+                      font-family: monospace;
+                      background: white;
+                      padding: 5px;
+                      border-radius: 3px;
+                      display: inline-block;
+                      margin-top: 3px;
+                    }
+                    .warning {
+                      color: #D32F2F;
+                      font-weight: bold;
+                      margin: 10px 0;
+                    }
+                    .support-box {
+                      background-color: #FEF3C7;
+                      border-left: 4px solid #F59E0B;
+                      padding: 15px;
+                      margin: 20px 0;
+                      border-radius: 4px;
+                    }
+                    .support-title {
+                      font-weight: bold;
+                      color: #92400E;
+                      margin-bottom: 10px;
+                    }
+                    .support-item {
+                      color: #78350F;
+                      margin: 5px 0;
+                    }
+                    .email-footer {
+                      background-color: #1F2937;
+                      color: #9CA3AF;
+                      padding: 20px;
+                      text-align: center;
+                      font-size: 13px;
+                    }
+                    .footer-text {
+                      margin: 10px 0;
+                    }
+                    a {
+                      color: #2563EB;
+                      text-decoration: none;
+                    }
+                    a:hover {
+                      text-decoration: underline;
+                    }
+                    @media only screen and (max-width: 600px) {
+                      .container {
+                        margin: 10px;
+                      }
+                      .content {
+                        padding: 20px;
+                      }
+                      .qr-image {
+                        max-width: 200px;
+                      }
+                    }
+                  </style>
                 </head>
                 <body>
-                    <div class="container">
-                        <div class="header">
-                            <h1>Your eSIM is Ready!</h1>
-                            <p>Thank you for your purchase</p>
-                        </div>
-                        <div class="content">
-                            <h2>Hello %s,</h2>
-                            <p>Your eSIM has been successfully activated. Below you'll find your QR code and activation details.</p>
-                            
-                            <div class="qr-container">
-                                <h3>Scan this QR Code</h3>
-                                <img src="cid:qrCodeImage" alt="eSIM QR Code" class="qr-code" />
-                                <p style="color: #666; font-size: 12px; margin-top: 10px;">
-                                    Scan this code with your device camera to install the eSIM
-                                </p>
-                            </div>
-
-                            <h3>eSIM Details</h3>
-                            
-                            <div class="info-box">
-                                <div class="info-label">ICCID Number</div>
-                                <div class="info-value">%s</div>
-                            </div>
-
-                            <div class="info-box">
-                                <div class="info-label">Activation Code</div>
-                                <div class="info-value">%s</div>
-                            </div>
-
-                            %s
-
-                            %s
-
-                            <div class="info-box">
-                                <div class="info-label">Network Provider</div>
-                                <div class="info-value">%s</div>
-                            </div>
-
-                            <div class="info-box">
-                                <div class="info-label">Customer ID</div>
-                                <div class="info-value">%s</div>
-                            </div>
-
-                            <div class="warning">
-                                <strong>⚠️ Important:</strong>
-                                <ul>
-                                    <li>Keep this QR code secure and do not share it with anyone</li>
-                                    <li>You can only install this eSIM once</li>
-                                    <li>Make sure you have a stable internet connection when installing</li>
-                                    <li>Contact support if you encounter any issues</li>
-                                </ul>
-                            </div>
-
-                            <h3>How to Install Your eSIM</h3>
-                            <ol>
-                                <li>Go to Settings on your device</li>
-                                <li>Select Cellular or Mobile Data</li>
-                                <li>Tap "Add Cellular Plan" or "Add eSIM"</li>
-                                <li>Scan the QR code above</li>
-                                <li>Follow the on-screen instructions</li>
-                            </ol>
-                        </div>
-                        <div class="footer">
-                            <p>Need help? Contact us at <a href="mailto:%s">%s</a></p>
-                            <p>&copy; 2026 %s. All rights reserved.</p>
-                        </div>
+                  <div class="container">
+                    <div class="header">
+                      <div class="logo-text">Telelys</div>
+                      <div class="subheader">Your eSIM is Ready!</div>
                     </div>
+
+                    <div class="content">
+                      <h1>Thank you for choosing Telelys</h1>
+                      <p class="intro">You can find details of your eSIM and setup instructions below.</p>
+
+                      <h2>Your eSIM Information</h2>
+                      <div class="info-box">
+                        <div class="info-item">
+                          <span class="info-label">Date:</span>
+                          <span class="info-value">%s</span>
+                        </div>
+                        <div class="info-item">
+                          <span class="info-label">Order ID:</span>
+                          <span class="info-value">%s</span>
+                        </div>
+                        <div class="info-item">
+                          <span class="info-label">ICCID:</span>
+                          <span class="info-value">%s</span>
+                        </div>
+                        <div class="info-item">
+                          <span class="info-label">Provider:</span>
+                          <span class="info-value">%s</span>
+                        </div>
+                      </div>
+
+                      <h2>Important Notes Before Setting Up</h2>
+                      <ul class="important-list">
+                        <li>eSIM can only be installed when there is an internet connection.</li>
+                        <li>Please do not delete eSIM after activation. The eSIM QR code can only be activated once.</li>
+                        <li>eSIM cannot be transferred to another device after installation.</li>
+                      </ul>
+
+                      <h2>eSIM Setup Guide - For iOS</h2>
+                      <div class="steps">
+                        <div class="step">
+                          <div class="step-number">1</div>
+                          <div class="step-title">Go to Settings > Cellular (or Mobile Data)</div>
+                        </div>
+                        <div class="step">
+                          <div class="step-number">2</div>
+                          <div class="step-title">Click Add eSIM or Add Cellular Plan > Choose Use QR Code</div>
+                          <div class="step-desc">Scan the below QR or tap Enter Details Manually and enter the activation code.</div>
+                        </div>
+                        <div class="step">
+                          <div class="step-number">3</div>
+                          <div class="step-title">Activation Information</div>
+                          <div class="activation-info">
+                            <p><span class="activation-label">Activation Code:</span><br><span class="activation-value">%s</span></p>
+                          </div>
+                          <div class="warning">Don't delete eSIM after setting up</div>
+                        </div>
+                        <div class="step">
+                          <div class="step-number">4</div>
+                          <div class="step-title">Click Next to finish the installation</div>
+                        </div>
+                        <div class="step">
+                          <div class="step-number">5</div>
+                          <div class="step-title">SIM Registration Required</div>
+                          <div class="step-desc">Please <a href="https://www.lyca-mobile.no/en/registration/">click here to register your SIM</a></div>
+                        </div>
+                      </div>
+
+                      <div class="qr-section">
+                        <span class="qr-label">Scan this QR Code</span>
+                        <img src="cid:qrCodeImage" alt="eSIM QR Code" class="qr-image" />
+                      </div>
+
+                      <h2>eSIM Setup Guide - For Android</h2>
+                      <div class="steps">
+                        <div class="step">
+                          <div class="step-number">1</div>
+                          <div class="step-title">Go to Settings > Connections</div>
+                        </div>
+                        <div class="step">
+                          <div class="step-number">2</div>
+                          <div class="step-title">Choose Add eSIM > Choose Use QR Code</div>
+                          <div class="step-desc">Scan the below QR or tap Enter Details Manually and enter the activation code.</div>
+                        </div>
+                        <div class="step">
+                          <div class="step-number">3</div>
+                          <div class="step-title">Activation Information</div>
+                          <div class="activation-info">
+                            <p><span class="activation-label">Activation Code:</span><br><span class="activation-value">%s</span></p>
+                          </div>
+                          <div class="warning">Don't delete eSIM after setting up</div>
+                        </div>
+                        <div class="step">
+                          <div class="step-number">4</div>
+                          <div class="step-title">Click Next to finish the installation</div>
+                        </div>
+                        <div class="step">
+                          <div class="step-number">5</div>
+                          <div class="step-title">SIM Registration Required</div>
+                          <div class="step-desc">Please <a href="https://www.lyca-mobile.no/en/registration/">click here to register your SIM</a></div>
+                        </div>
+                      </div>
+
+                      <div class="support-box">
+                        <div class="support-title">Need Help?</div>
+                        <div class="support-item"><strong>WhatsApp:</strong> +47 (WhatsApp)</div>
+                        <div class="support-item"><strong>Email:</strong> %s</div>
+                        <p style="margin-top: 10px; color: #78350F; font-size: 14px;">If you encounter any problems, please contact Telelys for timely support.</p>
+                      </div>
+                    </div>
+
+                    <div class="email-footer">
+                      <div class="footer-text">&copy; 2026 Telelys. All rights reserved.</div>
+                      <div class="footer-text">
+                        <a href="https://www.lyca-mobile.no/" style="color: #9CA3AF;">Visit our website</a> | 
+                        <a href="https://www.lyca-mobile.no/en/registration/" style="color: #9CA3AF;">Register SIM</a>
+                      </div>
+                    </div>
+                  </div>
                 </body>
                 </html>
                 """,
-                customerName,
-                iccid,
-                activationCode != null && !activationCode.isEmpty() ? activationCode : "N/A",
-                pin1 != null && !pin1.isEmpty() ? 
-                    String.format("<div class=\"info-box\"><div class=\"info-label\">PIN 1</div><div class=\"info-value\">%s</div></div>", pin1) : "",
-                puk1 != null && !puk1.isEmpty() ? 
-                    String.format("<div class=\"info-box\"><div class=\"info-label\">PUK 1</div><div class=\"info-value\">%s</div></div>", puk1) : "",
-                networkProvider,
+                java.time.LocalDate.now().toString(),
                 passportId,
-                supportEmail,
-                supportEmail,
-                appName
+                iccid,
+                networkProvider,
+                activationCode != null && !activationCode.isEmpty() ? activationCode : "N/A",
+                activationCode != null && !activationCode.isEmpty() ? activationCode : "N/A",
+                supportEmail
             );
             
             helper.setText(htmlContent, true);

@@ -4,11 +4,15 @@ import com.example.topup.demo.entity.Order;
 import com.example.topup.demo.entity.Product;
 import com.example.topup.demo.entity.User;
 import com.example.topup.demo.entity.RetailerProfit;
+import com.example.topup.demo.entity.RetailerOrder;
+import com.example.topup.demo.entity.RetailerLimit;
 import com.example.topup.demo.entity.Order.OrderStatus;
 import com.example.topup.demo.repository.OrderRepository;
 import com.example.topup.demo.repository.ProductRepository;
 import com.example.topup.demo.repository.UserRepository;
 import com.example.topup.demo.repository.RetailerProfitRepository;
+import com.example.topup.demo.repository.RetailerOrderRepository;
+import com.example.topup.demo.repository.RetailerLimitRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -34,6 +38,12 @@ public class RetailerService {
     
     @Autowired
     private RetailerProfitRepository profitRepository;
+    
+    @Autowired
+    private RetailerOrderRepository retailerOrderRepository;
+    
+    @Autowired
+    private RetailerLimitRepository retailerLimitRepository;
 
     // Get all orders for a retailer
     public List<Order> getOrdersByRetailer(User retailer) {
@@ -110,30 +120,81 @@ public class RetailerService {
         long pendingOrders = orderRepository.countByRetailerAndStatus(retailer, OrderStatus.PENDING);
         analytics.put("pendingOrders", pendingOrders);
         
-        // Calculate total revenue (including both COMPLETED orders and SOLD POS sales)
-        List<Order> completedOrders = orderRepository.findByRetailerAndStatusOrderByCreatedDateDesc(
-            retailer, OrderStatus.COMPLETED);
+        // Calculate total revenue from retailer's used credit (this is the actual lifetime revenue)
+        // Every sale deducts from credit, so usedCredit = total earnings
+        BigDecimal totalRevenue = BigDecimal.ZERO;
+        Optional<RetailerLimit> limitOpt = retailerLimitRepository.findByRetailer(retailer);
+        if (limitOpt.isPresent()) {
+            RetailerLimit limit = limitOpt.get();
+            if (limit.getUsedCredit() != null) {
+                totalRevenue = limit.getUsedCredit();
+            }
+        }
+        analytics.put("totalRevenue", totalRevenue);
+        
+        // Get old orders for customer sales count
         List<Order> soldOrders = orderRepository.findByRetailerAndStatusOrderByCreatedDateDesc(
             retailer, OrderStatus.SOLD);
         
-        BigDecimal totalRevenue = completedOrders.stream()
-            .map(Order::getAmount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Get POS sales from RetailerOrder (new system)
+        List<RetailerOrder> posSales = retailerOrderRepository.findByRetailerIdAndStatus(
+            retailer.getId(), RetailerOrder.OrderStatus.COMPLETED);
         
-        // Add POS sales revenue
-        BigDecimal posRevenue = soldOrders.stream()
-            .map(Order::getAmount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        totalRevenue = totalRevenue.add(posRevenue);
-        analytics.put("totalRevenue", totalRevenue);
-        
-        // Add customer sales count (POS transactions)
-        long customerSales = soldOrders.size();
+        // Add customer sales count (POS transactions from both systems)
+        long customerSales = soldOrders.size() + posSales.size();
         analytics.put("customerSales", customerSales);
         
-        // Add total profit calculation (assuming 30% profit margin on POS sales)
-        BigDecimal totalProfit = posRevenue.multiply(new BigDecimal("0.30"));
+        // Calculate eSIM and ePIN sales/earnings from RetailerOrder
+        long esimCount = posSales.stream()
+            .flatMap(order -> order.getItems().stream())
+            .filter(item -> {
+                String cat = item.getCategory() != null ? item.getCategory() : "";
+                String type = item.getProductType() != null ? item.getProductType() : "";
+                return cat.toLowerCase().contains("esim") || type.toLowerCase().contains("esim");
+            })
+            .mapToInt(RetailerOrder.OrderItem::getQuantity)
+            .sum();
+        
+        long epinCount = posSales.stream()
+            .flatMap(order -> order.getItems().stream())
+            .filter(item -> {
+                String cat = item.getCategory() != null ? item.getCategory() : "";
+                String type = item.getProductType() != null ? item.getProductType() : "";
+                return !cat.toLowerCase().contains("esim") && !type.toLowerCase().contains("esim");
+            })
+            .mapToInt(RetailerOrder.OrderItem::getQuantity)
+            .sum();
+        
+        BigDecimal esimEarnings = posSales.stream()
+            .flatMap(order -> order.getItems().stream())
+            .filter(item -> {
+                String cat = item.getCategory() != null ? item.getCategory() : "";
+                String type = item.getProductType() != null ? item.getProductType() : "";
+                return cat.toLowerCase().contains("esim") || type.toLowerCase().contains("esim");
+            })
+            .map(item -> item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal epinEarnings = posSales.stream()
+            .flatMap(order -> order.getItems().stream())
+            .filter(item -> {
+                String cat = item.getCategory() != null ? item.getCategory() : "";
+                String type = item.getProductType() != null ? item.getProductType() : "";
+                return !cat.toLowerCase().contains("esim") && !type.toLowerCase().contains("esim");
+            })
+            .map(item -> item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        analytics.put("totalEsimSold", esimCount);
+        analytics.put("totalEpinSold", epinCount);
+        analytics.put("esimEarnings", esimEarnings);
+        analytics.put("epinEarnings", epinEarnings);
+        
+        // Get profit from RetailerProfit records (all yearly records to calculate total)
+        List<RetailerProfit> profits = profitRepository.findByRetailer_IdAndPeriod(retailer.getId(), "yearly");
+        BigDecimal totalProfit = profits.stream()
+            .map(RetailerProfit::getProfit)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
         analytics.put("totalProfit", totalProfit);
         
         // Monthly growth calculation
@@ -400,6 +461,16 @@ public class RetailerService {
             
             BigDecimal profit = saleAmount.subtract(costPrice);
             
+            // Log profit calculation details
+            System.out.println("💰 Recording Profit:");
+            System.out.println("  Product: " + bundleName);
+            System.out.println("  Sale Amount: NOK " + saleAmount.toPlainString());
+            System.out.println("  Cost Price: NOK " + costPrice.toPlainString());
+            System.out.println("  Calculated Profit: NOK " + profit.toPlainString());
+            System.out.println("  Profit %: " + (profit.doubleValue() / saleAmount.doubleValue() * 100) + "%");
+            System.out.println("  Margin Rate from Frontend: " + marginRate + "%");
+            System.out.println("  Retailer ID: " + retailer.getId());
+            
             // Record daily profit
             updateProfitRecord(retailer, "daily", today, currentYear, currentMonth, 
                              saleAmount, costPrice, profit, bundleName, bundleId, marginRate);
@@ -468,19 +539,10 @@ public class RetailerService {
         try {
             List<RetailerProfit> profits;
             
-            switch (period.toLowerCase()) {
-                case "daily":
-                    profits = profitRepository.findDailyProfitsByRetailerId(retailer.getId());
-                    break;
-                case "monthly":
-                    profits = profitRepository.findMonthlyProfitsByRetailerId(retailer.getId());
-                    break;
-                case "yearly":
-                    profits = profitRepository.findYearlyProfitsByRetailerId(retailer.getId());
-                    break;
-                default:
-                    profits = profitRepository.findByRetailer_IdAndPeriod(retailer.getId(), period);
-            }
+            // Fetch profits by period for this retailer
+            profits = profitRepository.findByRetailer_IdAndPeriod(retailer.getId(), period);
+            
+            System.out.println("📊 Retrieved " + profits.size() + " " + period + " profit records for retailer: " + retailer.getId());
             
             // Convert to Map format for JSON response
             for (RetailerProfit profit : profits) {
@@ -504,7 +566,7 @@ public class RetailerService {
                 profitData.add(data);
             }
             
-            System.out.println("📊 Retrieved " + profitData.size() + " " + period + " profit records");
+            System.out.println("📊 Converted " + profitData.size() + " " + period + " profit records to response format");
         } catch (Exception e) {
             System.err.println("❌ Error fetching profit data: " + e.getMessage());
             e.printStackTrace();
@@ -521,7 +583,7 @@ public class RetailerService {
         
         try {
             // Get all yearly profits to calculate total
-            List<RetailerProfit> yearlyProfits = profitRepository.findYearlyProfitsByRetailerId(retailer.getId());
+            List<RetailerProfit> yearlyProfits = profitRepository.findByRetailer_IdAndPeriod(retailer.getId(), "yearly");
             
             BigDecimal totalProfit = yearlyProfits.stream()
                 .map(RetailerProfit::getProfit)
@@ -562,6 +624,39 @@ public class RetailerService {
             summary.put("totalSales", 0);
             summary.put("dailyProfit", 0.0);
             summary.put("averageMargin", 0.0);
+        }
+        
+        return summary;
+    }
+
+    // Get sales summary: count of sold items and total earnings
+    public Map<String, Object> getSalesSummary(User retailer) {
+        Map<String, Object> summary = new HashMap<>();
+        
+        try {
+            // Get all completed/sold orders for this retailer
+            List<RetailerOrder> completedOrders = retailerOrderRepository.findByRetailerIdAndStatus(
+                retailer.getId(), RetailerOrder.OrderStatus.COMPLETED);
+            
+            // Count total sales and sum total earnings
+            int totalSalesCount = completedOrders.size();
+            BigDecimal totalEarnings = completedOrders.stream()
+                .map(RetailerOrder::getTotalAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            summary.put("success", true);
+            summary.put("totalSalesCount", totalSalesCount);
+            summary.put("totalEarnings", totalEarnings.doubleValue());
+            
+            System.out.println("✅ Sales Summary - Count: " + totalSalesCount + ", Earnings: " + totalEarnings);
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error calculating sales summary: " + e.getMessage());
+            e.printStackTrace();
+            summary.put("success", false);
+            summary.put("totalSalesCount", 0);
+            summary.put("totalEarnings", 0.0);
         }
         
         return summary;
